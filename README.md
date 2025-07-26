@@ -20,6 +20,14 @@ FortranBindingsTest
 cppAnsatzSynth
 ```
 ```FortranBindingsTest``` can be run to check the build has been successful
+## Interfacing with fortran
+In order to interface the library with an external fortran project the file ```src/AnsatzSynthInterface.f90``` needs to be added to the external source tree. This file contains the fortran declarations for the functions implemented in the library. 
+The two libraries 
+```
+libAnsatzSynthInterface.a
+libcppAnsatzSynthLib.a
+```
+must then be added to the link line of the final executable. An example of how to do this with Cmake can be seen in ```src/CMakeLists.txt``` where the```FortranBindingsTest``` is compiled. 
 ## Future Development
 * Condense the number of libraries down while maintaining logical separation of interface and backend and avoiding multiple compilations of the same file
 * Documentation for everything
