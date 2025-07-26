@@ -7,6 +7,7 @@
 #define ANSATZMANAGER_H
 #include "ansatz.h"
 #include "tupsquantities.h"
+#include <mutex>
 
 
 class stateAnsatzManager
@@ -47,6 +48,8 @@ private:
     vector<realNumType> tempRealNumType; // used in various functions as a scratch space
 
 public:
+    // Lock that is used by interface to external programs to guarantee thread safe operation. Generally only one of these functions should be called at a time. Lock is not used internally
+    std::mutex m_interfaceLock;
     stateAnsatzManager();
     ~stateAnsatzManager();
     //Setup functions, These just store and wait until the last one is completed before setting anything up

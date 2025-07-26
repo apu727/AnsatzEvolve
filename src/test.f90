@@ -65,7 +65,7 @@ program myfortran
     print *, "Evaluate at HF Angles"
     status = getEnergy(9, angles, Energy,ctx)
     call checkStatus(status)
-    print *, "Energy:", Energy
+    print *, "Energy:  ", Energy
     print *, "Expected:", -2.2506796656654822_dp
 
     !Gradient

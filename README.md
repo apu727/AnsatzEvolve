@@ -47,6 +47,7 @@ Other compilers may or may not work. A C++17 compatible compiler is necessary.
 * Auto generation of the TUPS and LUCJ ansatz
 * Bibtex file for citations
 * Test compatibility with compilers
+* Unit tests
 
 ## Authors and Citation
 AnsatzEvolve is the work of Bence Csakany, if you use it please cite this GitHub reposititory
