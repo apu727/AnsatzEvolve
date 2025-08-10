@@ -88,7 +88,6 @@ void baseAnsatz::rotateState(const matrixType &rotationGenerator, realNumType th
         }
         else
         {
-            m_derivSpaceNotEvolvedCache.emplace_back();
             rotationGenerator.multiply(m_current,m_derivSpaceNotEvolvedCache[indexInPath]);
         }
     }
