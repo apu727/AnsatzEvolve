@@ -605,7 +605,12 @@ bool stateAnsatzManager::generatePathsForSubspace(size_t numberOfPaths)
         success = false;
         return success;
     }
-
+    if (useFused)
+    {
+        logger().log("Can only do subspacediagonalisation with standard ansatz build");
+        //TODO
+        return false;
+    }
     std::srand(100);
     std::vector<realNumType> Energies;
     std::vector<std::vector<ansatz::rotationElement>> rotationPaths;
