@@ -68,6 +68,13 @@ public:
     virtual void dummyImplement(){}
 };
 
+class SZAndnumberOperatorCompressor : public compressor
+{
+public:
+    SZAndnumberOperatorCompressor(uint32_t stateVectorSize, uint32_t spinUp, uint32_t spinDown);
+    virtual void dummyImplement(){}
+};
+
 class stateRotate : public operatorPool
 {
 public:
@@ -152,7 +159,7 @@ private:
 
     std::unordered_map<size_t,matrixType> m_lieAlgebra;
     bool m_lieAlgebraMatricesGenerated = false;
-    std::shared_ptr<numberOperatorCompressor> m_compressor;
+    std::shared_ptr<compressor> m_compressor;
     bool m_compressStateVectors = false;
 
 public:

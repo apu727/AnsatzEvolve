@@ -92,7 +92,7 @@ bool stateAnsatzManager::construct()
             if (m_numberOfParticles > 0)
             {
                 m_compressStateVectors = true;
-                m_compressor = std::make_shared<numberOperatorCompressor>(m_numberOfParticles,1<<m_numberOfQubits);
+                m_compressor = std::make_shared<SZAndnumberOperatorCompressor>(1<<m_numberOfQubits,m_numberOfParticles/2,m_numberOfParticles/2);
             }
 
             if (m_compressStateVectors)
@@ -108,6 +108,8 @@ bool stateAnsatzManager::construct()
             m_FA = std::make_shared<FusedEvolve>(m_start,m_Ham,m_compressMatrix,m_deCompressMatrix);
             m_FA->updateExc(m_excitations);
             m_rotationPath.clear(); // probably empty but lets make sure
+            m_rotationPath.assign(m_angles.size(),{0,0});
+            setRotationPathFromAngles();
             m_angles.clear();
             m_isConstructed = true;
         }
@@ -586,13 +588,10 @@ bool stateAnsatzManager::optimise()
         success = false;
         return success;
     }
-    if (!useFused)
-    {
-        logger().log("Can only optimise with Fused ansatz build");
-        return false;
-    }
+
     m_TUPSQuantities->OptimiseTups(m_Ham,m_rotationPath,*m_ansatz,true);
-    m_rotationPath = m_ansatz->getRotationPath();
+    if (!useFused)
+        m_rotationPath = m_ansatz->getRotationPath();
     setAnglesFromRotationPath();
     return success;
 }

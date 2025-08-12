@@ -16,7 +16,7 @@ stateRotate::stateRotate(int nQubits, bool compressStateVectors, int numberOfPar
     if (compressStateVectors)
     {
         m_compressStateVectors = true;
-        m_compressor = std::make_shared<numberOperatorCompressor>(numberOfParticles,m_dim);
+        m_compressor = std::make_shared<SZAndnumberOperatorCompressor>(m_dim,numberOfParticles/2,numberOfParticles/2);
     }
 
 }
@@ -176,4 +176,39 @@ bool stateRotate::loadOperators(std::string filePath)
     }
     fclose(fp);
     return 1;
+}
+
+SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint32_t stateVectorSize, uint32_t spinUp, uint32_t spinDown)
+{//Compresses for a specific spin, It assumes that the top N/2 bits are spin up and vice versa
+    uint32_t numberOfQubits = 0;
+    {
+        uint32_t dummy = stateVectorSize-1;
+        while(dummy)
+        {
+            numberOfQubits++;
+            dummy = dummy >>1;
+        }
+    }
+    assert(numberOfQubits %2 == 0);
+    assert(numberOfQubits < 32);
+
+
+    compressPerm.resize(stateVectorSize);
+    uint32_t activeCount = 0;
+    uint32_t allOnes = -1;
+    for (uint32_t i = 0; i < stateVectorSize; i++)
+    {
+        bool spinUpActive = bitwiseDot(i,allOnes,(numberOfQubits/2)) == (char)spinUp;
+        bool spinDownActive = bitwiseDot(i>>(numberOfQubits/2),allOnes,32) == (char)spinUp;
+        if (spinUpActive && spinDownActive)
+        {
+            compressPerm[i] = activeCount;
+            decompressPerm.push_back(i);
+            activeCount++;
+        }
+        else
+        {
+            compressPerm[i] = -1;
+        }
+    }
 }
