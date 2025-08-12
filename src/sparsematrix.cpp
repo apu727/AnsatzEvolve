@@ -266,7 +266,7 @@ bool sparseMatrix<dataType,vectorType>::loadMatrix(std::string filePath)
 }
 
 template<typename dataType, typename vectorType>
-void sparseMatrix<dataType, vectorType>::multiply(const vector<vectorType> &other, vector<vectorType> &dest) const
+void sparseMatrix<dataType, vectorType>::multiply(const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const
 {
     std::shared_ptr<compressor> otherCompressor;
     bool otherIsCompressed = other.getIsCompressed(otherCompressor);
@@ -277,17 +277,17 @@ void sparseMatrix<dataType, vectorType>::multiply(const vector<vectorType> &othe
         {
             vector<vectorType> decompressedOther;
             vector<vectorType> decompressedDest;
-            compressor::deCompressVector(other,decompressedOther,otherCompressor);
+            compressor::deCompressVector<vectorType>(other,decompressedOther,otherCompressor);
             multiplyDecompressed(decompressedOther,decompressedDest);
-            compressor::compressVector(decompressedDest,dest,otherCompressor);
+            compressor::compressVector<vectorType>(decompressedDest,dest,otherCompressor);
         }
         else if (!otherIsCompressed && m_isCompressed)
         {
             vector<vectorType> compressedOther;
             vector<vectorType> compressedDest;
-            compressor::compressVector(other,compressedOther,m_compressor);
+            compressor::compressVector<vectorType>(other,compressedOther,m_compressor);
             multiplyDecompressed(compressedOther,compressedDest);
-            compressor::deCompressVector(compressedDest,dest,m_compressor);
+            compressor::deCompressVector<vectorType>(compressedDest,dest,m_compressor);
         }
         else
         {
@@ -303,14 +303,14 @@ void sparseMatrix<dataType, vectorType>::multiply(const vector<vectorType> &othe
         vector<vectorType> compressedOther;
         vector<vectorType> compressedDest;
 
-        compressor::deCompressVector(other,decompressedOther,otherCompressor);
+        compressor::deCompressVector<vectorType>(other,decompressedOther,otherCompressor);
 
-        compressor::compressVector(decompressedOther,compressedOther,m_compressor);
+        compressor::compressVector<vectorType>(decompressedOther,compressedOther,m_compressor);
 
         multiplyDecompressed(compressedOther,compressedDest);
-        compressor::deCompressVector(compressedDest,decompressedDest,m_compressor);
+        compressor::deCompressVector<vectorType>(compressedDest,decompressedDest,m_compressor);
 
-        compressor::compressVector(decompressedDest,dest,otherCompressor);
+        compressor::compressVector<vectorType>(decompressedDest,dest,otherCompressor);
     }
     else
     {
@@ -320,7 +320,7 @@ void sparseMatrix<dataType, vectorType>::multiply(const vector<vectorType> &othe
 }
 
 template<typename dataType, typename vectorType>
-void sparseMatrix<dataType, vectorType>::rotate(realNumType angle, const vector<vectorType> &other, vector<vectorType> &dest) const
+void sparseMatrix<dataType, vectorType>::rotate(realNumType angle, const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const
 {
     double S = 0;
     double C = 0;
@@ -329,7 +329,7 @@ void sparseMatrix<dataType, vectorType>::rotate(realNumType angle, const vector<
 }
 
 template<typename dataType, typename vectorType>
-void sparseMatrix<dataType,vectorType>::multiplyDecompressed(const vector<vectorType> &other, vector<vectorType> &dest) const
+void sparseMatrix<dataType,vectorType>::multiplyDecompressed(const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const
 {
     const sparseMatrix<dataType,vectorType>& lhs = *this;
 
@@ -405,7 +405,7 @@ void sparseMatrix<dataType,vectorType>::multiplyDecompressed(const vector<vector
 }
 
 template<>
-void sparseMatrix<std::complex<realNumType>,std::complex<realNumType>>::multiplyDecompressed(const vector<std::complex<realNumType>> &other, vector<std::complex<realNumType>> &dest) const
+void sparseMatrix<std::complex<realNumType>,std::complex<realNumType>>::multiplyDecompressed(const vectorView<const Matrix<std::complex<realNumType>>>& other, vectorView<Matrix<std::complex<realNumType>>> dest) const
 {
     const sparseMatrix<std::complex<realNumType>,std::complex<realNumType>>& lhs = *this;
 
@@ -502,7 +502,7 @@ void sparseMatrix<std::complex<realNumType>,std::complex<realNumType>>::multiply
 }
 
 template<typename dataType, typename vectorType>
-void sparseMatrix<dataType, vectorType>::rotate(realNumType S,realNumType C, const vector<vectorType> &other, vector<vectorType> &dest) const
+void sparseMatrix<dataType, vectorType>::rotate(realNumType S,realNumType C, const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const
 {
     std::shared_ptr<compressor> otherCompressor;
     bool otherIsCompressed = other.getIsCompressed(otherCompressor);
@@ -513,17 +513,20 @@ void sparseMatrix<dataType, vectorType>::rotate(realNumType S,realNumType C, con
         {
             vector<vectorType> decompressedOther;
             vector<vectorType> decompressedDest;
-            compressor::deCompressVector(other,decompressedOther,otherCompressor);
+            compressor::deCompressVector<vectorType>(other,decompressedOther,otherCompressor);
+
             rotateDecompressed(S,C, decompressedOther,decompressedDest);
-            compressor::compressVector(decompressedDest,dest,otherCompressor);
+
+            compressor::compressVector<vectorType>(decompressedDest,dest,otherCompressor);
         }
         else if (!otherIsCompressed && m_isCompressed)
         {
             vector<vectorType> compressedOther;
             vector<vectorType> compressedDest;
-            compressor::compressVector(other,compressedOther,m_compressor);
-            rotateDecompressed(S,C, compressedOther,compressedDest);
-            compressor::deCompressVector(compressedDest,dest,m_compressor);
+            compressor::compressVector<vectorType>(other,compressedOther,m_compressor);
+            vectorView<Matrix<vectorType>> compressedDestView  = compressedDest;
+            rotateDecompressed(S,C, compressedOther,compressedDestView);
+            compressor::deCompressVector<vectorType>(compressedDest,dest,m_compressor);
         }
         else
         {
@@ -539,24 +542,26 @@ void sparseMatrix<dataType, vectorType>::rotate(realNumType S,realNumType C, con
         vector<vectorType> compressedOther;
         vector<vectorType> compressedDest;
 
-        compressor::deCompressVector(other,decompressedOther,otherCompressor);
+        compressor::deCompressVector<vectorType>(other,decompressedOther,otherCompressor);
 
-        compressor::compressVector(decompressedOther,compressedOther,m_compressor);
+        compressor::compressVector<vectorType>(decompressedOther,compressedOther,m_compressor);
 
         rotateDecompressed(S,C, compressedOther,compressedDest);
 
-        compressor::deCompressVector(compressedDest,decompressedDest,m_compressor);
+        compressor::deCompressVector<vectorType>(compressedDest,decompressedDest,m_compressor);
 
-        compressor::compressVector(decompressedDest,dest,otherCompressor);
+        compressor::compressVector<vectorType>(decompressedDest,dest,otherCompressor);
     }
     else
     {
-        rotateDecompressed(S,C,other,dest);
+        vectorView<Matrix<vectorType>> destView  = dest;
+        rotateDecompressed(S,C,other,destView);
     }
 }
 
 template<typename dataType, typename vectorType>
-void sparseMatrix<dataType, vectorType>::rotateAndBraketWithTangentOfResult(realNumType S, realNumType C, const vector<vectorType> &other, vector<vectorType> &dest, const vector<vectorType> &toBraket, realNumType &result) const
+void sparseMatrix<dataType, vectorType>::rotateAndBraketWithTangentOfResult(
+    realNumType S, realNumType C, const vectorView<const Matrix<vectorType>> &other, vectorView<Matrix<vectorType>> dest,  const vectorView<const Matrix<vectorType>> &toBraket, realNumType &result) const
 {
     std::shared_ptr<compressor> otherComp;
     assert(other.getIsCompressed(otherComp) == m_isCompressed);
@@ -580,7 +585,7 @@ void sparseMatrix<dataType, vectorType>::rotateAndBraketWithTangentOfResult(real
     auto iIdx = lhs.m_iIndexes.begin();
     auto iEnd = lhs.m_iIndexes.end();
     auto jIdx = lhs.m_jIndexes.begin();
-    if (&other != &dest)
+    if (!other.isSame(dest))
         dest.copy(other);
     while(iIdx != iEnd)
     {
@@ -601,7 +606,9 @@ void sparseMatrix<dataType, vectorType>::rotateAndBraketWithTangentOfResult(real
 }
 
 template<>
-void sparseMatrix<std::complex<realNumType>, std::complex<realNumType>>::rotateAndBraketWithTangentOfResult(realNumType S, realNumType C, const vector<std::complex<realNumType>> &other, vector<std::complex<realNumType>> &dest, const vector<std::complex<realNumType>> &toBraket, realNumType &result) const
+void sparseMatrix<std::complex<realNumType>, std::complex<realNumType>>::rotateAndBraketWithTangentOfResult(
+    realNumType S, realNumType C, const vectorView<const Matrix<std::complex<realNumType>>> &other, vectorView<Matrix<std::complex<realNumType>>> dest,
+    const vectorView<const Matrix<std::complex<realNumType>>> &toBraket, realNumType &result) const
 {
     std::shared_ptr<compressor> otherComp;
     assert(other.getIsCompressed(otherComp) == m_isCompressed);
@@ -625,7 +632,7 @@ void sparseMatrix<std::complex<realNumType>, std::complex<realNumType>>::rotateA
     auto iIdx = lhs.m_iIndexes.begin();
     auto iEnd = lhs.m_iIndexes.end();
     auto jIdx = lhs.m_jIndexes.begin();
-    if (&other != &dest)
+    if (other.isSame(dest))
         dest.copy(other);
     while(iIdx != iEnd)
     {
@@ -725,7 +732,8 @@ void sparseMatrix<dataType, vectorType>::decompress()
 }
 
 template<>
-void sparseMatrix<realNumType, realNumType>::rotateDecompressed(realNumType S,realNumType C, const vector<realNumType> &other, vector<realNumType> &dest) const
+void sparseMatrix<realNumType, realNumType>::rotateDecompressed(
+    realNumType S,realNumType C, const vectorView<const Matrix<realNumType>> &other, vectorView<Matrix<realNumType>> dest) const
 {
     if (!m_isRotationGenerator)
     {
@@ -742,7 +750,7 @@ void sparseMatrix<realNumType, realNumType>::rotateDecompressed(realNumType S,re
     auto iIdx = lhs.m_iIndexes.begin();
     auto iEnd = lhs.m_iIndexes.end();
     auto jIdx = lhs.m_jIndexes.begin();
-    if (&other != &dest)
+    if (!other.isSame(dest))
         dest.copy(other);
     while(iIdx != iEnd)
     {
@@ -757,7 +765,8 @@ void sparseMatrix<realNumType, realNumType>::rotateDecompressed(realNumType S,re
 }
 
 template<>
-void sparseMatrix<realNumType, std::complex<realNumType>>::rotateDecompressed(realNumType S,realNumType C, const vector<std::complex<realNumType>> &other, vector<std::complex<realNumType>> &dest) const
+void sparseMatrix<realNumType, std::complex<realNumType>>::rotateDecompressed(
+    realNumType S,realNumType C, const vectorView<const Matrix<std::complex<realNumType>>> &other, vectorView< Matrix<std::complex<realNumType>>> dest) const
 {
     if (!m_isRotationGenerator)
     {
@@ -774,7 +783,7 @@ void sparseMatrix<realNumType, std::complex<realNumType>>::rotateDecompressed(re
     auto iIdx = lhs.m_iIndexes.begin();
     auto iEnd = lhs.m_iIndexes.end();
     auto jIdx = lhs.m_jIndexes.begin();
-    if (&other != &dest)
+    if (!other.isSame(dest))
         dest.copy(other);
     while(iIdx != iEnd)
     {
@@ -789,7 +798,8 @@ void sparseMatrix<realNumType, std::complex<realNumType>>::rotateDecompressed(re
 }
 
 template<>
-void sparseMatrix<std::complex<realNumType>, std::complex<realNumType>>::rotateDecompressed(realNumType S,realNumType C, const vector<std::complex<realNumType>> &other, vector<std::complex<realNumType>> &dest) const
+void sparseMatrix<std::complex<realNumType>, std::complex<realNumType>>::rotateDecompressed(
+    realNumType S,realNumType C, const vectorView<const Matrix<std::complex<realNumType>>> &other, vectorView<Matrix<std::complex<realNumType>>> dest) const
 {
     if (!m_isRotationGenerator)
     {
@@ -806,7 +816,7 @@ void sparseMatrix<std::complex<realNumType>, std::complex<realNumType>>::rotateD
     auto iIdx = lhs.m_iIndexes.begin();
     auto iEnd = lhs.m_iIndexes.end();
     auto jIdx = lhs.m_jIndexes.begin();
-    if (&other != &dest)
+    if (!other.isSame(dest))
         dest.copy(other);
     while(iIdx != iEnd)
     {
@@ -885,7 +895,7 @@ bool projectionMatrix<dataType>::addBlank()
 }
 
 template<typename dataType>
-void projectionMatrix<dataType>::multiply(const vector<dataType> &other, vector<dataType> &dest) const
+void projectionMatrix<dataType>::multiply(const vectorView<const Matrix<dataType>>& other, vectorView<Matrix<dataType>> dest) const
 {
     dest.resize(m_basisVectors[0].size(),false,nullptr);
     vector<dataType> temp;
@@ -894,9 +904,9 @@ void projectionMatrix<dataType>::multiply(const vector<dataType> &other, vector<
     {
         if (count >= this->m_blankCount)
             break;
-        realNumType proj = v.dot(other);
+        realNumType proj = v.getView().dot(other);
         mul(proj,v,temp);
-        dest += temp;
+        dest += static_cast<const vectorView<const Matrix<dataType>>>(temp);
         count++;
     }
 }

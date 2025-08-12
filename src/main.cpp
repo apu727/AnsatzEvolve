@@ -87,23 +87,23 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    stateRotate* lie = nullptr;
+    std::shared_ptr<stateRotate> lie = nullptr;
     if (allSameParticleNumber)
     {
-        lie = new stateRotate(std::log2(statevectorCoeffs.size()),true,numberOfParticles);
+        lie = std::make_shared<stateRotate>(std::log2(statevectorCoeffs.size()),true,numberOfParticles);
     }
     else
-        lie = new stateRotate(std::log2(statevectorCoeffs.size()));
+        lie = std::make_shared<stateRotate>(std::log2(statevectorCoeffs.size()));
 
     lie->loadOperators(filePath + "_Operators.dat");
 
     vector<numType> start(statevectorCoeffs);
 
 
-    stateAnsatz* myAnsatz = nullptr;
+    std::shared_ptr<stateAnsatz> myAnsatz = nullptr;
     sparseMatrix<numType,numType> target({1},{1},{1},1);
 
-    myAnsatz = new stateAnsatz(&target,start,lie);
+    myAnsatz = std::make_shared<stateAnsatz>(&target,start,lie.get());
 
 
 
@@ -114,11 +114,8 @@ int main(int argc, char *argv[])
     std::vector<std::pair<int,realNumType>> order;
     int numberOfUniqueParameters = 0;
     if (!loadParameters(filePath,rotationPath,rotationPaths,order,numberOfUniqueParameters))
-    {
-        delete myAnsatz;
-        delete lie;
         return 1;
-    }
+
 
 
     sparseMatrix<realNumType,numType> Ham;
@@ -130,22 +127,23 @@ int main(int argc, char *argv[])
         Ham.compress(comp);
     }
 
-    //benchmark(myAnsatz,rotationPaths[1], Ham);
-    //return 0;
+
 
     realNumType NuclearEnergy = 0;
     LoadNuclearEnergy(NuclearEnergy, filePath);
 
     TUPSQuantities quantityCalc(Ham,order,numberOfUniqueParameters, NuclearEnergy,filePath); // Can also optimise
+    // benchmark(myAnsatz.get(),rotationPaths[1], Ham,quantityCalc.m_compressMatrix, quantityCalc.m_deCompressMatrix);
+    // return 0;
 
     //TODO command line switches
-    bool optimise = false;
+    bool optimise = true;
     bool subspaceDiag = false;
     bool writeProperties = true;
     bool generatePathsForSubspace = false;
     if (subspaceDiag)
     {
-        size_t numberOfPaths = 10;
+        size_t numberOfPaths = 9;
 
         if (generatePathsForSubspace)
         {
@@ -190,21 +188,26 @@ int main(int argc, char *argv[])
     if (optimise)
     {
         logger().log("Start Optimise");
-        quantityCalc.OptimiseTups(Ham,rotationPaths[1],*myAnsatz,true);
-        rotationPaths.push_back(myAnsatz->getRotationPath());
-
-        quantityCalc.iterativeTups(Ham,rotationPaths[1],*myAnsatz);
-        rotationPaths.push_back(myAnsatz->getRotationPath());
+        rotationPaths.push_back(rotationPaths[1]);
         quantityCalc.OptimiseTups(Ham,rotationPaths.back(),*myAnsatz,true);
-        rotationPaths.push_back(myAnsatz->getRotationPath());
+
+        // quantityCalc.iterativeTups(Ham,rotationPaths[0],*myAnsatz,true);
+        // rotationPaths.push_back(myAnsatz->getRotationPath());
+        // quantityCalc.OptimiseTups(Ham,rotationPaths.back(),*myAnsatz,true);
+        // rotationPaths.push_back(myAnsatz->getRotationPath());
+
+
+
+        // quantityCalc.OptimiseTupsLBFGS(Ham,rotationPaths[1],*myAnsatz,false);
+
+
+
     }
 
+    //showContinuousSymmetry(rotationPaths,myAnsatz,Ham);
+
+
     if (writeProperties)
-        quantityCalc.writeProperties(rotationPaths,myAnsatz);
-
-
-
-    delete myAnsatz;
-    delete lie;
+        quantityCalc.writeProperties(rotationPaths,myAnsatz.get());
     return 0;
 }

@@ -45,12 +45,12 @@ threadpool::~threadpool()
             m_newWork.notify_all();
 }
 
-std::future<void> threadpool::queueWork(std::function<void ()> work)
+std::future<void> threadpool::queueWork(std::function<void ()> work, bool dontQueue)
 {
     std::lock_guard lock(m_workQueueMutex);
     std::promise<void> prom;
     std::future<void> fut = prom.get_future();
-    if(m_workers.size() == 0)
+    if(m_workers.size() == 0 || dontQueue)
     {
         work();
         prom.set_value();

@@ -5,6 +5,7 @@
  */
 #include "tupsquantities.h"
 #include "diis.h"
+#include "fusedevolve.h"
 #include "logger.h"
 #include "threadpool.h"
 #include <iostream>
@@ -137,7 +138,7 @@ TUPSQuantities::TUPSQuantities(sparseMatrix<realNumType,numType>& Ham, std::vect
         m_file = stdout;
 
     m_Ham.copy(Ham);
-    m_HamEm = Ham;
+    // m_HamEm = Ham;
     m_NuclearEnergy = NuclearEnergy;
     m_numberOfUniqueParameters = numberOfUniqueParameters;
     m_runPath = runPath;
@@ -149,6 +150,7 @@ TUPSQuantities::TUPSQuantities(sparseMatrix<realNumType,numType>& Ham, std::vect
 
 void TUPSQuantities::writeProperties(std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, stateAnsatz* myAnsatz)
 {
+    m_HamEm = m_Ham;
     /* calculate the energy for all rotation paths*/
     std::vector<realNumType> Energies(rotationPaths.size());
     std::vector<realNumType> RealEnergies(rotationPaths.size());
@@ -501,32 +503,22 @@ void TUPSQuantities::asyncHij(const sparseMatrix<realNumType,numType> &Ham, cons
     std::atomic_thread_fence(std::memory_order_acquire);
 }
 
-void TUPSQuantities::runNewtonMethod(stateAnsatz *myAnsatz,bool avoidNegativeHessianValues)
+void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumType> &angles,bool avoidNegativeHessianValues)
 {
     // realNumType maxStepSize = 0.1;
     int maxStepCount = 250;
     realNumType zeroThreshold = 1e-10;
 
-    // myAnsatz->setCalculateSecondDerivatives(true);
-    myAnsatz->setCalculateSecondDerivatives(false);
-    myAnsatz->setCalculateFirstDerivatives(false);
-    const std::vector<ansatz::rotationElement> &rp = myAnsatz->getRotationPath();
-
-    std::vector<realNumType> angles;
-    for (auto rpe : rp)
-    {
-        angles.push_back(rpe.second);
-    }
-
     int count = maxStepCount;
-    // sparseMatrix<realNumType,numType>::EigenSparseMatrix HamEm = m_Ham;
+
     vector<numType> temp;
     while(count-- > 0)
     {
         auto start = std::chrono::high_resolution_clock::now();
-        myAnsatz->updateAngles(angles);
 
-        const vector<numType>& dest = myAnsatz->getVec();
+        vector<numType> dest;
+        myAnsatz->evolve(dest,angles);
+
         // vector<numType>::EigenVector destEM = dest;
         // const std::vector<vector<numType>>& derivTangentSpace = myAnsatz->getDerivTangentSpace();
 
@@ -553,8 +545,10 @@ void TUPSQuantities::runNewtonMethod(stateAnsatz *myAnsatz,bool avoidNegativeHes
         // vector<realNumType>::EigenVector gradVector_i = m_deCompressMatrix * gradVector_mu;
 
         vector<realNumType> gradVectorCalc;
-        Matrix<realNumType>::EigenMatrix Hij; //uninitialized by default
-        myAnsatz->getHessianAndDerivative(&m_Ham,Hij,gradVectorCalc);
+        // Matrix<realNumType>::EigenMatrix Hij;
+        Matrix<realNumType>::EigenMatrix Hmunu;
+        // myAnsatz->getHessianAndDerivative(&m_Ham,Hmunu,gradVectorCalc,&m_compressMatrix);
+        myAnsatz->evolveHessian(Hmunu,gradVectorCalc,angles);
         vector<realNumType>::EigenVector gradVectorCalcEm = gradVectorCalc;
 
         vector<realNumType>::EigenVector gradVector_mu = m_compressMatrix * gradVectorCalcEm;
@@ -583,12 +577,12 @@ void TUPSQuantities::runNewtonMethod(stateAnsatz *myAnsatz,bool avoidNegativeHes
         //Hessian_{ij}
         // Hij.resize(iSize,jSize);
         //Hessian_{\mu\nu}
-        Matrix<realNumType>::EigenMatrix Hmunu(m_numberOfUniqueParameters,m_numberOfUniqueParameters); //uninitialized by default
+
 
 
         // asyncHij(m_Ham,secondDerivTensor,derivTangentSpace,Hij,dest,iSize);
 
-        Hmunu = m_compressMatrix * Hij * m_compressMatrix.transpose();
+        // Hmunu = m_compressMatrix * Hij * m_compressMatrix.transpose();
 
         Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> es(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
         vector<std::complex<realNumType>>::EigenVector hessianEigVal = es.eigenvalues();
@@ -598,8 +592,8 @@ void TUPSQuantities::runNewtonMethod(stateAnsatz *myAnsatz,bool avoidNegativeHes
 
 
 
-        vector<realNumType>::EigenVector updateAngles(rp.size());
-        updateAngles.setZero(rp.size());
+        vector<realNumType>::EigenVector updateAngles(angles.size());
+        updateAngles.setZero(angles.size());
 
         vector<realNumType>::EigenVector negativeEigenValueDirections(hessianEigVal.rows());
         negativeEigenValueDirections.setZero();
@@ -642,7 +636,7 @@ void TUPSQuantities::runNewtonMethod(stateAnsatz *myAnsatz,bool avoidNegativeHes
         // if (maxAngleStep > maxStepSize)
         //     updateAngles /= (maxAngleStep/maxStepSize);
 
-        for (size_t i = 0; i < rp.size();i++)
+        for (size_t i = 0; i < angles.size();i++)
             angles[i] += updateAngles[i];
 
         //Implements backtracking
@@ -651,14 +645,14 @@ void TUPSQuantities::runNewtonMethod(stateAnsatz *myAnsatz,bool avoidNegativeHes
         while(true)
         {
             vector<numType> trial;
-            myAnsatz->updateAnglesNoDeriv(angles,trial);
+            myAnsatz->evolve(trial,angles);
             // vector<numType>::EigenVector destEMTrial = trial;
             // EnergyTrial = (destEMTrial.adjoint() * HamEm * destEMTrial).real()(0,0);
             EnergyTrial = m_Ham.braket(trial,trial,&temp);
             if (EnergyTrial > Energy && BacktrackCount < 30)
             {//Backtracking
-                // logger().log("Backtracking",BacktrackCount);
-                for (size_t i = 0; i < rp.size();i++)
+                logger().log("Backtracking",BacktrackCount);
+                for (size_t i = 0; i < angles.size();i++)
                 {
                     updateAngles[i] /=2;
                     angles[i] -= updateAngles[i];
@@ -803,7 +797,7 @@ void TUPSQuantities::runNewtonMethodProjected(stateAnsatz *myAnsatz,bool avoidNe
         auto stop = std::chrono::high_resolution_clock::now();
 
         realNumType overlap = psiH.dot(dest)*InvnormOfPsiH;
-        fprintf(stderr,"Energy: " realNumTypeCode " GradNorm: " realNumTypeCode " Overlap: " realNumTypeCode " Time (ms): %li\n", Energy,gradVector_mu.norm(),overlap,std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count());
+        // fprintf(stderr,"Energy: " realNumTypeCode " GradNorm: " realNumTypeCode " Overlap: " realNumTypeCode " Time (ms): %li\n", Energy,gradVector_mu.norm(),overlap,std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count());
         if (BacktrackCount >= 30 && amStuck)
         {
             logger().log("Break on Stuck");
@@ -818,20 +812,12 @@ void TUPSQuantities::runNewtonMethodProjected(stateAnsatz *myAnsatz,bool avoidNe
     }
 }
 
-bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(stateAnsatz *myAnsatz, bool doDerivativeSteps = true)
+bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(sparseMatrix<realNumType,numType> *Ham, FusedEvolve *myAnsatz,std::vector<realNumType>& angles, bool doDerivativeSteps = true)
 {
     realNumType stepSize = 0.01;
 
-    myAnsatz->setCalculateSecondDerivatives(false);
-    myAnsatz->setCalculateFirstDerivatives(false);
-    const std::vector<ansatz::rotationElement> &rp = myAnsatz->getRotationPath();
-    std::vector<realNumType> angles;
     int numberOfUniqueParameters = m_compressMatrix.rows();
 
-    for (auto rpe : rp)
-    {
-        angles.push_back(rpe.second);
-    }
     bool foundOne = false;
     bool solvedSomething = false;
     int count = 10;
@@ -839,9 +825,12 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(stateAnsatz *myAnsatz
     vector<numType> temp;
     while(count-- > 0)
     {
-        myAnsatz->updateAngles(angles);
+        vector<numType> dest;
+        myAnsatz->evolve(dest,angles);
 
-        const vector<numType>& dest = myAnsatz->getVec();
+        // const std::vector<vector<numType>>& derivTangentSpace = myAnsatz->getDerivTangentSpace();
+
+
         /* some notation:
              * quantities in `compressed' notation after taking into account which angles are equivalent are denoted by the greek subscripts \mu \nu
              * in uncompressed notation with every exponential having a free angle: latin subscripts i,j
@@ -864,16 +853,13 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(stateAnsatz *myAnsatz
         //Hessian_{ij}
         Matrix<realNumType>::EigenMatrix Hij; //uninitialized by default
         //Hessian_{\mu\nu}
-        Matrix<realNumType>::EigenMatrix Hmunu(numberOfUniqueParameters,numberOfUniqueParameters); //uninitialized by default
+        Matrix<realNumType>::EigenMatrix Hmunu;
 
 
         // asyncHij(*Ham,secondDerivTensor,derivTangentSpace,Hij,dest,iSize);
 
 
-        myAnsatz->getHessianAndDerivative(&m_Ham,Hij,gradVec);
-
-
-        Hmunu = m_compressMatrix * Hij * m_compressMatrix.transpose();
+        myAnsatz->evolveHessian(Hmunu,gradVec,angles);
 
         Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> es(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
         vector<realNumType>::EigenVector hessianEigVal = es.eigenvalues();
@@ -881,16 +867,16 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(stateAnsatz *myAnsatz
 
 
 
-        realNumType zeroThreshold = 1e-7;
-        vector<realNumType>::EigenVector updateAngles(rp.size());
-        updateAngles.setZero(rp.size());
+        realNumType zeroThreshold = 1e-10;
+        vector<realNumType>::EigenVector updateAngles(angles.size());
+        updateAngles.setZero(angles.size());
         foundOne = false;
         for (long int i = 0; i < hessianEigVal.rows(); i++)
         {
             auto he  = hessianEigVal[i];
             realNumType e = he;
 
-            if (e < -zeroThreshold)
+            if (e < -1e-7)
             {
                 foundOne = true;
                 solvedSomething = true;
@@ -899,7 +885,7 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(stateAnsatz *myAnsatz
                 updateAngles += m_deCompressMatrix * evCondensed*stepSize;
             }
         }
-        for (size_t i = 0; i < rp.size();i++)
+        for (size_t i = 0; i < angles.size();i++)
             angles[i] += updateAngles[i];
 
         if (!foundOne)
@@ -907,8 +893,12 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(stateAnsatz *myAnsatz
     }
     for (int i =0; i < 1000 && doDerivativeSteps; i++)
     {
-        myAnsatz->updateAngles(angles);
-        const vector<numType>& dest = myAnsatz->getVec();
+        vector<numType> dest;
+        myAnsatz->evolve(dest,angles);
+        // const std::vector<vector<numType>>& derivTangentSpace = myAnsatz->getDerivTangentSpace();
+
+        // Matrix<numType>::EigenMatrix derivTangentSpaceEM = convert(derivTangentSpace).transpose();
+        // vector<numType>::EigenVector destEM = dest;
 
         /* g_{\mu\nu} = \braket{\eta_\mu | \eta_\nu}
          * Where \ket{\eta_\mu} = \frac{d}{d \theta_\mu} \ket{\Psi}
@@ -921,11 +911,15 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(stateAnsatz *myAnsatz
         */
 
         //derivTangentSpaceEMCondensed_{a\mu} = compressMatrix_{\mu,i} derivTangentSpaceEM_{a,i}
+        // Matrix<numType>::EigenMatrix derivTangentSpaceEMCondensed =  derivTangentSpaceEM * m_compressMatrix.transpose();
 
         //gradVector_{\mu} = 2 * \braket{\psi | H | \frac{d}{d\theta_\mu}\psi}
+        // sparseMatrix<realNumType,numType>::EigenSparseMatrix HamEm = *Ham;
+        // vector<realNumType>::EigenVector gradVector = 2*(destEM.adjoint()*HamEm*derivTangentSpaceEMCondensed).real();
+        // gradVector = m_deCompressMatrix * gradVector;
 
         vector<realNumType>::EigenVector gradVectorEM;
-        myAnsatz->getDerivativeVec(&m_Ham,gradVec);
+        myAnsatz->evolveDerivative(dest,gradVec,angles);
         gradVectorEM = gradVec;
         gradVectorEM = m_deCompressMatrix *(m_compressMatrix * gradVectorEM);
 
@@ -954,6 +948,7 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(stateAnsatz *myAnsatz
 void TUPSQuantities::doSubspaceDiagonalisation(stateAnsatz &myAnsatz,size_t numberOfMinima, const std::vector<std::vector<ansatz::rotationElement>>& rotationPaths)
 {
     //skip over HF state
+    m_HamEm = m_Ham;
     numberOfMinima = std::min(rotationPaths.size()-1,numberOfMinima);
     Matrix<numType>::EigenMatrix HMat(numberOfMinima,numberOfMinima);
     Matrix<numType>::EigenMatrix SMat(numberOfMinima,numberOfMinima);
@@ -1044,7 +1039,7 @@ void TUPSQuantities::doSubspaceDiagonalisation(stateAnsatz &myAnsatz,size_t numb
         if (isCompressed)
         {
             lowestEigenVector.setIsCompressed(isCompressed,stateCompressor);
-            compressor::deCompressVector(lowestEigenVector,decompressedLowestEigenVector,stateCompressor);
+            compressor::deCompressVector<numType>(lowestEigenVector,decompressedLowestEigenVector,stateCompressor);
         }
         else
         {
@@ -1135,6 +1130,14 @@ realNumType TUPSQuantities::computeFrechetDistanceBetweenPaths(stateAnsatz *myAn
         myAnsatz->addRotation(rpe.first,rpe.second);
         secondVectors.push_back(myAnsatz->getVec());
     }
+    // distanceMatrix.resize(rotationPath.size(),rotationPath2.size());
+    // for (long i = 0; i < distanceMatrix.rows(); i++)
+    // {
+    //     for (long j = 0; j < distanceMatrix.cols(); j++)
+    //     {
+    //         distanceMatrix(i,j) = (firstVectors[i] - secondVectors[j]).norm();
+    //     }
+    // }
     auto getDistance = [&](long i,long j){return (firstVectors[i] - secondVectors[j]).norm();};
 
     //Do dijkstra to find the shortest route through the matrix while making sure the row and column is increasing
@@ -1238,33 +1241,39 @@ realNumType TUPSQuantities::computeFrechetDistanceBetweenPaths(stateAnsatz *myAn
 }
 
 
-realNumType TUPSQuantities::OptimiseTups(sparseMatrix<realNumType,numType> &Ham, const std::vector<baseAnsatz::rotationElement> &rp, stateAnsatz &myAnsatz, bool avoidNegativeHessianValues)
+realNumType TUPSQuantities::OptimiseTups(sparseMatrix<realNumType,numType> &Ham, std::vector<baseAnsatz::rotationElement> &rp, stateAnsatz &myAnsatz, bool avoidNegativeHessianValues)
 {
-    myAnsatz.setCalculateFirstDerivatives(false);
-    myAnsatz.setCalculateSecondDerivatives(false);
-    myAnsatz.resetPath();
+    FusedEvolve FE(myAnsatz.getStart(),m_Ham,m_compressMatrix,m_deCompressMatrix);
+    std::vector<stateRotate::exc> excs;
+
+
+    std::vector<realNumType> anglesV(m_deCompressMatrix.rows());
     {
         vector<realNumType>::EigenVector angles(rp.size());
         for (size_t i = 0; i <rp.size(); i++ )
         {
+            excs.emplace_back();
+            dynamic_cast<stateRotate*>(myAnsatz.getLie())->convertIdxToExc(rp[i].first,excs.back());
             angles[i] = rp[i].second;// + std::rand()/(10.*RAND_MAX);
+            anglesV[i] = angles[i];
         }
         angles = m_deCompressMatrix * m_normCompressMatrix * angles;
-        for (size_t i = 0; i <rp.size(); i++ )
+        for (long i = 0; i < angles.rows(); i++)
         {
-            myAnsatz.addRotation(rp[i].first,angles[i]);
+            anglesV[i] = angles[i];
         }
+        FE.updateExc(excs);
     }
     realNumType normOfGradVector = 1;
     realNumType Energy = 0;
     bool amStuck = false;
     while (true)
     {
-        runNewtonMethod(&myAnsatz,avoidNegativeHessianValues);
-        bool foundOne  = doStepsUntilHessianIsPositiveDefinite(&myAnsatz,false);
-        myAnsatz.setCalculateSecondDerivatives(false);
+        runNewtonMethod(&FE,anglesV,avoidNegativeHessianValues);
+        bool foundOne  = doStepsUntilHessianIsPositiveDefinite(&Ham,&FE,anglesV,false);
 
-        const vector<numType>& dest = myAnsatz.getVec();
+        vector<numType> dest;
+        FE.evolve(dest,anglesV);
 
 
         /* g_{\mu\nu} = \braket{\eta_\mu | \eta_\nu}
@@ -1282,7 +1291,7 @@ realNumType TUPSQuantities::OptimiseTups(sparseMatrix<realNumType,numType> &Ham,
 
         //gradVector_{\mu} = \braket{\psi | H | \frac{d}{d\theta_\mu}\psi} + \braket{\frac{d}{d\theta_\mu}\psi | H | \psi}
         vector<realNumType> gradVector;
-        myAnsatz.getDerivativeVec(&Ham,gradVector);
+        FE.evolveDerivative(dest,gradVector,anglesV);
         vector<realNumType>::EigenVector gradVectorEm  = gradVector;
         gradVectorEm = m_compressMatrix * gradVectorEm;
 
@@ -1300,18 +1309,21 @@ realNumType TUPSQuantities::OptimiseTups(sparseMatrix<realNumType,numType> &Ham,
             amStuck = false;
     }
     fprintf(stderr,"Optimised Angles: \n");
-    const std::vector<baseAnsatz::rotationElement> &rp2 = myAnsatz.getRotationPath();
-    vector<realNumType>::EigenVector angles(rp2.size());
-    for(long i =0; i < angles.rows(); i++)
+    Eigen::Vector<realNumType,Eigen::Dynamic> angles(anglesV.size());
+    for(size_t i =0; i < anglesV.size(); i++)
     {
-        angles[i] = rp2[i].second;
-        fprintf(stderr,"%.15lg\n",(double)angles[i]);
+        angles[i] = anglesV[i];
+        fprintf(stderr,"%.15lg\n",(double)anglesV[i]);
     }
     fprintf(stderr,"Condensed Angles: \n");
     vector<realNumType>::EigenVector angles2 = m_normCompressMatrix * angles;
     for(long i =0; i < angles2.rows(); i++)
     {
         fprintf(stderr,"%.15lg\n",(double)angles2[i]);
+    }
+    for (size_t i = 0; i < rp.size(); i++)
+    {
+        rp[i].second = anglesV[i];
     }
     return Energy;
 
@@ -1324,9 +1336,9 @@ realNumType innerProduct(const vector<numType>::EigenVector& a, const vector<num
     return std::real(a.dot(b));
 };
 
-void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const std::vector<baseAnsatz::rotationElement> &rp, stateAnsatz &myAnsatz)
+void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const std::vector<baseAnsatz::rotationElement> &rp, stateAnsatz &myAnsatz, bool avoidNegativeHessianValues)
 {
-    bool doDIIS = false;
+    bool doDIIS = true;
     myAnsatz.setCalculateFirstDerivatives(false);
     myAnsatz.setCalculateSecondDerivatives(false);
     myAnsatz.resetPath();
@@ -1345,7 +1357,7 @@ void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const
     realNumType normOfGradVector = 1;
     realNumType Energy = 0;
 
-    DIIS<vector<numType>::EigenVector,vector<realNumType>::EigenVector,innerProduct> myDIIS(3);
+    EDIIS<vector<numType>::EigenVector,vector<realNumType>::EigenVector,innerProduct> myDIIS(15);
     int count = 0;
     while (count++ < 3000)
     {

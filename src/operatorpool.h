@@ -80,7 +80,7 @@ public:
         exc(){}
         exc(int8_t (&arr)[4]){first = arr[0]; second = arr[1]; third = arr[2]; fourth = arr[3];}
         exc(uint32_t val){first = val >> 24; second = val >> 16; third = val >> 8; fourth = val;}
-        operator uint32_t() const {return ((uint32_t)first << 24) + ((uint32_t)second << 16) + ((uint32_t) third << 8) + (uint32_t)fourth;}
+        operator uint32_t() const {return ((uint8_t)first << 24) + ((uint8_t)second << 16) + ((uint8_t) third << 8) + (uint8_t)fourth;}
         const int8_t& operator [](size_t idx) const
         {
             switch (idx)
@@ -115,12 +115,40 @@ public:
                 return first;
             }
         }
+        bool commutes(const exc& other)
+        {
+            bool allNonEqual = true;
+            if (third == -1 && fourth == -1 && other.third == -1 && other.fourth == -1)
+            {
+
+                for (int8_t i = 0; i < 2 && allNonEqual; i++)
+                {
+                    for (int8_t j = 0; j < 2 && allNonEqual; j++)
+                    {
+                        if ((*this)[i] == other[j])
+                            allNonEqual = false;
+                    }
+                }
+            }
+            else
+            {
+                for (int8_t i = 0; i < 2 && allNonEqual; i++)
+                {
+                    for (int8_t j = 0; j < 2 && allNonEqual; j++)
+                    {
+                        if ((*this)[i] == other[j])
+                            allNonEqual = false;
+                    }
+                }
+            }
+            return allNonEqual;
+        }
     }; // 0 indexed
 private:
     typedef uint32_t excHash;
 
     excHash makeExcHash(const exc e){return e;}
-    void makeExcFromHash(exc e,const excHash eh){ e = exc(eh);}
+    void makeExcFromHash(exc &e,const excHash eh){ e = exc(eh);}
 
     std::unordered_map<size_t,matrixType> m_lieAlgebra;
     bool m_lieAlgebraMatricesGenerated = false;
@@ -142,6 +170,7 @@ public:
     matrixType* getLieAlgebraMatrix(size_t idx) override;
     matrixType* getLieAlgebraMatrix(void* data) override {return getLieAlgebraMatrix(*(exc*)data);}
     size_t convertDataToIdx(const void* data) override{return m_lieAlgebraIndexExcReverseMap.at(makeExcHash(*(exc*)data));}
+    void convertIdxToExc(size_t idx, exc& e){return makeExcFromHash(e,m_lieAlgebraIndexExcMap.at(idx));}
     const std::unordered_map<size_t,matrixType>* getLieAlgebraMatrices() override;
 
     bool loadOperators(std::string filename);

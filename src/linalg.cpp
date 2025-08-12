@@ -29,14 +29,14 @@ void Matrix<dataType>::cleanup()
 template<typename dataType>
 void Matrix<dataType>::setZero()
 {
-    memset(m_data,0,sizeof(dataType)*m_iSize*m_jSize);
-}
-
-template<>
-void Matrix<std::complex<realNumType>>::setZero()
-{
-    for (size_t i = 0; i < m_iSize*m_jSize; i++)
-            m_data[i] = std::complex<realNumType>(0);
+    dataType* ptr = m_data;
+    for (size_t i = 0; i < m_iSize; i++)
+    {
+        for (size_t j = 0; j < m_jSize; j++)
+        {
+            *ptr++ = dataType(0);
+        }
+    }
 }
 
 template<typename dataType>
@@ -224,16 +224,6 @@ Matrix<dataType> &Matrix<dataType>::copyFromBuffer(const dataType *buffer, size_
     return *this;
 }
 
-//template<typename dataType>
-//Matrix<dataType> &Matrix<dataType>::operator*=(numType scalar)
-//{
-//    auto dataPtr = m_data;
-//    for (size_t i = 0; i < m_iSize*m_jSize; i++)
-//    {
-//        *dataPtr++ *= scalar;
-//    }
-//    return *this;
-//}
 
 template<typename dataType>
 Matrix<dataType> &Matrix<dataType>::operator=(Matrix&& other) noexcept
@@ -423,9 +413,9 @@ Matrix<dataType>& Matrix<dataType>::prod(const Matrix &other)
 }
 
 template<typename dataType>
-vector<dataType>::vector(const EigenVector &vec):Matrix<dataType>(vec.rows(),1)
+vector<dataType>::vector(const EigenVector &vec):Matrix<dataType>(1,vec.rows())
 {
-    for (size_t i = 0; i < this->m_iSize; i++)
+    for (size_t i = 0; i < size(); i++)
     {
         (*this)[i] = vec(i);
     }
@@ -442,47 +432,61 @@ vector<dataType>::vector(const std::vector<dataType>& data) : vector(data.size()
 
 
 
-template<typename dataType>
+template<typename dataType> // NOTE this returns the REAL part of the complex vector product!!!!!
 realNumType vector<dataType>::dot(const vector &other) const
 {
-    assert(this->m_iSize == other.m_iSize);
+    //Ugly code:
+    if constexpr (std::is_same_v<typename Eigen::NumTraits<dataType>::Real,dataType>)
+    {
+        dataType ret;
+        Eigen::Map<Eigen::Matrix<dataType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> thisMap(this->m_data,this->m_iSize,this->m_jSize);
+        Eigen::Map<Eigen::Matrix<dataType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> otherMap(other.m_data,other.m_iSize,other.m_jSize);
+        ret = thisMap.dot(otherMap);
+        return ret;
+    }
+    else if constexpr(std::is_same_v<std::complex<typename Eigen::NumTraits<dataType>::Real>,dataType>)
+    {//complex
+        typedef typename Eigen::NumTraits<dataType>::Real realT;
+        realT  ret;
+        Eigen::Map<Eigen::Matrix<realT,1,-1,Eigen::RowMajor>,Eigen::Aligned32> thisMap((realT*)this->m_data,this->m_iSize,this->m_jSize*2);
+        Eigen::Map<Eigen::Matrix<realT,1,-1,Eigen::RowMajor>,Eigen::Aligned32> otherMap((realT*)other.m_data,other.m_iSize,other.m_jSize*2);
+        ret = thisMap.dot(otherMap);
+        return ret;
+    }
+    else
+        static_assert(false,"Unknown type?");
 
-    realNumType ret = 0;
-    for (size_t i = 0; i < other.m_iSize; i++)
-        ret += this->m_data[i*(this->m_jSize)+0] * other.m_data[i*other.m_jSize+0];
-    return ret;
+
+
+    //Nice code:
+    // realNumType ret = 0;
+    // for (size_t i = 0; i < other.size(); i++)
+    // {//TODO something like float16 and std::complex<float> may break this? IF so it breaks into assuming it is complex so this is fine.
+    //     if constexpr (std::is_same_v<dataType, decltype(std::real(dataType()))>)
+    //         ret += (*this)[i] * other[i];
+    //     else
+    //         ret += std::real(std::conj((*this)[i]) * other[i]);
+    // }
+    // return ret;
 
 }
-template<> // NOTE this returns the REAL part of the complex vector product!!!!!
-realNumType vector<std::complex<realNumType>>::dot(const vector &other) const
+
+
+template<typename dataType>
+std::complex<realNumType> vector<dataType>::cdot(const vector &other) const
 {
-    assert(this->m_iSize == other.m_iSize);
+    if constexpr(std::is_same_v<dataType, decltype(std::real(dataType()))>)
+        return this->dot(other);
+    else
+    {
+        assert(size() == other.size());
 
-    std::complex<realNumType> ret = 0;
-    for (size_t i = 0; i < other.m_iSize; i++)
-        ret += std::conj(this->m_data[i*(this->m_jSize)+0]) * other.m_data[i*other.m_jSize+0];
-    return real(ret);
-
+        std::complex<realNumType> ret = 0;
+        for (size_t i = 0; i < other.size(); i++)
+            ret += std::conj((*this)[i]) * other[i];
+        return ret;
+    }
 }
-
-template<>
-std::complex<realNumType> vector<realNumType>::cdot(const vector &other) const
-{
-    return this->dot(other);
-}
-
-template<>
-std::complex<realNumType> vector<std::complex<realNumType>>::cdot(const vector &other) const
-{
-    assert(this->m_iSize == other.m_iSize);
-
-    std::complex<realNumType> ret = 0;
-    for (size_t i = 0; i < other.m_iSize; i++)
-        ret += std::conj(this->m_data[i*(this->m_jSize)+0]) * other.m_data[i*other.m_jSize+0];
-    return ret;
-}
-
-
 
 template<typename dataType>
 void vector<dataType>::partialScalarMul(size_t startIndex, size_t endIndex,dataType scalar)
@@ -496,39 +500,30 @@ void vector<dataType>::partialScalarMul(size_t startIndex, size_t endIndex,dataT
     if (startIndex >= endIndex)
         return;
 
+    //TODO use the new view class
     vector<dataType> view;
-    view.m_iSize = endIndex-startIndex;
-    view.m_jSize = 1;
+    view.m_jSize = endIndex-startIndex;
+    view.m_iSize = 1;
     view.m_data = &this->m_data[startIndex]; //ugly pointers
     view*=scalar;
     view.m_data = nullptr;
-    view.m_iSize = 0;
+    view.m_jSize = 0;
 }
 
 
-template<>
-void vector<realNumType>::conj()
+template<typename dataType>
+void vector<dataType>::conj()
 {
-    return;
-}
-
-template<>
-void vector<std::complex<realNumType>>::conj()
-{
-    for (size_t i = 0; i < size(); i++)
+    if constexpr(std::is_same_v<dataType, decltype(std::real(dataType()))>)
+        return;
+    else
     {
-        m_data[i] = std::conj(m_data[i]);
+        for (size_t i = 0; i < size(); i++)
+        {
+            this->m_data[i] = std::conj(this->m_data[i]);
+        }
     }
 }
-
-//template<typename dataType>
-//vector<dataType> &vector<dataType>::operator *=(const vector<dataType> &other)
-//{
-//    assert(this->m_iSize == other.m_iSize);
-//    for (size_t i = 0; i < other.m_iSize; i++)
-//        this->m_data[i*(this->m_jSize)+0] = this->m_data[i*(this->m_jSize)+0] * other.m_data[i*other.m_jSize+0];
-//    return *this;
-//}
 
 Matrix<numType>::EigenMatrix convert(const std::vector<vector<numType> > &AnsatzTangentSpace)
 {
@@ -538,7 +533,18 @@ Matrix<numType>::EigenMatrix convert(const std::vector<vector<numType> > &Ansatz
             ret(i,j) = AnsatzTangentSpace[i][j];
     return ret;
 }
+
 template class Matrix<std::complex<realNumType>>;
 template class Matrix<realNumType>;
 template class vector<std::complex<realNumType>>;
 template class vector<realNumType>;
+
+template class vectorView<Matrix<std::complex<realNumType>>>;
+template class vectorView<Matrix<realNumType>>;
+template class vectorView<const Matrix<std::complex<realNumType>>>;
+template class vectorView<const Matrix<realNumType>>;
+
+template class vectorView<Matrix<std::complex<realNumType>>, Eigen::ColMajor>;
+template class vectorView<Matrix<realNumType>, Eigen::ColMajor>;
+template class vectorView<const Matrix<std::complex<realNumType>>, Eigen::ColMajor>;
+template class vectorView<const Matrix<realNumType>, Eigen::ColMajor>;

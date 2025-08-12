@@ -18,12 +18,12 @@ bool stateAnsatzManager::validateToRun()
             success = false;
         }
     }
-    if (!m_lie)
+    if (!m_lie && !useFused)
     {
         success = false;
         logger().log("You tried running without setting up the operators!");
     }
-    if (!m_ansatz)
+    if (!m_ansatz && !useFused)
     {
         success = false;
         logger().log("Ansatz is not setup, You have either not provided the initial state or not provided the operators");
@@ -33,10 +33,15 @@ bool stateAnsatzManager::validateToRun()
         success = false;
         logger().log("TUPS Properties is not setup, Make sure the Hamiltonian, Initial state, operators are all setup");
     }
-    if (m_rotationPath.size() == 0)
+    if (m_rotationPath.size() == 0 && !useFused)
     {
         success = false;
         logger().log("Rotation path has zero size. Operators have not been setup");
+    }
+    if (useFused && !m_FA)
+    {
+        success = false;
+        logger().log("Fused Ansatz is not setup, You have either not provided the initial state or not provided the operators");
     }
     return success;
 }
@@ -82,38 +87,65 @@ bool stateAnsatzManager::construct()
     }
     if (success)
     {
-        if (m_numberOfParticles <= 0) // -1 is what is expected
+        if constexpr(useFused)
         {
-            m_lie = std::make_shared<stateRotate>(m_numberOfQubits);
+            if (m_numberOfParticles > 0)
+            {
+                m_compressStateVectors = true;
+                m_compressor = std::make_shared<numberOperatorCompressor>(m_numberOfParticles,1<<m_numberOfQubits);
+            }
+
+            if (m_compressStateVectors)
+            {
+                m_Ham.compress(m_compressor);
+                vector<numType> compStart;
+                compressor::compressVector<numType>(m_start,compStart,m_compressor);
+                static_cast<Matrix<numType>&>(m_start) = std::move(compStart);
+            }
+            m_TUPSQuantities = std::make_shared<TUPSQuantities>(m_Ham,m_parameterDependency,m_numberOfUniqueParameters, m_nuclearEnergy,m_runPath); //TODO allow for a output file path
+            m_compressMatrix = m_TUPSQuantities->m_compressMatrix;
+            m_deCompressMatrix = m_TUPSQuantities->m_deCompressMatrix;
+            m_FA = std::make_shared<FusedEvolve>(m_start,m_Ham,m_compressMatrix,m_deCompressMatrix);
+            m_FA->updateExc(m_excitations);
+            m_rotationPath.clear(); // probably empty but lets make sure
+            m_angles.clear();
+            m_isConstructed = true;
         }
         else
         {
-            m_lie = std::make_shared<stateRotate>(m_numberOfQubits,true,m_numberOfParticles);
-        }
-        m_rotationPath.clear(); // probably empty but lets make sure
-        m_angles.clear();
-        for (auto& e : m_excitations)
-        {
-            m_lie->getLieAlgebraMatrix(e);
-            m_rotationPath.push_back({m_lie->convertDataToIdx(&e),0});
-            m_angles.push_back(0);
-        }
-        m_ansatz = std::make_shared<stateAnsatz>(&m_target,m_start,m_lie.get());
-        m_ansatz->setCalculateFirstDerivatives(false);
-        m_ansatz->setCalculateSecondDerivatives(false);
-        m_ansatz->resetPath();
-        for (auto& rp : m_rotationPath )
-        {
-            m_ansatz->addRotation(rp.first,rp.second);
-        }
-        std::shared_ptr<compressor> comp;
+            if (m_numberOfParticles <= 0) // -1 is what is expected
+            {
+                m_lie = std::make_shared<stateRotate>(m_numberOfQubits);
+            }
+            else
+            {
+                m_lie = std::make_shared<stateRotate>(m_numberOfQubits,true,m_numberOfParticles);
+            }
+            m_rotationPath.clear(); // probably empty but lets make sure
+            m_angles.clear();
+            for (auto& e : m_excitations)
+            {
+                m_lie->getLieAlgebraMatrix(e);
+                m_rotationPath.push_back({m_lie->convertDataToIdx(&e),0});
+                m_angles.push_back(0);
+            }
+            m_ansatz = std::make_shared<stateAnsatz>(&m_target,m_start,m_lie.get());
+            m_ansatz->setCalculateFirstDerivatives(false);
+            m_ansatz->setCalculateSecondDerivatives(false);
+            m_ansatz->resetPath();
+            for (auto& rp : m_rotationPath )
+            {
+                m_ansatz->addRotation(rp.first,rp.second);
+            }
+            std::shared_ptr<compressor> comp;
 
-        if (m_lie->getCompressor(comp))
-        {
-            m_Ham.compress(comp);
+            if (m_lie->getCompressor(comp))
+            {
+                m_Ham.compress(comp);
+            }
+            m_TUPSQuantities = std::make_shared<TUPSQuantities>(m_Ham,m_parameterDependency,m_numberOfUniqueParameters, m_nuclearEnergy,m_runPath); //TODO allow for a output file path
+            m_isConstructed = true;
         }
-        m_TUPSQuantities = std::make_shared<TUPSQuantities>(m_Ham,m_parameterDependency,m_numberOfUniqueParameters, m_nuclearEnergy,m_runPath); //TODO allow for a output file path
-        m_isConstructed = true;
     }
     return success;
 }
@@ -366,8 +398,15 @@ bool stateAnsatzManager::setAngles(std::vector<realNumType> angles)
     if (success && angles != m_angles)
     {
         m_angles = angles;
-        setRotationPathFromAngles();
-        m_ansatz->updateAngles(m_angles);
+        if constexpr(useFused)
+        {
+            m_FA->evolve(m_current,angles);
+        }
+        else
+        {
+            setRotationPathFromAngles();
+            m_ansatz->updateAngles(m_angles);
+        }
     }
     return success;
 }
@@ -380,7 +419,14 @@ bool stateAnsatzManager::getExpectationValue(realNumType &exptValue)
         success = false;
         return success;
     }
-    exptValue = m_Ham.braket(m_ansatz->getVec(),m_ansatz->getVec(),&tempNumType);
+    if constexpr(useFused)
+    {
+        exptValue = m_FA->getEnergy(m_current);
+    }
+    else
+    {
+        exptValue = m_Ham.braket(m_ansatz->getVec(),m_ansatz->getVec(),&tempNumType);
+    }
     return success;
 }
 
@@ -392,10 +438,10 @@ bool stateAnsatzManager::getFinalState(vector<numType> &finalState)
         success = false;
         return success;
     }
-    const vector<numType>& dest = m_ansatz->getVec();
+    const vector<numType>& dest = useFused ?  m_current: m_ansatz->getVec();
     std::shared_ptr<compressor> comp;
     if (dest.getIsCompressed(comp))
-        compressor::deCompressVector(dest,finalState,comp);
+        compressor::deCompressVector<numType>(dest,finalState,comp);
     else
         finalState.copy(dest);
     return success;
@@ -409,7 +455,10 @@ bool stateAnsatzManager::getGradient(vector<realNumType> &gradient)
         success = false;
         return success;
     }
-    m_ansatz->getDerivativeVec(&m_Ham,gradient);
+    if (useFused)
+        m_FA->evolveDerivative(m_current,gradient,m_angles);
+    else
+        m_ansatz->getDerivativeVec(&m_Ham,gradient);
 
     return success;
 }
@@ -436,17 +485,35 @@ bool stateAnsatzManager::getHessian(Matrix<realNumType>::EigenMatrix &hessian)
         success = false;
         return success;
     }
-    m_ansatz->getHessianAndDerivative(&m_Ham,hessian,tempRealNumType);
+    if constexpr(useFused)
+    {
+        logger().log("Fused ansatz can only provide compressed Hessians");
+        __builtin_trap();
+    }
+    else
+        m_ansatz->getHessianAndDerivative(&m_Ham,hessian,tempRealNumType);
     return success;
 }
 
 bool stateAnsatzManager::getHessianComp(Matrix<realNumType>::EigenMatrix &hessian)
 {
     bool success = true;
-    success = getHessian(hessian);
-    if (success)
+    if constexpr (useFused)
     {
-        hessian = m_TUPSQuantities->m_compressMatrix * hessian * m_TUPSQuantities->m_compressMatrix.transpose();
+        if (!validateToRun())
+        {
+            success = false;
+            return success;
+        }
+        m_FA->evolveHessian(hessian,tempRealNumType,m_angles);
+    }
+    else
+    {
+        success = getHessian(hessian);
+        if (success)
+        {
+            hessian = m_TUPSQuantities->m_compressMatrix * hessian * m_TUPSQuantities->m_compressMatrix.transpose();
+        }
     }
     return success;
 }
@@ -518,6 +585,11 @@ bool stateAnsatzManager::optimise()
     {
         success = false;
         return success;
+    }
+    if (!useFused)
+    {
+        logger().log("Can only optimise with Fused ansatz build");
+        return false;
     }
     m_TUPSQuantities->OptimiseTups(m_Ham,m_rotationPath,*m_ansatz,true);
     m_rotationPath = m_ansatz->getRotationPath();

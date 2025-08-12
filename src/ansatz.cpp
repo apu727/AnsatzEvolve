@@ -8,7 +8,6 @@
 #include "threadpool.h"
 #include "logger.h"
 
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -16,6 +15,39 @@
 #include <cstring>
 
 void asyncRotate(std::vector<vector<numType>>& m_derivList, const matrixType &rotationGenerator, realNumType S, realNumType C)
+{
+    std::atomic_int finishCount = 0;
+
+    auto multiply = [&](size_t startD, size_t endD)
+    {
+        auto d = m_derivList.begin()+startD;
+        auto end = m_derivList.begin()+endD;
+        while (d != end)
+        {
+            rotationGenerator.rotate(S,C,*d,*d);
+            d++;
+        }
+        std::atomic_fetch_add_explicit(&finishCount,1,std::memory_order_release);
+    };
+    const int stepSize = std::max((size_t)m_derivList.size()/NUM_CORES,1ul);
+
+    auto& pool = threadpool::getInstance(NUM_CORES);
+    std::vector<std::future<void>> futures;
+    for (size_t i = 0; i<m_derivList.size(); i += stepSize)
+    {
+        auto endIndex = std::min(i+stepSize,m_derivList.size());
+        futures.push_back(pool.queueWork([=,&multiply](){ multiply(i,endIndex);}));
+
+    }
+
+    for (auto& fut : futures)
+        fut.wait();
+    while (std::atomic_load_explicit(&finishCount,std::memory_order_acquire) < (int)futures.size())
+        fprintf(stderr,"Wait returned but not all done?");
+    std::atomic_thread_fence(std::memory_order_acquire);
+}
+
+void asyncRotate(std::vector<vectorView<Matrix<numType>>>& m_derivList, const matrixType &rotationGenerator, realNumType S, realNumType C)
 {
     std::atomic_int finishCount = 0;
 
@@ -58,7 +90,6 @@ void baseAnsatz::rotateState(const matrixType &rotationGenerator, realNumType th
 
     double S = 0;
     double C = 0;
-
     mysincos(theta,&S,&C);
 
 
@@ -197,7 +228,7 @@ void baseAnsatz::calcRotationAlongPath(const std::vector<rotationElement> &rotat
 {
     if (m_lieIsCompressed)
     {
-        compressor::compressVector(start,dest,m_compressor);
+        compressor::compressVector<numType>(start,dest,m_compressor);
     }
     else
         dest.copy(start);
@@ -218,11 +249,25 @@ void baseAnsatz::getDerivativeVec(sparseMatrix<realNumType,numType> *ExpMat, vec
     deriv.resize(m_rotationPath.size(),false,nullptr);
     vector<numType> hPsi;
     auto superstart = std::chrono::high_resolution_clock::now();
-    ExpMat->multiply(m_current,hPsi);
+    // ExpMat->multiply(m_current,hPsi);
+    if (!m_HamEmIsSet)
+    {
+        m_HamEm = ((Eigen::SparseMatrix<realNumType,Eigen::RowMajor>)*ExpMat);
+        m_HamEmIsSet = true;
+    }
+    {
+        hPsi.resize(m_current.size(),m_lieIsCompressed,m_compressor,false);
+        Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&m_current.at(0,0),m_current.m_iSize,m_current.m_jSize);
+        Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> destMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
+        destMap.noalias() = currentMap*m_HamEm;
+    }
 
     m_hPsiEvolvedList.resize(m_rotationPath.size());
     m_hPsiEvolvedList.back().copy(hPsi); // this can be removed if only the der
     auto start = std::chrono::high_resolution_clock::now();
+    std::vector<std::future<void>> futs;
+    futs.reserve(m_rotationPath.size());
+
     for (size_t i = m_rotationPath.size()-1; i > 0 ; i--)
     {
         vector<numType>& src = m_hPsiEvolvedList[i];
@@ -238,18 +283,19 @@ void baseAnsatz::getDerivativeVec(sparseMatrix<realNumType,numType> *ExpMat, vec
         double C = 0;
         mysincos(theta,&S,&C);
         rotationGenerator.rotate(S,C,src,dest);
-        deriv[i] = 2* m_derivSpaceNotEvolvedCache[i].dot(src);
+        futs.push_back(threadpool::getInstance(NUM_CORES).queueWork([i,&deriv,this](){deriv[i] = 2* m_derivSpaceNotEvolvedCache[i].dot(m_hPsiEvolvedList[i]);}));
     }
     deriv[0] = 2* m_derivSpaceNotEvolvedCache[0].dot(m_hPsiEvolvedList[0]);
-
+    for (auto& f : futs)
+        f.wait();
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(start-superstart).count();
     auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
-    // logger().log("hpsi Time taken (ms)",duration1);
-    // logger().log("DerivEvolve Time taken (ms)",duration2);
+    logger().log("hpsi Time taken (ms)",duration1);
+    logger().log("DerivEvolve Time taken (ms)",duration2);
 }
 
-void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *ExpMat, Matrix<realNumType>::EigenMatrix &Hessian, vector<realNumType>& deriv)
+void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *ExpMat, Matrix<realNumType>::EigenMatrix &Hessian, vector<realNumType>& deriv, Eigen::SparseMatrix<realNumType,Eigen::RowMajor>* compressMatrix)
 {
     //Its better to assume nothing is cached since we need to recompute everything anyway basically.
 
@@ -263,10 +309,11 @@ void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *Exp
     getDerivativeVec(ExpMat,deriv);
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
-    // logger().log("getDerivativeVec Time taken (ms)",duration);
+    logger().log("getDerivativeVec Time taken (ms)",duration);
     // m_hPsiEvolvedList is now setup
     Hessian.resize(m_rotationPath.size(), m_rotationPath.size());
     Hessian.setZero();
+    Eigen::MatrixXd THT;
     if (m_rotationPath.size() < 1)
         return;
 
@@ -296,7 +343,7 @@ void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *Exp
             // rotationGenerator.multiply(currPos,normDir); // normDir = rotationGenerator * m_current
             //normDir now has  \ket{\frac{d^2}{dx_i d x_j}}
             // Hessian(starti,x_j) = 2*normDir.dot(m_hPsiEvolvedList[x_j]);
-            Hessian(x_j,starti) = Hessian(starti,x_j);
+            // Hessian(x_j,starti) = Hessian(starti,x_j);
         }
     };
 
@@ -311,7 +358,7 @@ void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *Exp
     for (size_t x_i = 0; x_i < m_rotationPath.size(); x_i++)
     {
         //Special case the diagonal term
-        currPos.copy(m_derivSpaceNotEvolvedCache[x_i]);
+        const vector<numType>& currPos = m_derivSpaceNotEvolvedCache[x_i];
         const rotationElement& rp = m_rotationPath[x_i];
         const matrixType &rotationGenerator = *m_lie->getLieAlgebraMatrix(rp.first);
 
@@ -327,12 +374,20 @@ void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *Exp
         fut.wait();
 
     //Do the cross terms, effectively need to construct m_derivList
-    if (!m_calculateFirstDerivatives)
+    auto start1 = std::chrono::high_resolution_clock::now();
+    auto start2 = std::chrono::high_resolution_clock::now();
+    auto start3 = std::chrono::high_resolution_clock::now();
+    auto start4 = std::chrono::high_resolution_clock::now();
+
+
+
     {
-        m_derivList.clear();
-        m_derivList.reserve(m_rotationPath.size());
-        m_derivList.emplace_back();
-        m_derivList.back().copy(m_derivSpaceNotEvolvedCache[0]);
+        Matrix<numType> mat;
+        mat.resize(m_rotationPath.size(),m_start.size(),m_lieIsCompressed,m_compressor);
+
+        mat.getJVectorView(0).copy(m_derivSpaceNotEvolvedCache[0]);
+        std::vector<vectorView<Matrix<numType>,Eigen::RowMajor> > derivList;
+        derivList.push_back(mat.getJVectorView(0));
 
         for (size_t x_i = 1; x_i < m_rotationPath.size(); x_i++)
         {
@@ -347,40 +402,114 @@ void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *Exp
             mysincos(theta,&S,&C);
 
 
-            asyncRotate(m_derivList,rotationGenerator,S,C);
+            asyncRotate(derivList,rotationGenerator,S,C);
 
             m_derivList.emplace_back();
-            m_derivList.back().copy(m_derivSpaceNotEvolvedCache[x_i]);
-
+            mat.getJVectorView(x_i).copy(m_derivSpaceNotEvolvedCache[x_i]);
+            derivList.push_back(mat.getJVectorView(x_i));
         }
-    }
-    //m_derivList is now valid
-    m_hPsiDeriv.resize(m_rotationPath.size());
-    futures.clear();
 
-    for (size_t x_i = 0; x_i < m_rotationPath.size(); x_i++)
-    {
-        futures.push_back(pool.queueWork([&,x_i](){mul(*ExpMat,m_derivList[x_i],m_hPsiDeriv[x_i]);}));
-    }
-    for (auto& fut : futures)
-        fut.wait();
-
-
-    //\braket{\frac{d}{d x_j}\psi | H is now computed
-
-    futures.clear();
-    for (size_t x_i = 0; x_i < m_rotationPath.size(); x_i++)
-    {
-        futures.push_back(pool.queueWork([&,x_i](){
-        for (size_t x_j = x_i; x_j < m_rotationPath.size(); x_j++)
+        if (!m_HamEmIsSet)
         {
-            Hessian(x_i,x_j) += 2*m_hPsiDeriv[x_i].dot(m_derivList[x_j]);
-            Hessian(x_j,x_i) = Hessian(x_i,x_j);
+            m_HamEm = ((Eigen::SparseMatrix<realNumType,Eigen::RowMajor>)*ExpMat);
+            m_HamEmIsSet = true;
         }
-        }));
+
+        Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> HPsiDerivC;
+        Eigen::Map<Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32>matMapR(&mat.at(0,0),mat.m_iSize,mat.m_jSize);
+
+        start2 = std::chrono::high_resolution_clock::now();
+        /*This ordering swap is worth it somehow. Probably because the loops can be restructured to be:
+             * A += B*C
+             * //Slow access
+             *  for (j)
+             *      //Access the sparse matrix in order
+             *      for (k)
+             *          //UNROLL/use avx Since B(i,.) and A(i,.) are adjacent in memory
+             *          for (i)
+             *               A(i,j) += B(i,k)*C(k,j)
+             */
+        if (compressMatrix != nullptr)
+        {
+            Eigen::Matrix<numType,-1,-1,Eigen::RowMajor> matMapR_Comp = *compressMatrix*matMapR; //Has roughly the same cost as the dot product. I.e. cheap compared to matrix multiplication
+            Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> matMapC = matMapR_Comp;
+            HPsiDerivC.noalias() = matMapC * m_HamEm;
+            THT.resize(compressMatrix->rows(),compressMatrix->rows());
+
+            start3 = std::chrono::high_resolution_clock::now();
+            if constexpr(std::is_same_v<numType,typename Eigen::NumTraits<numType>::Real>)
+            {
+                THT.triangularView<Eigen::Upper>() = 2*matMapR_Comp * HPsiDerivC.transpose();
+            }
+            else if constexpr(std::is_same_v<std::complex<realNumType>,numType>)
+            {
+                //Have to do magic trickery to avoid an 8x slowdown, With this its only 4x slower. There are only 2x as many flops so im not sure why? If the conjugate is one flop (its not quite) then 3x flops?
+                //https://en.cppreference.com/w/cpp/numeric/complex.html This is well defined
+                Eigen::Map<Eigen::Matrix<realNumType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32>matMapRReal((realNumType*)matMapR_Comp.data(),matMapR_Comp.rows(),matMapR_Comp.cols()*2);
+                Eigen::Matrix<numType,-1,-1,Eigen::RowMajor> HPsiDerivR = HPsiDerivC;
+
+                Eigen::Map<Eigen::Matrix<realNumType,-1,-1,Eigen::RowMajor>>HPsiDerivRReal((realNumType*)HPsiDerivR.data(),HPsiDerivR.rows(),HPsiDerivR.cols()*2);
+                THT.triangularView<Eigen::Upper>() = 2*matMapRReal * HPsiDerivRReal.transpose();
+            }
+            else
+            {
+                static_assert(std::is_same_v<numType,typename Eigen::NumTraits<numType>::Real> || std::is_same_v<std::complex<realNumType>,numType>);
+                logger().log("Impossible?");
+            }
+        }
+        else
+        {
+            Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> matMapC = matMapR; //Has roughly the same cost as the dot product. I.e. cheap compared to matrix multiplication
+            HPsiDerivC.noalias() = matMapC * m_HamEm;
+            THT.resize(m_rotationPath.size(),m_rotationPath.size());
+
+            start3 = std::chrono::high_resolution_clock::now();
+            if constexpr(std::is_same_v<numType,typename Eigen::NumTraits<numType>::Real>)
+            {
+                THT.triangularView<Eigen::Upper>() = 2*matMapR * HPsiDerivC.transpose();
+            }
+            else if constexpr(std::is_same_v<std::complex<realNumType>,numType>)
+            {
+                //Have to do magic trickery to avoid an 8x slowdown, With this its only 4x slower. There are only 2x as many flops so im not sure why? If the conjugate is one flop (its not quite) then 3x flops?
+                //https://en.cppreference.com/w/cpp/numeric/complex.html This is well defined
+                Eigen::Map<Eigen::Matrix<realNumType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32>matMapRReal((realNumType*)&mat.at(0,0),mat.m_iSize,mat.m_jSize*2);
+                Eigen::Matrix<numType,-1,-1,Eigen::RowMajor> HPsiDerivR = HPsiDerivC;
+
+                Eigen::Map<Eigen::Matrix<realNumType,-1,-1,Eigen::RowMajor>>HPsiDerivRReal((realNumType*)HPsiDerivR.data(),HPsiDerivR.rows(),HPsiDerivR.cols()*2);
+                THT.triangularView<Eigen::Upper>() = 2*matMapRReal * HPsiDerivRReal.transpose();
+            }
+            else
+            {
+                static_assert(std::is_same_v<numType,typename Eigen::NumTraits<numType>::Real> || std::is_same_v<std::complex<realNumType>,numType>);
+                logger().log("Impossible?");
+            }
+        }
+        start4 = std::chrono::high_resolution_clock::now();
     }
-    for (auto& fut : futures)
-        fut.wait();
+    for (long i = 0; i < Hessian.rows(); i++)
+    {
+        for (long j = i; j < Hessian.rows(); j++)
+        {
+            Hessian(j,i) = Hessian(i,j);
+        }
+    }
+    for (long i = 0; i < THT.rows(); i++)
+    {
+        for (long j = i; j < THT.rows(); j++)
+        {
+            THT(j,i) = THT(i,j);
+        }
+    }
+    if (compressMatrix != nullptr)
+        Hessian = *compressMatrix * Hessian * compressMatrix->transpose();
+    Hessian += THT;
+
+    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(start2-start1).count();
+    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(start3-start2).count();
+    auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(start4-start3).count();
+    logger().log("Hessian Duration1:",duration1);
+    logger().log("Hessian Duration2:",duration2);
+    logger().log("Hessian Duration3:",duration3);
 }
 
 void baseAnsatz::getDerivativeVecProj(const vector<numType> &projVec, vector<realNumType> &deriv)
@@ -391,6 +520,8 @@ void baseAnsatz::getDerivativeVecProj(const vector<numType> &projVec, vector<rea
     m_hPsiEvolvedList.resize(m_rotationPath.size());
     m_hPsiEvolvedList.back().copy(projVec); // this can be removed if only the der
     auto start = std::chrono::high_resolution_clock::now();
+    std::vector<std::future<void>> futs;
+    futs.reserve(m_rotationPath.size());
     for (size_t i = m_rotationPath.size()-1; i > 0 ; i--)
     {
         vector<numType>& src = m_hPsiEvolvedList[i];
@@ -406,9 +537,12 @@ void baseAnsatz::getDerivativeVecProj(const vector<numType> &projVec, vector<rea
         double C = 0;
         mysincos(theta,&S,&C);
         rotationGenerator.rotate(S,C,src,dest);
-        deriv[i] = m_derivSpaceNotEvolvedCache[i].dot(src);
+        // deriv[i] = m_derivSpaceNotEvolvedCache[i].dot(src);
+        futs.push_back(threadpool::getInstance(NUM_CORES).queueWork([i,&deriv,this](){deriv[i] = 2* m_derivSpaceNotEvolvedCache[i].dot(m_hPsiEvolvedList[i]);}));
     }
     deriv[0] = m_derivSpaceNotEvolvedCache[0].dot(m_hPsiEvolvedList[0]);
+    for (auto& f : futs)
+        f.wait();
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(start-superstart).count();
@@ -423,8 +557,7 @@ void baseAnsatz::getHessianAndDerivativeProj(const vector<numType> &projVec, Mat
 
 
     //TODO memory fragmentation
-    // H_{ij}      = \braket{\psi | H | \frac{d^2}{dx_i d x_j} \psi } + \braket{\frac{d^2}{dx_i d x_j} \psi | H | \psi} +
-    //             + \braket{\frac{d}{d x_i}\psi | H | \frac{d}{d x_j}\psi} + \braket{\frac{d}{d x_j}\psi | H | \frac{d}{d x_i}\psi}
+    // H_{ij}      = \braket{\psi | H | \frac{d^2}{dx_i d x_j} \psi }
 
     //It is assumed that ExpMat is Hermitian i.e. Conjugate transpose symmetric
     auto start = std::chrono::high_resolution_clock::now();
@@ -496,6 +629,7 @@ void baseAnsatz::resetPath()
 {
     resetState();
     m_rotationPath.clear();
+    m_HamEmIsSet = false;
 }
 
 
@@ -715,7 +849,7 @@ baseAnsatz::baseAnsatz(targetMatrix<numType,numType> *target, const vector<numTy
     m_lie = lie;
     m_lieIsCompressed = lie->getCompressor(m_compressor);
     if (m_lieIsCompressed)
-        compressor::compressVector(start,m_start,m_compressor);
+        compressor::compressVector<numType>(start,m_start,m_compressor);
 
     else
         m_start.copy(start);

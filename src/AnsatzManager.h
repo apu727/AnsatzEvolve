@@ -7,15 +7,21 @@
 #define ANSATZMANAGER_H
 #include "ansatz.h"
 #include "tupsquantities.h"
+#include "fusedevolve.h"
 #include <mutex>
-
-
+#define USE_FUSED
+#ifdef USE_FUSED
+constexpr bool useFused = true;
+#else
+constexpr bool useFused = false;
+#endif
 class stateAnsatzManager
 {
 private:
     std::shared_ptr<stateRotate> m_lie = nullptr;
     std::shared_ptr<stateAnsatz> m_ansatz = nullptr;
     std::shared_ptr<TUPSQuantities> m_TUPSQuantities = nullptr;
+    std::shared_ptr<FusedEvolve> m_FA;
 
     sparseMatrix<numType,numType> m_target; //dummy, todo remove
     std::vector<realNumType> m_angles; // To compare and only recalculate when it changes
@@ -46,6 +52,12 @@ private:
 
     vector<numType> tempNumType; // used in various functions as a scratch space
     vector<realNumType> tempRealNumType; // used in various functions as a scratch space
+
+    bool m_compressStateVectors = false;
+    std::shared_ptr<compressor> m_compressor = nullptr;
+    Eigen::SparseMatrix<realNumType, Eigen::RowMajor> m_compressMatrix; //Stores equivalent parameters
+    Eigen::SparseMatrix<realNumType, Eigen::RowMajor> m_deCompressMatrix; //Stores equivalent parameters
+    vector<numType> m_current;
 
 public:
     // Lock that is used by interface to external programs to guarantee thread safe operation. Generally only one of these functions should be called at a time. Lock is not used internally

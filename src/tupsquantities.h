@@ -6,6 +6,7 @@
 #ifndef TUPSQUANTITIES_H
 #define TUPSQUANTITIES_H
 
+#include "fusedevolve.h"
 #include "globals.h"
 
 #include "Eigen/Eigenvalues"
@@ -38,10 +39,11 @@ class TUPSQuantities
                   const std::vector<vector<numType>> &derivTangentSpace, Matrix<realNumType>::EigenMatrix &Hij,
                   const vector<numType>& dest, const size_t iSize);
 
-    void runNewtonMethod(stateAnsatz *myAnsatz,bool avoidNegativeHessianValues = true);
+    void runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumType> &angles,bool avoidNegativeHessianValues = true);
     void runNewtonMethodProjected(stateAnsatz *myAnsatz,bool avoidNegativeHessianValues = true);
 
-    bool doStepsUntilHessianIsPositiveDefinite(stateAnsatz *myAnsatz, bool doDerivativeSteps);
+    bool doStepsUntilHessianIsPositiveDefinite(sparseMatrix<realNumType,numType> *Ham,
+                                               FusedEvolve *myAnsatz,std::vector<realNumType>& angles, bool doDerivativeSteps);
     realNumType computeFrechetDistanceBetweenPaths(stateAnsatz *myAnsatz, const std::vector<ansatz::rotationElement>& rotationPath, const std::vector<ansatz::rotationElement>& rotationPath2);
 
 
@@ -58,10 +60,10 @@ public:
     void OptimiseTupsLBFGS(sparseMatrix<realNumType,numType> &Ham, std::vector<ansatz::rotationElement> &rotationPath,
                       stateAnsatz& myAnsatz, bool blanking = false);
 
-    realNumType OptimiseTups(sparseMatrix<realNumType,numType> &Ham, const std::vector<ansatz::rotationElement> &rotationPath,
+    realNumType OptimiseTups(sparseMatrix<realNumType,numType> &Ham, std::vector<ansatz::rotationElement> &rotationPath,
                            stateAnsatz& myAnsatz,bool avoidNegativeHessianValues = true);
     void iterativeTups(sparseMatrix<realNumType,numType> &Ham, const std::vector<ansatz::rotationElement> &rotationPath,
-                      stateAnsatz& myAnsatz);
+                      stateAnsatz& myAnsatz,bool avoidNegativeHessianValues = true);
     void doSubspaceDiagonalisation(stateAnsatz &myAnsatz, size_t numberOfMinima,const std::vector<std::vector<ansatz::rotationElement>>& rotationPaths);
 
 

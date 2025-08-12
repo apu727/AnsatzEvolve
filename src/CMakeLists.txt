@@ -40,7 +40,8 @@ add_library(cppAnsatzSynthLib STATIC
     tupsquantities.cpp
     tupsquantities.h
     benchmark.h benchmark.cpp
-    diis.h
+    diis.h diis.cpp
+    fusedevolve.cpp fusedevolve.h
 )
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 else()

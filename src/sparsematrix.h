@@ -128,7 +128,7 @@ protected:
 public:
     virtual ~targetMatrix(){};
 
-    virtual void multiply(const vector<vectorType>& other, vector<vectorType>& dest) const = 0;
+    virtual void multiply(const vectorView<const Matrix<vectorType>> &other, vectorView<Matrix<vectorType>> dest) const = 0;
 
     friend void mul (const targetMatrix<dataType,vectorType>& lhs, const vector<vectorType>& other, vector<vectorType>& dest)
     {
@@ -181,7 +181,8 @@ public:
         return true;
     }
     template<typename VectorType>
-    static void compressVector(const vector<VectorType>& src, vector<VectorType>& dst, std::shared_ptr<compressor> thisPtr)
+    static void compressVector(const vectorView<const Matrix<VectorType>,Eigen::RowMajor>& src, vectorView<Matrix<VectorType>,Eigen::RowMajor> dst,
+                               std::shared_ptr<compressor> thisPtr)
     {
         std::shared_ptr<compressor> srcCompressor;
         if (src.getIsCompressed(srcCompressor)) // this comes up often enough that its better to special case it than throw an error
@@ -204,7 +205,7 @@ public:
     }
 
     template<typename VectorType>
-    static void deCompressVector(const vector<VectorType>& src, vector<VectorType>& dst, std::shared_ptr<compressor> thisPtr)
+    static void deCompressVector(const vectorView<const Matrix<VectorType>>& src, vectorView<Matrix<VectorType>,Eigen::RowMajor> dst, std::shared_ptr<compressor> thisPtr)
     {
         std::shared_ptr<compressor> srcCompressor;
         assert(src.getIsCompressed(srcCompressor) == true); // decompressing a decompressed vector is an error. This is to catch bugs
@@ -242,8 +243,8 @@ class sparseMatrix : public targetMatrix<dataType,vectorType>
     bool m_isCompressed = false;
     bool m_isRotationGenerator = false;// allows certain optimisations
 
-    void multiplyDecompressed(const vector<vectorType>& other, vector<vectorType>& dest) const;
-    void rotateDecompressed(realNumType S,realNumType C, const vector<vectorType>& other, vector<vectorType>& dest) const;
+    void multiplyDecompressed(const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const;
+    void rotateDecompressed(realNumType S,realNumType C, const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const;
 public:
     sparseMatrix();
     sparseMatrix(const std::vector<dataType>& value, const std::vector<int>& iIndex, const std::vector<int>& jIndex,int);
@@ -278,11 +279,11 @@ public:
     std::vector<uint32_t> &getBlankingVector(){return m_blankingVector;}
     virtual bool loadMatrix(std::string filename);
 
-    void multiply(const vector<vectorType>& other, vector<vectorType>& dest) const override;
-    void rotate(realNumType angle, const vector<vectorType>& other, vector<vectorType>& dest) const;
-    void rotate(realNumType S,realNumType C, const vector<vectorType>& other, vector<vectorType>& dest) const;
-    void rotateAndBraketWithTangentOfResult(realNumType S,realNumType C, const vector<vectorType>& other, vector<vectorType>& dest,
-                                    const vector<vectorType>& toBraket, realNumType& result) const;
+    void multiply(const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const override;
+    void rotate(realNumType angle, const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const;
+    void rotate(realNumType S,realNumType C, const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const;
+    void rotateAndBraketWithTangentOfResult(realNumType S,realNumType C, const vectorView<const Matrix<vectorType>>& other,vectorView<Matrix<vectorType>> dest,
+                                    const vectorView<const Matrix<vectorType>>& toBraket, realNumType& result) const;
     void compress(std::shared_ptr<compressor> comp);
     void decompress();
 
@@ -324,7 +325,7 @@ public:
     virtual void blankAllButOne()override{this->m_blankCount = 1;};
     virtual size_t getMaxBlankCount() const override {return m_basisVectors.size();};
 
-    void multiply (const vector<dataType>& other, vector<dataType>& dest) const override;
+    void multiply(const vectorView<const Matrix<dataType>>& other, vectorView<Matrix<dataType>> dest) const override;
 
     const vector<dataType>& getTargetVector()const{return m_basisVectors[this->m_blankCount-1];}
 };

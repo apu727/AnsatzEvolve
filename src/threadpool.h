@@ -34,7 +34,7 @@ public:
     threadpool(threadpool& other) = delete;
     ~threadpool();
 
-    std::future<void> queueWork(std::function<void()> work);
+    std::future<void> queueWork(std::function<void()> work, bool dontQueue = false);
     static threadpool& getInstance(int num){static threadpool me(num); return me;};
 };
 
