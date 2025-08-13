@@ -170,7 +170,7 @@ public:
     int m_dim = -1;//number of elements in the pauli vectors
     int m_lieOpDim = 0;
 
-    stateRotate(int nQubits, bool compressStateVectors = false, int numberOfParticles = 0);
+    stateRotate(int nQubits, std::shared_ptr<compressor> comp = nullptr);
     virtual ~stateRotate(){};
 
     matrixType* getLieAlgebraMatrix(const exc a);
@@ -181,6 +181,7 @@ public:
     const std::unordered_map<size_t,matrixType>* getLieAlgebraMatrices() override;
 
     bool loadOperators(std::string filename);
+    static bool loadOperators(std::string filePath, std::vector<stateRotate::exc>& excs);
 
     bool getCompressor(std::shared_ptr<compressor>& ptr) override {ptr = m_compressor; return m_compressStateVectors;}
 };

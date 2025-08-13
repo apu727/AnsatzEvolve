@@ -9,14 +9,14 @@
 
 #include <cassert>
 
-stateRotate::stateRotate(int nQubits, bool compressStateVectors, int numberOfParticles)
+stateRotate::stateRotate(int nQubits, std::shared_ptr<compressor> comp)
 {
     m_nQubits = nQubits;
     m_dim = 1<<m_nQubits;
-    if (compressStateVectors)
+    if (comp)
     {
         m_compressStateVectors = true;
-        m_compressor = std::make_shared<SZAndnumberOperatorCompressor>(m_dim,numberOfParticles/2,numberOfParticles/2);
+        m_compressor = comp;
     }
 
 }
@@ -155,6 +155,18 @@ const std::unordered_map<size_t, matrixType> *stateRotate::getLieAlgebraMatrices
 
 bool stateRotate::loadOperators(std::string filePath)
 {
+    std::vector<exc> excs;
+
+    if (!loadOperators(filePath,excs))
+        return 0;
+    for (auto& e : excs)
+        getLieAlgebraMatrix(e);
+    return 1;
+}
+
+bool stateRotate::loadOperators(std::string filePath, std::vector<stateRotate::exc>& excs)
+{
+    excs.clear();
     FILE *fp;
     exc Excs;
 
@@ -171,7 +183,7 @@ bool stateRotate::loadOperators(std::string filePath)
         //printf("Read Operator: %hhd %hhd %hhd %hhd\n ", Excs[0],Excs[1],Excs[2],Excs[3]);
         for (int i = 0; i < 4; i++)
             Excs[i] -= 1;
-        getLieAlgebraMatrix(Excs);
+        excs.push_back(Excs);
         ret = fscanf(fp, "%hhd %hhd %hhd %hhd \n",&Excs[0],&Excs[1],&Excs[2],&Excs[3] );
     }
     fclose(fp);
@@ -199,7 +211,7 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint32_t stateVecto
     for (uint32_t i = 0; i < stateVectorSize; i++)
     {
         bool spinUpActive = bitwiseDot(i,allOnes,(numberOfQubits/2)) == (char)spinUp;
-        bool spinDownActive = bitwiseDot(i>>(numberOfQubits/2),allOnes,32) == (char)spinUp;
+        bool spinDownActive = bitwiseDot(i>>(numberOfQubits/2),allOnes,32) == (char)spinDown;
         if (spinUpActive && spinDownActive)
         {
             compressPerm[i] = activeCount;

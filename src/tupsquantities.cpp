@@ -549,11 +549,11 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         Matrix<realNumType>::EigenMatrix Hmunu;
         // myAnsatz->getHessianAndDerivative(&m_Ham,Hmunu,gradVectorCalc,&m_compressMatrix);
         myAnsatz->evolveHessian(Hmunu,gradVectorCalc,angles);
-        vector<realNumType>::EigenVector gradVectorCalcEm = gradVectorCalc;
+        Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> gradVectorCalcEm(&gradVectorCalc[0],gradVectorCalc.size(),1);
 
         vector<realNumType>::EigenVector gradVector_mu = m_compressMatrix * gradVectorCalcEm;
         // realNumType Energy = (destEM.adjoint() * HamEm * destEM).real()(0,0);
-        realNumType Energy = m_Ham.braket(dest,dest,&temp);
+        realNumType Energy = myAnsatz->getEnergy(dest);//m_Ham.braket(dest,dest,&temp);
 
         /* some notation:
              * quantities in `compressed' notation after taking into account which angles are equivalent are denoted by the greek subscripts \mu \nu
@@ -585,7 +585,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         // Hmunu = m_compressMatrix * Hij * m_compressMatrix.transpose();
 
         Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> es(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
-        vector<std::complex<realNumType>>::EigenVector hessianEigVal = es.eigenvalues();
+        vector<realNumType>::EigenVector hessianEigVal = es.eigenvalues();
         vector<realNumType>::EigenVector InvhessianEigVal(hessianEigVal.rows());
         auto hessianEigVec = es.eigenvectors();
 
@@ -598,13 +598,15 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         vector<realNumType>::EigenVector negativeEigenValueDirections(hessianEigVal.rows());
         negativeEigenValueDirections.setZero();
 
+        auto curveDamp = [](realNumType v){if (v > 1000) return (v-1000)*0.1 +1000; else return v;};
+
         for (long int i = 0; i < hessianEigVal.rows(); i++)
         {
-            if(abs(hessianEigVal[i].real()) >= zeroThreshold)
+            if(abs(hessianEigVal[i]) >= zeroThreshold)
             {
                 if (avoidNegativeHessianValues)
                 {
-                    InvhessianEigVal[i] = abs(1./(hessianEigVal[i].real()));
+                    InvhessianEigVal[i] = curveDamp(abs(1./(hessianEigVal[i])));
                     /*if (hessianEigVal[i].real() < 0 && abs(gradVector_mu.dot(hessianEigVec.col(i))) < zeroThreshold)
                         negativeEigenValueDirections += hessianEigVec.col(i) * 0.1;*/
                     // if (hessianEigVal[i].real() < 0)
@@ -614,7 +616,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                     // }
                 }
                 else
-                    InvhessianEigVal[i] = 1./(hessianEigVal[i].real());
+                    InvhessianEigVal[i] = curveDamp(1./(hessianEigVal[i]));
             }
             else
                 InvhessianEigVal[i] = 0;
@@ -648,7 +650,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             myAnsatz->evolve(trial,angles);
             // vector<numType>::EigenVector destEMTrial = trial;
             // EnergyTrial = (destEMTrial.adjoint() * HamEm * destEMTrial).real()(0,0);
-            EnergyTrial = m_Ham.braket(trial,trial,&temp);
+            EnergyTrial = myAnsatz->getEnergy(trial);//m_Ham.braket(trial,trial,&temp);
             if (EnergyTrial > Energy && BacktrackCount < 30)
             {//Backtracking
                 logger().log("Backtracking",BacktrackCount);
@@ -1243,10 +1245,7 @@ realNumType TUPSQuantities::computeFrechetDistanceBetweenPaths(stateAnsatz *myAn
 
 realNumType TUPSQuantities::OptimiseTups(sparseMatrix<realNumType,numType> &Ham, std::vector<baseAnsatz::rotationElement> &rp, stateAnsatz &myAnsatz, bool avoidNegativeHessianValues)
 {
-    FusedEvolve FE(myAnsatz.getStart(),m_Ham,m_compressMatrix,m_deCompressMatrix);
     std::vector<stateRotate::exc> excs;
-
-
     std::vector<realNumType> anglesV(m_deCompressMatrix.rows());
     {
         vector<realNumType>::EigenVector angles(rp.size());
@@ -1262,8 +1261,19 @@ realNumType TUPSQuantities::OptimiseTups(sparseMatrix<realNumType,numType> &Ham,
         {
             anglesV[i] = angles[i];
         }
-        FE.updateExc(excs);
     }
+    realNumType Energy = OptimiseTups(myAnsatz.getStart(),Ham,anglesV,excs,avoidNegativeHessianValues);
+    for (size_t i = 0; i < rp.size(); i++)
+    {
+        rp[i].second = anglesV[i];
+    }
+    return Energy;
+}
+
+realNumType TUPSQuantities::OptimiseTups(const vector<numType>& start,sparseMatrix<realNumType,numType> &Ham, std::vector<realNumType> &anglesV, const std::vector<stateRotate::exc>& excs, bool avoidNegativeHessianValues)
+{
+    FusedEvolve FE(start,m_Ham,m_compressMatrix,m_deCompressMatrix);
+    FE.updateExc(excs);
     realNumType normOfGradVector = 1;
     realNumType Energy = 0;
     bool amStuck = false;
@@ -1321,10 +1331,7 @@ realNumType TUPSQuantities::OptimiseTups(sparseMatrix<realNumType,numType> &Ham,
     {
         fprintf(stderr,"%.15lg\n",(double)angles2[i]);
     }
-    for (size_t i = 0; i < rp.size(); i++)
-    {
-        rp[i].second = anglesV[i];
-    }
+
     return Energy;
 
 

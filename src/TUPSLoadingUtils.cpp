@@ -7,7 +7,7 @@
 #include "logger.h"
 
 
-bool loadPath(stateRotate& sr, std::string filePath, std::vector<ansatz::rotationElement>& rotationPath)
+bool loadPath(std::shared_ptr<stateRotate> sr, std::string filePath, std::vector<ansatz::rotationElement>& rotationPath)
 {
     FILE *fp;
     stateRotate::exc Excs;
@@ -25,7 +25,10 @@ bool loadPath(stateRotate& sr, std::string filePath, std::vector<ansatz::rotatio
         // printf("Read Operator: %hhd %hhd %hhd %hhd\n ", Excs[0],Excs[1],Excs[2],Excs[3]);
         for (int i = 0; i < 4; i++)
             Excs[i] -= 1;
-        rotationPath.push_back({sr.convertDataToIdx(&Excs),0});
+        if (sr)
+            rotationPath.push_back({sr->convertDataToIdx(&Excs),0});
+        else
+            rotationPath.push_back({0,0});
         ret = fscanf(fp, "%hhd %hhd %hhd %hhd \n",&Excs[0],&Excs[1],&Excs[2],&Excs[3] );
     }
     fclose(fp);

@@ -17,107 +17,6 @@
 
 
 
-
-template<typename vectorType>
-inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,std::string filePath)
-{
-    //works for loading from some random sparse matrix format. Index file is 1 Indexed!!
-    FILE *fpCoeff;
-
-    fpCoeff = fopen((filePath+"_Ham_Coeff.dat").c_str(), "r");
-    if(NULL == fpCoeff)
-    {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
-        return 0;
-    }
-
-    FILE *fpIndex;
-
-    fpIndex = fopen((filePath+"_Ham_Index.dat").c_str(), "r");
-    if(NULL == fpIndex)
-    {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
-        return 0;
-    }
-    realNumType coeffReal = 0;
-    realNumType coeffImag = 0;
-
-    uint32_t idxs[2] = {};
-
-    int ret = fscanf(fpCoeff, realNumTypeCode ", " realNumTypeCode " \n", &coeffReal, &coeffImag);
-    int ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
-
-    while(EOF != ret && EOF != ret2)
-    {
-        // printf("Read Coeff: %lf \n ", coeff);
-        // printf("Read Index: %u,%u \n ", idxs[0]-1,idxs[1]-1);
-
-        me->m_iIndexes.push_back(idxs[0]-1);
-        me->m_jIndexes.push_back(idxs[1]-1);
-        me->m_data.push_back(std::complex<double>(coeffReal,coeffImag));
-
-        ret = fscanf(fpCoeff, realNumTypeCode ", " realNumTypeCode " \n", &coeffReal, &coeffImag);
-        ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
-    }
-    fclose(fpIndex);
-    fclose(fpCoeff);
-    me->unblankAll();
-    return 1;
-}
-
-
-template<typename vectorType>
-inline bool s_loadMatrix(sparseMatrix<realNumType,vectorType>* me,std::string filePath)
-{
-    //works for loading from some random sparse matrix format. Index file is 1 Indexed!!
-    FILE *fpCoeff;
-
-    fpCoeff = fopen((filePath+"_Ham_Coeff.dat").c_str(), "r");
-    if(NULL == fpCoeff)
-    {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
-        return 0;
-    }
-
-    FILE *fpIndex;
-
-    fpIndex = fopen((filePath+"_Ham_Index.dat").c_str(), "r");
-    if(NULL == fpIndex)
-    {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
-        return 0;
-    }
-    realNumType coeff = 0;
-
-    uint32_t idxs[2] = {};
-
-    int ret = fscanf(fpCoeff, realNumTypeCode "\n", &coeff);
-    int ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
-
-    while(EOF != ret && EOF != ret2)
-    {
-        // printf("Read Coeff: %lf \n ", coeff);
-        // printf("Read Index: %u,%u \n ", idxs[0]-1,idxs[1]-1);
-
-        me->m_iIndexes.push_back(idxs[0]-1);
-        me->m_jIndexes.push_back(idxs[1]-1);
-        me->m_data.push_back(coeff);
-
-        ret = fscanf(fpCoeff, realNumTypeCode "\n", &coeff);
-        ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
-    }
-    fclose(fpIndex);
-    fclose(fpCoeff);
-    me->unblankAll();
-    return 1;
-}
-
-
-
 //typedef bool (*compareType)(const std::pair<size_t,size_t>&, const std::pair<size_t,size_t> &);
 
 template<typename dataType, typename vectorType>
@@ -225,6 +124,12 @@ public:
     size_t getUnCompressedSize(){return compressPerm.size();}
     virtual void dummyImplement() = 0; // To make this an abstract base class. Derived class needs to implement the construction of compressPerm and decompressPerm
 };
+template<typename vectorType>
+inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,std::string filePath);
+template<typename vectorType>
+inline bool s_loadMatrix(sparseMatrix<realNumType,vectorType>* me,std::string filePath);
+template<typename vectorType>
+bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp);
 
 template<typename dataType, typename vectorType>
 class sparseMatrix : public targetMatrix<dataType,vectorType>
@@ -238,7 +143,8 @@ class sparseMatrix : public targetMatrix<dataType,vectorType>
     uint32_t m_jSize = 0;
     std::vector<uint32_t> m_blankingVector; // vector that multiplies by 1 or 0 depending of if the column/row is allowed.
 
-    friend bool s_loadMatrix <>(sparseMatrix<dataType,vectorType>* me, std::string filename);
+    friend bool s_loadMatrix <>(sparseMatrix<dataType,vectorType>* me,std::string filePath);
+    friend bool s_loadOneAndTwoElectronsIntegrals <>(sparseMatrix<realNumType,vectorType>* me,std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp);
     std::shared_ptr<compressor> m_compressor;
     bool m_isCompressed = false;
     bool m_isRotationGenerator = false;// allows certain optimisations
@@ -277,7 +183,8 @@ public:
     virtual size_t getMaxBlankCount() const override {return m_iSize;}
     void setBlankingVector(const std::vector<uint32_t> &v){m_blankingVector = v;}
     std::vector<uint32_t> &getBlankingVector(){return m_blankingVector;}
-    virtual bool loadMatrix(std::string filename);
+    virtual bool loadMatrix(std::string filename,size_t numberOfQubits,std::shared_ptr<compressor> comp);
+    bool dumpMatrix(const std::string& filePath);
 
     void multiply(const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const override;
     void rotate(realNumType angle, const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const;

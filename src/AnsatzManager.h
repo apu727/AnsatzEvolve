@@ -9,7 +9,10 @@
 #include "tupsquantities.h"
 #include "fusedevolve.h"
 #include <mutex>
+#ifndef USE_COMPLEX
 #define USE_FUSED
+#endif
+
 #ifdef USE_FUSED
 constexpr bool useFused = true;
 #else
@@ -45,6 +48,10 @@ private:
     vector<numType> m_start; // Size != 0
     sparseMatrix<realNumType,numType> m_Ham; // Size != 0
     int m_numberOfParticles = -1;
+    int m_spinUp = -1;
+    int m_spinDown = -1;
+    bool m_SZSym;
+    bool m_particleSym = false;
     int m_numberOfQubits = -1;
     std::vector<std::pair<int,realNumType>> m_parameterDependency;
 

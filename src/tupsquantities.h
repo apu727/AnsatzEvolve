@@ -62,6 +62,7 @@ public:
 
     realNumType OptimiseTups(sparseMatrix<realNumType,numType> &Ham, std::vector<ansatz::rotationElement> &rotationPath,
                            stateAnsatz& myAnsatz,bool avoidNegativeHessianValues = true);
+    realNumType OptimiseTups(const vector<numType>& start, sparseMatrix<realNumType,numType> &Ham, std::vector<realNumType> &angles, const std::vector<stateRotate::exc>& excs, bool avoidNegativeHessianValues);
     void iterativeTups(sparseMatrix<realNumType,numType> &Ham, const std::vector<ansatz::rotationElement> &rotationPath,
                       stateAnsatz& myAnsatz,bool avoidNegativeHessianValues = true);
     void doSubspaceDiagonalisation(stateAnsatz &myAnsatz, size_t numberOfMinima,const std::vector<std::vector<ansatz::rotationElement>>& rotationPaths);

@@ -15,7 +15,7 @@ int readCsvState(std::vector<realNumType>& Coeffs, const std::string& filePath);
 //reads in the nuclear energy
 void LoadNuclearEnergy(realNumType &NuclearEnergy, std::string filePath);
 
-bool loadPath(stateRotate& sr, std::string filePath,
+bool loadPath(std::shared_ptr<stateRotate> sr, std::string filePath,
               std::vector<ansatz::rotationElement>& rotationPath);
 
 bool loadParameters(std::string filePath,

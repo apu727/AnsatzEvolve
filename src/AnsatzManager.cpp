@@ -87,17 +87,21 @@ bool stateAnsatzManager::construct()
     }
     if (success)
     {
+        if (m_particleSym)
+        {
+            m_compressStateVectors = true;
+            if (m_SZSym)
+                m_compressor = std::make_shared<SZAndnumberOperatorCompressor>(1<<m_numberOfQubits,m_spinUp,m_spinDown);
+            else
+                m_compressor = std::make_shared<numberOperatorCompressor>(m_numberOfParticles,1<<m_numberOfQubits);
+            m_Ham.compress(m_compressor);
+        }
+        logger().log("SZSym:",m_SZSym);
+        logger().log("particleNumSym:",m_particleSym);
         if constexpr(useFused)
         {
-            if (m_numberOfParticles > 0)
-            {
-                m_compressStateVectors = true;
-                m_compressor = std::make_shared<SZAndnumberOperatorCompressor>(1<<m_numberOfQubits,m_numberOfParticles/2,m_numberOfParticles/2);
-            }
-
             if (m_compressStateVectors)
             {
-                m_Ham.compress(m_compressor);
                 vector<numType> compStart;
                 compressor::compressVector<numType>(m_start,compStart,m_compressor);
                 static_cast<Matrix<numType>&>(m_start) = std::move(compStart);
@@ -115,14 +119,8 @@ bool stateAnsatzManager::construct()
         }
         else
         {
-            if (m_numberOfParticles <= 0) // -1 is what is expected
-            {
-                m_lie = std::make_shared<stateRotate>(m_numberOfQubits);
-            }
-            else
-            {
-                m_lie = std::make_shared<stateRotate>(m_numberOfQubits,true,m_numberOfParticles);
-            }
+
+            m_lie = std::make_shared<stateRotate>(m_numberOfQubits,m_compressor);
             m_rotationPath.clear(); // probably empty but lets make sure
             m_angles.clear();
             for (auto& e : m_excitations)
@@ -139,12 +137,7 @@ bool stateAnsatzManager::construct()
             {
                 m_ansatz->addRotation(rp.first,rp.second);
             }
-            std::shared_ptr<compressor> comp;
 
-            if (m_lie->getCompressor(comp))
-            {
-                m_Ham.compress(comp);
-            }
             m_TUPSQuantities = std::make_shared<TUPSQuantities>(m_Ham,m_parameterDependency,m_numberOfUniqueParameters, m_nuclearEnergy,m_runPath); //TODO allow for a output file path
             m_isConstructed = true;
         }
@@ -241,6 +234,13 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
         uint32_t ones = -1;
         int numberOfParticles = -1;
         bool allSameParticleNumber = true;
+        bool SZSym = true;
+        int spinUp = -1;
+        int spinDown = -1;
+
+        if (numberOfQubits %2 != 0)
+            SZSym = false;
+
         for (size_t i = 0; i < indexes.size(); i++)
         {
             if (coeffs[i] == 0.)
@@ -258,6 +258,16 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
                 allSameParticleNumber = false;
                 break;
             }
+            int currSpinUp = bitwiseDot(indexes[i]>>(numberOfQubits/2),ones,32);
+            int currSpinDown = bitwiseDot(indexes[i]>>(numberOfQubits/2),ones,numberOfQubits/2);
+            if (spinUp == -1 && currSpinUp != -1)
+                spinUp = currSpinUp;
+            if (spinDown == -1 && currSpinDown != -1)
+                spinDown = currSpinDown;
+            if (currSpinUp != spinUp)
+                SZSym = false;
+            if (currSpinDown != spinDown)
+                SZSym = false;
         }
         if (numberOfParticles == -1)
         {
@@ -267,9 +277,22 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
         {
             logger().log("Warning: not all the same particle number");
         }
+        m_numberOfParticles = -1;
+        m_spinUp = -1;
+        m_spinDown = -1;
+        m_SZSym = false;
+        m_particleSym = false;
+
         if (allSameParticleNumber && numberOfParticles != -1)
         {
             m_numberOfParticles = numberOfParticles;
+            m_particleSym = true;
+            if (SZSym && spinUp != -1 && spinDown != -1)
+            {
+                m_SZSym = true;
+                m_spinUp = spinUp;
+                m_spinDown = spinDown;
+            }
         }
     }
     return success;

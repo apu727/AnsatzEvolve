@@ -62,6 +62,20 @@ int main(int argc, char *argv[])
     uint32_t ones = -1;
     char numberOfParticles = -1;
     bool allSameParticleNumber = true;
+    bool SZSym = true;
+    int spinUp = -1;
+    int spinDown = -1;
+    int numberOfQubits = 0;
+    {
+        size_t dummy = statevectorCoeffs.size()-1;
+        while(dummy)
+        {
+            numberOfQubits++;
+            dummy = dummy >>1;
+        }
+    }
+
+
 
     for (size_t i = 0; i < statevectorCoeffs.size(); i++)
     {
@@ -69,6 +83,9 @@ int main(int argc, char *argv[])
         {
             continue;
         }
+        if (numberOfQubits %2 != 0)
+            SZSym = false;
+
         char currNumberOfParticles = bitwiseDot(i,ones,32);
 
         if (numberOfParticles == -1 && currNumberOfParticles != -1)
@@ -80,35 +97,68 @@ int main(int argc, char *argv[])
             allSameParticleNumber = false;
             break;
         }
+
+        int currSpinUp = bitwiseDot(i>>(numberOfQubits/2),ones,32);
+        int currSpinDown = bitwiseDot(i,ones,numberOfQubits/2);
+        if (spinUp == -1 && currSpinUp != -1)
+            spinUp = currSpinUp;
+        if (spinDown == -1 && currSpinDown != -1)
+            spinDown = currSpinDown;
+        if (currSpinUp != spinUp)
+            SZSym = false;
+        if (currSpinDown != spinDown)
+            SZSym = false;
+
     }
     if (numberOfParticles == -1)
     {
         logger().log("Could not determine particle number");
         return 1;
     }
-
-    std::shared_ptr<stateRotate> lie = nullptr;
-    if (allSameParticleNumber)
+    if (spinUp == -1 || spinDown == -1)
     {
-        lie = std::make_shared<stateRotate>(std::log2(statevectorCoeffs.size()),true,numberOfParticles);
+        logger().log("Could not determine spin number");
+        return 1;
+    }
+    logger().log("SZSym:",SZSym);
+    logger().log("particleNumSym:",allSameParticleNumber);
+    std::shared_ptr<stateRotate> lie = nullptr;
+    std::shared_ptr<compressor> comp;
+    if (allSameParticleNumber && SZSym)
+        comp = std::make_shared<SZAndnumberOperatorCompressor>(statevectorCoeffs.size(),spinUp,spinDown);
+    if (allSameParticleNumber && !SZSym)
+        comp = std::make_shared<numberOperatorCompressor>(statevectorCoeffs.size(),numberOfParticles);
+
+    bool makeLie = false;
+    std::vector<stateRotate::exc> excs;
+    if (makeLie)
+    {
+        lie = std::make_shared<stateRotate>(numberOfQubits,comp);
+        lie->loadOperators(filePath + "_Operators.dat");
     }
     else
-        lie = std::make_shared<stateRotate>(std::log2(statevectorCoeffs.size()));
-
-    lie->loadOperators(filePath + "_Operators.dat");
+    {
+        stateRotate::loadOperators(filePath + + "_Operators.dat",excs);
+    }
 
     vector<numType> start(statevectorCoeffs);
 
 
     std::shared_ptr<stateAnsatz> myAnsatz = nullptr;
     sparseMatrix<numType,numType> target({1},{1},{1},1);
-
-    myAnsatz = std::make_shared<stateAnsatz>(&target,start,lie.get());
+    if (makeLie)
+        myAnsatz = std::make_shared<stateAnsatz>(&target,start,lie.get());
+    else if (comp)
+    {
+        vector<numType> temp;
+        compressor::compressVector<numType>(start,temp,comp);
+        static_cast<Matrix<numType>&>(start) = std::move(temp);
+    }
 
 
 
     std::vector<ansatz::rotationElement> rotationPath;
-    loadPath(*lie,filePath + "_Operators.dat",rotationPath);
+    loadPath(lie,filePath + "_Operators.dat",rotationPath);
 
     std::vector<std::vector<ansatz::rotationElement>> rotationPaths;
     std::vector<std::pair<int,realNumType>> order;
@@ -119,14 +169,8 @@ int main(int argc, char *argv[])
 
 
     sparseMatrix<realNumType,numType> Ham;
-    Ham.loadMatrix(filePath);
-    if (allSameParticleNumber)
-    {
-        std::shared_ptr<compressor> comp;
-        lie->getCompressor(comp);
-        Ham.compress(comp);
-    }
-
+    Ham.loadMatrix(filePath,numberOfQubits,comp);
+    // Ham.dumpMatrix(filePath);
 
 
     realNumType NuclearEnergy = 0;
@@ -139,10 +183,15 @@ int main(int argc, char *argv[])
     //TODO command line switches
     bool optimise = true;
     bool subspaceDiag = false;
-    bool writeProperties = true;
+    bool writeProperties = false;
     bool generatePathsForSubspace = false;
     if (subspaceDiag)
     {
+        if (!makeLie)
+        {
+            logger().log("No Lie");
+            return 1;
+        }
         size_t numberOfPaths = 9;
 
         if (generatePathsForSubspace)
@@ -189,7 +238,11 @@ int main(int argc, char *argv[])
     {
         logger().log("Start Optimise");
         rotationPaths.push_back(rotationPaths[1]);
-        quantityCalc.OptimiseTups(Ham,rotationPaths.back(),*myAnsatz,true);
+        // quantityCalc.OptimiseTups(Ham,rotationPaths.back(),*myAnsatz,true);
+        std::vector<realNumType> angles(rotationPath.size());
+        std::transform(rotationPaths.back().begin(),rotationPaths.back().end(),angles.begin(),[](baseAnsatz::rotationElement& r){return r.second;});
+
+        quantityCalc.OptimiseTups(start,Ham,angles,excs,true);
 
         // quantityCalc.iterativeTups(Ham,rotationPaths[0],*myAnsatz,true);
         // rotationPaths.push_back(myAnsatz->getRotationPath());
