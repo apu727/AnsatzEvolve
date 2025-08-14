@@ -44,7 +44,8 @@ class TUPSQuantities
 
     bool doStepsUntilHessianIsPositiveDefinite(sparseMatrix<realNumType,numType> *Ham,
                                                FusedEvolve *myAnsatz,std::vector<realNumType>& angles, bool doDerivativeSteps);
-    realNumType computeFrechetDistanceBetweenPaths(stateAnsatz *myAnsatz, const std::vector<ansatz::rotationElement>& rotationPath, const std::vector<ansatz::rotationElement>& rotationPath2);
+    realNumType computeFrechetDistanceBetweenPaths(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE,
+                                                   const std::vector<baseAnsatz::rotationElement> &rotationPath, const std::vector<baseAnsatz::rotationElement> &rotationPath2);
 
 
 
@@ -56,16 +57,16 @@ public:
     TUPSQuantities(sparseMatrix<realNumType,numType>& Ham, std::vector<std::pair<int,realNumType>> order,
                    int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile = nullptr);
 
-    void writeProperties(std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, stateAnsatz* myAnsatz);
+    void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths);
     void OptimiseTupsLBFGS(sparseMatrix<realNumType,numType> &Ham, std::vector<ansatz::rotationElement> &rotationPath,
                       stateAnsatz& myAnsatz, bool blanking = false);
 
-    realNumType OptimiseTups(sparseMatrix<realNumType,numType> &Ham, std::vector<ansatz::rotationElement> &rotationPath,
-                           stateAnsatz& myAnsatz,bool avoidNegativeHessianValues = true);
-    realNumType OptimiseTups(const vector<numType>& start, sparseMatrix<realNumType,numType> &Ham, std::vector<realNumType> &angles, const std::vector<stateRotate::exc>& excs, bool avoidNegativeHessianValues);
+    realNumType OptimiseTups(stateAnsatz &myAnsatz, std::vector<ansatz::rotationElement> &rotationPath,
+                             bool avoidNegativeHessianValues = true);
+    realNumType OptimiseTups(FusedEvolve& FE, std::vector<baseAnsatz::rotationElement> &rp, bool avoidNegativeHessianValues);
     void iterativeTups(sparseMatrix<realNumType,numType> &Ham, const std::vector<ansatz::rotationElement> &rotationPath,
                       stateAnsatz& myAnsatz,bool avoidNegativeHessianValues = true);
-    void doSubspaceDiagonalisation(stateAnsatz &myAnsatz, size_t numberOfMinima,const std::vector<std::vector<ansatz::rotationElement>>& rotationPaths);
+    void doSubspaceDiagonalisation(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE,  size_t numberOfMinima,const std::vector<std::vector<ansatz::rotationElement>>& rotationPaths);
 
 
 };

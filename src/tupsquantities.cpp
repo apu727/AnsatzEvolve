@@ -148,8 +148,11 @@ TUPSQuantities::TUPSQuantities(sparseMatrix<realNumType,numType>& Ham, std::vect
     buildCompressionMatrices(numberOfUniqueParameters, order, m_deCompressMatrix,m_compressMatrix);
 }
 
-void TUPSQuantities::writeProperties(std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, stateAnsatz* myAnsatz)
+void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths)
 {
+    bool useFusedEvolve = false;
+    if (!myAnsatz)
+        useFusedEvolve = true;
     m_HamEm = m_Ham;
     /* calculate the energy for all rotation paths*/
     std::vector<realNumType> Energies(rotationPaths.size());
@@ -180,24 +183,45 @@ void TUPSQuantities::writeProperties(std::vector<std::vector<ansatz::rotationEle
     for (size_t rpIndex = 0; rpIndex < rotationPaths.size(); rpIndex++)
     {
         fprintf(stderr,"On Path%zu\n",rpIndex);
-        for (size_t rpIndex2 = 0; rpIndex2 <= rpIndex; rpIndex2++)
+        // for (size_t rpIndex2 = 0; rpIndex2 <= rpIndex; rpIndex2++)
+        // {
+        //     FrechetDistance(rpIndex,rpIndex2) = computeFrechetDistanceBetweenPaths(myAnsatz,FE,rotationPaths[rpIndex],rotationPaths[rpIndex2]);
+        //     FrechetDistance(rpIndex2,rpIndex) = FrechetDistance(rpIndex,rpIndex2);
+        // }
+        if (!useFusedEvolve)
         {
-            FrechetDistance(rpIndex,rpIndex2) = computeFrechetDistanceBetweenPaths(myAnsatz,rotationPaths[rpIndex],rotationPaths[rpIndex2]);
-            FrechetDistance(rpIndex2,rpIndex) = FrechetDistance(rpIndex,rpIndex2);
-        }
-        myAnsatz->setCalculateFirstDerivatives(true);
-        myAnsatz->setCalculateSecondDerivatives(false);
-        myAnsatz->resetPath();
-        const std::vector<ansatz::rotationElement> &rp = rotationPaths[rpIndex];
-        for (auto rpe : rp)
-        {
-            myAnsatz->addRotation(rpe.first,rpe.second);
-            //todo calculate quantities along path?
+            myAnsatz->setCalculateFirstDerivatives(true);
+            myAnsatz->setCalculateSecondDerivatives(false);
+            myAnsatz->resetPath();
+            const std::vector<ansatz::rotationElement> &rp = rotationPaths[rpIndex];
+            for (auto rpe : rp)
+            {
+                myAnsatz->addRotation(rpe.first,rpe.second);
+                //todo calculate quantities along path?
+            }
         }
         //myAnsatz->calcRotationAlongPath(rp,dest,start);
         //writeVector("dest.csv",dest,*lie);
-        const vector<numType>& dest = myAnsatz->getVec();
-        const std::vector<vector<numType>>& derivTangentSpace = myAnsatz->getDerivTangentSpace();
+        vector<numType> dest;
+        std::vector<realNumType> anglesV(rotationPaths[rpIndex].size());
+        if (useFusedEvolve)
+        {
+            std::transform(rotationPaths[rpIndex].begin(),rotationPaths[rpIndex].end(),anglesV.begin(),[](const ansatz::rotationElement& r){return r.second;});
+            FE->evolve(dest,anglesV);
+        }
+        else
+            dest.copy(myAnsatz->getVec());
+        std::vector<vector<numType>> derivTangentSpace;
+
+        if (!useFusedEvolve)
+        {
+            const std::vector<vector<numType>>&  ref = myAnsatz->getDerivTangentSpace();
+            for (const auto& r : ref)
+            {
+                derivTangentSpace.emplace_back();
+                derivTangentSpace.back().copy(r);
+            }
+        }
 
         /* some notation:
          * quantities in `compressed' notation after taking into account which angles are equivalent are denoted by the greek subscripts \mu \nu
@@ -210,7 +234,7 @@ void TUPSQuantities::writeProperties(std::vector<std::vector<ansatz::rotationEle
          */
 
         // derivTangentSpaceEM_{ai} = \frac{d}{d\theta_i}\ket{\psi}
-        Matrix<numType>::EigenMatrix derivTangentSpaceEM = convert(derivTangentSpace).transpose();
+        Matrix<numType>::EigenMatrix derivTangentSpaceEM = useFusedEvolve? Matrix<numType>::EigenMatrix() : convert(derivTangentSpace).transpose();
         vector<numType>::EigenVector destEM = dest;
         //Debugging if it is a phase away from the real eigenvector
         // vector<realNumType>::EigenVector destArg(destEM.rows());
@@ -230,13 +254,15 @@ void TUPSQuantities::writeProperties(std::vector<std::vector<ansatz::rotationEle
         */
 
         //derivTangentSpaceEMCondensed_{a\mu} = compressMatrix_{\mu,i} derivTangentSpaceEM_{a,i}
-        Matrix<numType>::EigenMatrix derivTangentSpaceEMCondensed =  derivTangentSpaceEM * m_compressMatrix.transpose();
+        Matrix<numType>::EigenMatrix derivTangentSpaceEMCondensed =  useFusedEvolve ? Matrix<numType>::EigenMatrix() : derivTangentSpaceEM * m_compressMatrix.transpose();
 
         //g_{\mu\nu} = derivTangentSpaceEMCondensed_{a\mu} derivTangentSpaceEMCondensed_{a\nu}
-        Matrix<numType>::EigenMatrix metricTensor = (derivTangentSpaceEMCondensed.adjoint() * derivTangentSpaceEMCondensed).real();
+        Matrix<numType>::EigenMatrix metricTensor = useFusedEvolve ? Matrix<numType>::EigenMatrix() : (derivTangentSpaceEMCondensed.adjoint() * derivTangentSpaceEMCondensed).real();
 
         //gradVector_{\mu} = 2 * \braket{\psi | H | \frac{d}{d\theta_\mu}\psi}
-        vector<realNumType>::EigenVector gradVector = 2*(destEM.adjoint()*m_HamEm*derivTangentSpaceEMCondensed).real();
+        vector<realNumType> gradVectorCalc;
+
+
 
         // H_{\mu\nu}: = \frac{dx_j}{d\theta_nu} \frac{dx_i}{d\theta_mu} H_{ij} (for real vectors)
         // H_{ij}      = \braket{\psi | H | \frac{d^2}{dx_i d x_j} \psi } + \braket{\frac{d^2}{dx_i d x_j} \psi | H | \psi} +
@@ -247,41 +273,31 @@ void TUPSQuantities::writeProperties(std::vector<std::vector<ansatz::rotationEle
         // size_t iSize = secondDerivTensor.size();
         // size_t jSize = secondDerivTensor.back().size();
         //Hessian_{ij}
-        Matrix<realNumType>::EigenMatrix Hij; //uninitialized by default
+
+        Matrix<realNumType>::EigenMatrix Hmunu(m_numberOfUniqueParameters,m_numberOfUniqueParameters); //uninitialized by default
+        // Matrix<realNumType>::EigenMatrix Hij; //uninitialized by default
+        if (useFusedEvolve)
+        {
+            FE->evolveHessian(Hmunu,gradVectorCalc,anglesV);
+        }
+        else
         {
             vector<realNumType> temp;
-            myAnsatz->getHessianAndDerivative(&m_Ham,Hij,temp);
+            myAnsatz->getHessianAndDerivative(&m_Ham,Hmunu,gradVectorCalc,&m_compressMatrix);
         }
-        //Hessian_{\mu\nu}
-        Matrix<realNumType>::EigenMatrix Hmunu(m_numberOfUniqueParameters,m_numberOfUniqueParameters); //uninitialized by default
+        vector<realNumType>::EigenVector gradVector = m_compressMatrix * (vector<realNumType>::EigenVector)gradVectorCalc;
 
 
-        //        for (size_t i = 0; i < iSize; i++)
-        //        {
-        //            for (size_t j = 0; j <= i; j++)
-        //            {
-        //                Hij(i,j) = 2*Ham.braket(dest,secondDerivTensor[i][j],&temp);
-        //                Hij(i,j) += 2*Ham.braket(derivTangentSpace[i],derivTangentSpace[j],&temp);
-        //                Hij(j,i) = Hij(i,j);
-
-        //            }
-        //        }
-        // asyncHij(m_Ham,secondDerivTensor,derivTangentSpace,Hij,dest,iSize);
-
-        Hmunu = m_compressMatrix * Hij * m_compressMatrix.transpose();
         writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Hessian",Hmunu);
-        writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric",metricTensor);
+        if (!useFusedEvolve)
+            writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric",metricTensor);
 
         Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> esH(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
         vector<std::complex<realNumType>>::EigenVector hessianEigVal = esH.eigenvalues();
         auto hessianEigVec = esH.eigenvectors();
 
         vector<std::complex<realNumType>>::EigenVector hessianDiagVals = Hmunu.diagonal();
-        Eigen::SelfAdjointEigenSolver<Matrix<numType>::EigenMatrix> esM(metricTensor,Eigen::DecompositionOptions::ComputeEigenvectors);
-        vector<std::complex<realNumType>>::EigenVector metricEigVal = esM.eigenvalues();
 
-        auto metricEigenVectors = esM.eigenvectors();
-        vector<std::complex<realNumType>>::EigenVector metricDiagVals = metricTensor.diagonal();
 
         std::vector<vector<std::complex<realNumType>>::EigenVector> metricZeroEigenVectors;
 
@@ -313,7 +329,7 @@ void TUPSQuantities::writeProperties(std::vector<std::vector<ansatz::rotationEle
                 const vector<numType>::EigenVector &evCondensed = hessianEigVec.col(i);
                 vector<numType>::EigenVector ev(evCondensed.rows());
                 ev = m_deCompressMatrix * evCondensed;
-                calculateNumericalSecondDerivative(rp,Energies[rpIndex],m_Ham,ev,myAnsatz);
+                // calculateNumericalSecondDerivative(rp,Energies[rpIndex],m_Ham,ev,myAnsatz);
 
             }
             else if (e >= -zeroThreshold && e <= zeroThreshold)
@@ -338,32 +354,39 @@ void TUPSQuantities::writeProperties(std::vector<std::vector<ansatz::rotationEle
             if (std::fabs(he.imag()) > zeroThreshold)
                 fprintf(stderr,"Problem with Imag HDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n",he.real(),he.imag());
         }
-
-        for (long int i =0; i < metricEigVal.rows();i++)
+        if (!useFusedEvolve)
         {
-            auto me = metricEigVal[i];
-            realNumType e = me.real();
-            if (e > zeroThreshold)
-                NumberOfPositiveMetricEValues[rpIndex]++;
-            else if (e >= -zeroThreshold && e <= zeroThreshold)
+            Eigen::SelfAdjointEigenSolver<Matrix<numType>::EigenMatrix> esM(metricTensor,Eigen::DecompositionOptions::ComputeEigenvectors);
+            vector<std::complex<realNumType>>::EigenVector metricEigVal = esM.eigenvalues();
+
+            auto metricEigenVectors = esM.eigenvectors();
+            vector<std::complex<realNumType>>::EigenVector metricDiagVals = metricTensor.diagonal();
+
+            for (long int i =0; i < metricEigVal.rows();i++)
             {
-                NumberOfZeroMetricEValues[rpIndex]++;
-                metricZeroEigenVectors.push_back(metricEigenVectors.col(i));
+                auto me = metricEigVal[i];
+                realNumType e = me.real();
+                if (e > zeroThreshold)
+                    NumberOfPositiveMetricEValues[rpIndex]++;
+                else if (e >= -zeroThreshold && e <= zeroThreshold)
+                {
+                    NumberOfZeroMetricEValues[rpIndex]++;
+                    metricZeroEigenVectors.push_back(metricEigenVectors.col(i));
+                }
+                else
+                    fprintf(stderr,"Problem with MEigenvalue: " realNumTypeCode "\n",e);
+                if (std::fabs(me.imag()) > zeroThreshold)
+                    fprintf(stderr,"Problem with Imag MEigenvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
             }
-            else
-                fprintf(stderr,"Problem with MEigenvalue: " realNumTypeCode "\n",e);
-            if (std::fabs(me.imag()) > zeroThreshold)
-                fprintf(stderr,"Problem with Imag MEigenvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
+            for (auto me : metricDiagVals)
+            {
+                realNumType e = me.real();
+                if (e >= -zeroThreshold && e <= zeroThreshold)
+                    NumberOfZeroMetricDiagonalValues[rpIndex]++;
+                if (std::fabs(me.imag()) > zeroThreshold)
+                    fprintf(stderr,"Problem with Imag MDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
+            }
         }
-        for (auto me : metricDiagVals)
-        {
-            realNumType e = me.real();
-            if (e >= -zeroThreshold && e <= zeroThreshold)
-                NumberOfZeroMetricDiagonalValues[rpIndex]++;
-            if (std::fabs(me.imag()) > zeroThreshold)
-                fprintf(stderr,"Problem with Imag MDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
-        }
-
         NormOfGradVector[rpIndex] = gradVector.norm();
         realNumType Mag = dest.dot(dest);
         if (std::fabs(Mag-1.) > 1e-5)
@@ -387,10 +410,12 @@ void TUPSQuantities::writeProperties(std::vector<std::vector<ansatz::rotationEle
     printOutputLine(NumberOfNegativeHessianDiagValues,"NumberOfNegativeHessianDiagValues");
     printOutputLine(NumberOfNearZeroHessianDiagValues,"NumberOfNearZeroHessianDiagValues");
     printOutputLine(NumberOfPositiveHessianDiagValues,"NumberOfPositiveHessianDiagValues");
-
-    printOutputLine(NumberOfPositiveMetricEValues,"NumberOfPositiveMetricEValues");
-    printOutputLine(NumberOfZeroMetricEValues,"NumberOfZeroMetricEValues");
-    printOutputLine(NumberOfZeroMetricDiagonalValues,"NumberOfZeroMetricDiagonalValues");
+    if (!useFusedEvolve)
+    {
+        printOutputLine(NumberOfPositiveMetricEValues,"NumberOfPositiveMetricEValues");
+        printOutputLine(NumberOfZeroMetricEValues,"NumberOfZeroMetricEValues");
+        printOutputLine(NumberOfZeroMetricDiagonalValues,"NumberOfZeroMetricDiagonalValues");
+    }
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
     if (m_HamEm.rows() < 1500)
@@ -947,21 +972,32 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(sparseMatrix<realNumT
 
 }
 
-void TUPSQuantities::doSubspaceDiagonalisation(stateAnsatz &myAnsatz,size_t numberOfMinima, const std::vector<std::vector<ansatz::rotationElement>>& rotationPaths)
+void TUPSQuantities::doSubspaceDiagonalisation(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, size_t numberOfMinima, const std::vector<std::vector<ansatz::rotationElement>>& rotationPaths)
 {
+    bool useFusedEvolve = false;
+
+    if (!myAnsatz)
+        useFusedEvolve = true;
     //skip over HF state
     m_HamEm = m_Ham;
     numberOfMinima = std::min(rotationPaths.size()-1,numberOfMinima);
     Matrix<numType>::EigenMatrix HMat(numberOfMinima,numberOfMinima);
     Matrix<numType>::EigenMatrix SMat(numberOfMinima,numberOfMinima);
-    myAnsatz.setCalculateFirstDerivatives(false);
-    myAnsatz.setCalculateSecondDerivatives(false);
+    myAnsatz->setCalculateFirstDerivatives(false);
+    myAnsatz->setCalculateSecondDerivatives(false);
     std::vector<vector<numType>> states(numberOfMinima);
     std::vector<vector<numType>> hstates(numberOfMinima);
 
     for (size_t i = 0; i < numberOfMinima; i++)
     {
-        myAnsatz.calcRotationAlongPath(rotationPaths[i+1],states[i],myAnsatz.getStart());
+        if (useFusedEvolve)
+        {
+            std::vector<realNumType> angles(rotationPaths[i+1].size());
+            std::transform(rotationPaths[i+1].begin(),rotationPaths[i+1].end(),angles.begin(),[](const ansatz::rotationElement& r){return r.second;});
+            FE->evolve(states[i],angles);
+        }
+        else
+            myAnsatz->calcRotationAlongPath(rotationPaths[i+1],states[i],myAnsatz->getStart());
         mul(m_Ham,states[i],hstates[i]);
     }
 
@@ -1104,10 +1140,11 @@ void TUPSQuantities::doSubspaceDiagonalisation(stateAnsatz &myAnsatz,size_t numb
 
 }
 
-realNumType TUPSQuantities::computeFrechetDistanceBetweenPaths(stateAnsatz *myAnsatz,
+realNumType TUPSQuantities::computeFrechetDistanceBetweenPaths(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE,
                                                        const std::vector<baseAnsatz::rotationElement> &rotationPath, const std::vector<baseAnsatz::rotationElement> &rotationPath2)
 {
     return 0;
+    //TODO make this able to use FE
     // Matrix<realNumType>::EigenMatrix distanceMatrix;
     std::vector<vector<numType>::EigenVector> firstVectors;
     std::vector<vector<numType>::EigenVector> secondVectors;
@@ -1243,7 +1280,7 @@ realNumType TUPSQuantities::computeFrechetDistanceBetweenPaths(stateAnsatz *myAn
 }
 
 
-realNumType TUPSQuantities::OptimiseTups(sparseMatrix<realNumType,numType> &Ham, std::vector<baseAnsatz::rotationElement> &rp, stateAnsatz &myAnsatz, bool avoidNegativeHessianValues)
+realNumType TUPSQuantities::OptimiseTups(stateAnsatz &myAnsatz, std::vector<baseAnsatz::rotationElement> &rp, bool avoidNegativeHessianValues)
 {
     std::vector<stateRotate::exc> excs;
     std::vector<realNumType> anglesV(m_deCompressMatrix.rows());
@@ -1262,25 +1299,26 @@ realNumType TUPSQuantities::OptimiseTups(sparseMatrix<realNumType,numType> &Ham,
             anglesV[i] = angles[i];
         }
     }
-    realNumType Energy = OptimiseTups(myAnsatz.getStart(),Ham,anglesV,excs,avoidNegativeHessianValues);
-    for (size_t i = 0; i < rp.size(); i++)
-    {
-        rp[i].second = anglesV[i];
-    }
+    FusedEvolve FE(myAnsatz.getStart(),m_Ham,m_compressMatrix,m_deCompressMatrix);
+    FE.updateExc(excs);
+    realNumType Energy = OptimiseTups(FE,rp,avoidNegativeHessianValues);
+
     return Energy;
 }
 
-realNumType TUPSQuantities::OptimiseTups(const vector<numType>& start,sparseMatrix<realNumType,numType> &Ham, std::vector<realNumType> &anglesV, const std::vector<stateRotate::exc>& excs, bool avoidNegativeHessianValues)
+realNumType TUPSQuantities::OptimiseTups(FusedEvolve& FE, std::vector<baseAnsatz::rotationElement> &rp, bool avoidNegativeHessianValues)
 {
-    FusedEvolve FE(start,m_Ham,m_compressMatrix,m_deCompressMatrix);
-    FE.updateExc(excs);
+
+    std::vector<realNumType> anglesV(rp.size());
+    std::transform(rp.begin(),rp.end(),anglesV.begin(),[](const ansatz::rotationElement& r){return r.second;});
+
     realNumType normOfGradVector = 1;
     realNumType Energy = 0;
     bool amStuck = false;
     while (true)
     {
         runNewtonMethod(&FE,anglesV,avoidNegativeHessianValues);
-        bool foundOne  = doStepsUntilHessianIsPositiveDefinite(&Ham,&FE,anglesV,false);
+        bool foundOne  = doStepsUntilHessianIsPositiveDefinite(&m_Ham,&FE,anglesV,false);
 
         vector<numType> dest;
         FE.evolve(dest,anglesV);
@@ -1306,7 +1344,7 @@ realNumType TUPSQuantities::OptimiseTups(const vector<numType>& start,sparseMatr
         gradVectorEm = m_compressMatrix * gradVectorEm;
 
         normOfGradVector = gradVectorEm.norm();
-        Energy = Ham.braket(dest,dest);
+        Energy = m_Ham.braket(dest,dest);
         fprintf(stderr, "Energy: " realNumTypeCode " GradNorm: " realNumTypeCode "\n", Energy, normOfGradVector);
 
         if (normOfGradVector < 1e-12)
@@ -1331,7 +1369,10 @@ realNumType TUPSQuantities::OptimiseTups(const vector<numType>& start,sparseMatr
     {
         fprintf(stderr,"%.15lg\n",(double)angles2[i]);
     }
-
+    for (size_t i = 0; i < rp.size(); i++)
+    {
+        rp[i].second = anglesV[i];
+    }
     return Energy;
 
 

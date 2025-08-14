@@ -128,6 +128,7 @@ int main(int argc, char *argv[])
     logger().log("spinDown",spinDown);
     std::shared_ptr<stateRotate> lie = nullptr;
     std::shared_ptr<compressor> comp;
+    std::shared_ptr<FusedEvolve> FE;
     if (allSameParticleNumber && SZSym)
         comp = std::make_shared<SZAndnumberOperatorCompressor>(statevectorCoeffs.size(),spinUp,spinDown);
     if (allSameParticleNumber && !SZSym)
@@ -182,21 +183,21 @@ int main(int argc, char *argv[])
     LoadNuclearEnergy(NuclearEnergy, filePath);
 
     TUPSQuantities quantityCalc(Ham,order,numberOfUniqueParameters, NuclearEnergy,filePath); // Can also optimise
+    if (!makeLie)
+    {
+        FE = std::make_shared<FusedEvolve>(start,Ham,quantityCalc.m_compressMatrix,quantityCalc.m_deCompressMatrix);
+        FE->updateExc(excs);
+    }
     // benchmark(myAnsatz.get(),rotationPaths[1], Ham,quantityCalc.m_compressMatrix, quantityCalc.m_deCompressMatrix);
     // return 0;
 
     //TODO command line switches
     bool optimise = true;
     bool subspaceDiag = false;
-    bool writeProperties = false;
+    bool writeProperties = true;
     bool generatePathsForSubspace = false;
     if (subspaceDiag)
     {
-        if (!makeLie)
-        {
-            logger().log("No Lie");
-            return 1;
-        }
         size_t numberOfPaths = 9;
 
         if (generatePathsForSubspace)
@@ -219,11 +220,15 @@ int main(int argc, char *argv[])
                 {
                     rotationPaths.back()[i].second = angles(i);
                 }
-                realNumType Energy = quantityCalc.OptimiseTups(Ham,rotationPaths.back(),*myAnsatz,true);
+                realNumType Energy;
+                if (makeLie)
+                    Energy = quantityCalc.OptimiseTups(*myAnsatz,rotationPaths.back(),true);
+                else
+                    Energy = quantityCalc.OptimiseTups(*FE,rotationPaths.back(),true);
+
                 if (std::find_if(Energies.begin(),Energies.end(), [=](realNumType E){return std::abs(E-Energy) < 1e-10;}) == Energies.end())
                 {
                     Energies.push_back(Energy);
-                    rotationPaths.back() = myAnsatz->getRotationPath();
                     if (pathsFound < numberOfPaths-1)
                     {
                         rotationPaths.push_back(rotationPaths[0]);
@@ -234,7 +239,7 @@ int main(int argc, char *argv[])
             logger().log("Found following Energies",Energies);
 
         }
-        quantityCalc.doSubspaceDiagonalisation(*myAnsatz,numberOfPaths,rotationPaths);
+        quantityCalc.doSubspaceDiagonalisation(myAnsatz,FE,numberOfPaths,rotationPaths);
     }
 
 
@@ -243,11 +248,14 @@ int main(int argc, char *argv[])
     {
         logger().log("Start Optimise");
         rotationPaths.push_back(rotationPaths[1]);
-        // quantityCalc.OptimiseTups(Ham,rotationPaths.back(),*myAnsatz,true);
-        std::vector<realNumType> angles(rotationPath.size());
-        std::transform(rotationPaths.back().begin(),rotationPaths.back().end(),angles.begin(),[](baseAnsatz::rotationElement& r){return r.second;});
-
-        quantityCalc.OptimiseTups(start,Ham,angles,excs,true);
+        if (makeLie)
+        {
+            quantityCalc.OptimiseTups(*myAnsatz,rotationPaths.back(),true);
+        }
+        else
+        {
+            quantityCalc.OptimiseTups(*FE,rotationPaths.back(),true);
+        }
 
         // quantityCalc.iterativeTups(Ham,rotationPaths[0],*myAnsatz,true);
         // rotationPaths.push_back(myAnsatz->getRotationPath());
@@ -266,6 +274,6 @@ int main(int argc, char *argv[])
 
 
     if (writeProperties)
-        quantityCalc.writeProperties(rotationPaths,myAnsatz.get());
+        quantityCalc.writeProperties(myAnsatz,FE,rotationPaths);
     return 0;
 }

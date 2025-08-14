@@ -611,8 +611,10 @@ bool stateAnsatzManager::optimise()
         success = false;
         return success;
     }
-
-    m_TUPSQuantities->OptimiseTups(m_Ham,m_rotationPath,*m_ansatz,true);
+    if (useFused)
+        m_TUPSQuantities->OptimiseTups(*m_FA,m_rotationPath,true);
+    else
+        m_TUPSQuantities->OptimiseTups(*m_ansatz,m_rotationPath,true);
     if (!useFused)
         m_rotationPath = m_ansatz->getRotationPath();
     setAnglesFromRotationPath();
@@ -651,11 +653,17 @@ bool stateAnsatzManager::generatePathsForSubspace(size_t numberOfPaths)
         {
             rotationPaths.back()[i].second = angles(i);
         }
-        realNumType Energy = m_TUPSQuantities->OptimiseTups(m_Ham,rotationPaths.back(),*m_ansatz,true);
+
+        realNumType Energy;
+        if (useFused)
+            Energy = m_TUPSQuantities->OptimiseTups(*m_FA,rotationPaths.back(),true); // this is broken
+        else
+            Energy = m_TUPSQuantities->OptimiseTups(*m_ansatz,rotationPaths.back(),true);
         if (std::find_if(Energies.begin(),Energies.end(), [=](realNumType E){return std::abs(E-Energy) < 1e-10;}) == Energies.end())
         {
             Energies.push_back(Energy);
-            rotationPaths.back() = m_ansatz->getRotationPath();
+            if (!useFused)
+                rotationPaths.back() = m_ansatz->getRotationPath();
             if (pathsFound < numberOfPaths-1)
             {
                 rotationPaths.push_back(rotationPaths[0]);
@@ -665,7 +673,7 @@ bool stateAnsatzManager::generatePathsForSubspace(size_t numberOfPaths)
     }
     logger().log("Found following Energies",Energies);
 
-    m_TUPSQuantities->doSubspaceDiagonalisation(*m_ansatz,numberOfPaths,rotationPaths);
+    m_TUPSQuantities->doSubspaceDiagonalisation(m_ansatz,m_FA,numberOfPaths,rotationPaths);
     return success;
 }
 
