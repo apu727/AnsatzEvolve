@@ -257,6 +257,71 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
         return Energy;
     };
 
+    auto getElement = [numberOfQubits,&getEnergy,&getTwoElectronEnergy,getFockMatrixElem](uint32_t iBasisState, uint32_t jBasisState)
+    {
+        std::pair<size_t,bool> idxs[4];// a^\dagger a^\dagger a a
+        int8_t annihilatePos = 2;
+        int8_t createPos = 0;
+        bool eveniElecSoFar = 0;
+        bool evenjElecSoFar = 0;
+
+        bool sign = true; //True => positive
+        realNumType Energy = 0;
+
+        for (size_t k = 0; k < numberOfQubits; k++)
+        {
+            bool isSet = false;
+            bool jsSet = false;
+            if (iBasisState & (1<< k))
+            {
+                isSet = true;
+                eveniElecSoFar = !eveniElecSoFar;
+            }
+            if (jBasisState & (1<<k))
+            {
+                jsSet = true;
+                evenjElecSoFar = !evenjElecSoFar;
+            }
+            if (isSet == jsSet)
+                continue;
+            if (isSet)
+            {
+                if (createPos > 1)
+                    __builtin_trap();
+                idxs[createPos++] = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
+                if (eveniElecSoFar)
+                    sign = !sign;
+            }
+            if (jsSet)
+            {
+                if (annihilatePos > 3)
+                    __builtin_trap();
+                idxs[annihilatePos++] = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
+                if (evenjElecSoFar)
+                    sign = !sign;
+            }
+        }
+
+        if(annihilatePos == 2 && createPos == 0)
+        {
+            Energy = getEnergy(jBasisState);
+        }
+        else if (annihilatePos == 3 && createPos == 1)
+        {
+            Energy = (sign ? 1 : -1)*getFockMatrixElem(idxs,jBasisState);
+        }
+        else if (annihilatePos == 4 && createPos == 2)
+        {
+            Energy = (sign ? 1 : -1)*getTwoElectronEnergy(idxs);
+        }
+        else
+        {
+            logger().log("Not handled case construct Ham");
+            __builtin_trap();
+        }
+        return Energy;
+    };
+
 
 
     //only construct the compressed elements, but in the decompressed format
@@ -270,7 +335,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
     {
         compressedSize = 1<<numberOfQubits;
     }
-    size_t expectedMatrixSize = 2*choose(numberOfQubits,2)*compressedSize; // An estimate;
+    size_t expectedMatrixSize = 5*choose(numberOfQubits,2)*compressedSize; // An estimate;
     me->m_iIndexes.reserve(expectedMatrixSize);
     me->m_jIndexes.reserve(expectedMatrixSize);
     me->m_data.reserve(expectedMatrixSize);
@@ -279,96 +344,118 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
     threadpool& pool = threadpool::getInstance(NUM_CORES);
     size_t stepSize = std::max(compressedSize/NUM_CORES,1ul);
     std::vector<std::future<void>> futs;
+
+    auto start = std::chrono::high_resolution_clock::now();
     for (size_t starti = 0; starti < compressedSize; starti+= stepSize)
     {
         size_t stopi = std::min(starti+stepSize,compressedSize);
-        futs.push_back(pool.queueWork([me,comp,compressedSize,numberOfQubits,&getEnergy,getFockMatrixElem,getTwoElectronEnergy,starti,stopi,&vectorLock]()
+        futs.push_back(pool.queueWork([me,comp,numberOfQubits,getElement,starti,stopi,&vectorLock]()
         {
         for (size_t i = starti; i < stopi; i++)
         {
-            uint32_t iBasisState;
+            uint32_t jBasisState;
             if (comp)
-                comp->deCompressIndex(i,iBasisState);
+                comp->deCompressIndex(i,jBasisState);
             else
-                iBasisState = i;
-
-            for (size_t j = 0; j < compressedSize; j++)
+                jBasisState = i;
+            assert(numberOfQubits < 256);
+            for (std::uint_fast8_t a = 0; a < numberOfQubits; a++)
             {
-                uint32_t jBasisState;
-                if (comp)
-                    comp->deCompressIndex(j,jBasisState);
-                else
-                    jBasisState = i;
-                if (bitwiseDot(iBasisState^jBasisState,-1,numberOfQubits) > 4)
+                if(jBasisState & (1<<a))
                     continue;
-                std::pair<size_t,bool> idxs[4];// a^\dagger a^\dagger a a
-                int8_t annihilatePos = 2;
-                int8_t createPos = 0;
-                bool eveniElecSoFar = 0;
-                bool evenjElecSoFar = 0;
-
-                bool sign = true; //True => positive
-                realNumType Energy = 0;
-
-                for (size_t k = 0; k < numberOfQubits; k++)
+                for (std::uint_fast8_t b = a+1; b < numberOfQubits; b++)
                 {
-                    bool isSet = false;
-                    bool jsSet = false;
-                    if (iBasisState & (1<< k))
-                    {
-                        isSet = true;
-                        eveniElecSoFar = !eveniElecSoFar;
-                    }
-                    if (jBasisState & (1<<k))
-                    {
-                        jsSet = true;
-                        evenjElecSoFar = !evenjElecSoFar;
-                    }
-                    if (isSet == jsSet)
+                    if(jBasisState & (1<<b))
                         continue;
-                    if (isSet)
+                    for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
                     {
-                        if (createPos > 1)
-                            goto ExcTooBig;
-                        idxs[createPos++] = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-                        if (eveniElecSoFar)
-                            sign = !sign;
+                        if (!(jBasisState & (1<<c)))
+                            continue;
+                        if (c == a || c == b)
+                            continue;
+                        for (std::uint_fast8_t d = c+1; d < numberOfQubits; d++)
+                        {
+                            if (d == b || d == a)
+                                continue;
+                            if (!(jBasisState & (1<<d)))
+                                continue;
+
+                            uint32_t iBasisState = ((1<<a) | (1<<b)) ^ ((1<<c | 1<< d) ^ jBasisState);
+                            if (iBasisState < jBasisState)
+                                continue;
+                            assert(iBasisState != jBasisState);
+                            if (comp)
+                            {
+                                uint32_t temp;
+                                comp->compressIndex(iBasisState,temp);
+                                if (temp == (uint32_t)-1)
+                                    continue;
+                            }
+
+                            realNumType Energy = getElement(iBasisState,jBasisState);
+
+                            {
+                                std::unique_lock<std::mutex> lock(vectorLock);
+                                me->m_iIndexes.push_back(iBasisState);
+                                me->m_jIndexes.push_back(jBasisState);
+                                me->m_data.push_back(Energy);
+                                me->m_iIndexes.push_back(jBasisState);
+                                me->m_jIndexes.push_back(iBasisState);
+                                me->m_data.push_back(Energy); //TODO conjugate
+                            }
+                            ;
+                        }
                     }
-                    if (jsSet)
+                }
+            }
+
+            for (std::uint_fast8_t a = 0; a < numberOfQubits; a++)
+            {
+                if ((jBasisState & (1<<a)))
+                    continue;
+                for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
+                {
+                    if (c == a)
+                        continue;
+                    if (!(jBasisState & (1<<c)))
+                        continue;
+
+                    uint32_t iBasisState = ((1<<a)) ^ ((1<<c) ^ jBasisState);
+                    if (iBasisState < jBasisState)
+                        continue;
+                    assert(iBasisState != jBasisState);
+                    if (comp)
                     {
-                        if (annihilatePos > 3)
-                            goto ExcTooBig;
-                        idxs[annihilatePos++] = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-                        if (evenjElecSoFar)
-                            sign = !sign;
+                        uint32_t temp;
+                        comp->compressIndex(iBasisState,temp);
+                        if (temp == (uint32_t)-1)
+                            continue;
                     }
+
+                    realNumType Energy = getElement(iBasisState,jBasisState);
+
+                    {
+                        std::unique_lock<std::mutex> lock(vectorLock);
+                        me->m_iIndexes.push_back(iBasisState);
+                        me->m_jIndexes.push_back(jBasisState);
+                        me->m_data.push_back(Energy);
+                        me->m_iIndexes.push_back(jBasisState);
+                        me->m_jIndexes.push_back(iBasisState);
+                        me->m_data.push_back(Energy);
+                    }
+                    ;
+
                 }
 
-                if(annihilatePos == 2 && createPos == 0)
-                {
-                    Energy = getEnergy(jBasisState);
-                }
-                else if (annihilatePos == 3 && createPos == 1)
-                {
-                    Energy = (sign ? 1 : -1)*getFockMatrixElem(idxs,jBasisState);
-                }
-                else if (annihilatePos == 4 && createPos == 2)
-                {
-                    Energy = (sign ? 1 : -1)*getTwoElectronEnergy(idxs);
-                }
-                else
-                {
-                    logger().log("Not handled case construct Ham");
-                    __builtin_trap();
-                }
-                {
-                    std::unique_lock<std::mutex> lock(vectorLock);
-                    me->m_iIndexes.push_back(iBasisState);
-                    me->m_jIndexes.push_back(jBasisState);
-                    me->m_data.push_back(Energy);
-                }
-                ExcTooBig:
-                ;
+            }
+
+            realNumType Energy = getElement(jBasisState,jBasisState);
+
+            {
+                std::unique_lock<std::mutex> lock(vectorLock);
+                me->m_iIndexes.push_back(jBasisState);
+                me->m_jIndexes.push_back(jBasisState);
+                me->m_data.push_back(Energy);
             }
 
         }
@@ -376,6 +463,9 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
     }
     for (auto&f : futs)
         f.wait();
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    logger().log("Ham Time taken (ms)",duration);
     logger().log("Actual size:", me->m_iIndexes.size());
     me->m_iIndexes.shrink_to_fit();
     me->m_jIndexes.shrink_to_fit();
