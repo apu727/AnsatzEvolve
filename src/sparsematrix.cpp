@@ -299,47 +299,47 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
                     comp->deCompressIndex(j,jBasisState);
                 else
                     jBasisState = i;
-                if (bitwiseDot(iBasisState^jBasisState,-1,numberOfQubits) > 2)
+                if (bitwiseDot(iBasisState^jBasisState,-1,numberOfQubits) > 4)
                     continue;
-                std::vector<bool> is(numberOfQubits);
-                std::vector<bool> js(numberOfQubits);
                 std::pair<size_t,bool> idxs[4];// a^\dagger a^\dagger a a
                 int8_t annihilatePos = 2;
                 int8_t createPos = 0;
-                size_t numiElecSoFar = 0;
-                size_t numjElecSoFar = 0;
+                bool eveniElecSoFar = 0;
+                bool evenjElecSoFar = 0;
 
                 bool sign = true; //True => positive
                 realNumType Energy = 0;
 
                 for (size_t k = 0; k < numberOfQubits; k++)
                 {
+                    bool isSet = false;
+                    bool jsSet = false;
                     if (iBasisState & (1<< k))
                     {
-                        is[k] = true;
-                        ++numiElecSoFar;
+                        isSet = true;
+                        eveniElecSoFar = !eveniElecSoFar;
                     }
                     if (jBasisState & (1<<k))
                     {
-                        js[k] = true;
-                        ++numjElecSoFar;
+                        jsSet = true;
+                        evenjElecSoFar = !evenjElecSoFar;
                     }
-                    if (is[k] == js[k])
+                    if (isSet == jsSet)
                         continue;
-                    if (is[k] == true)
+                    if (isSet)
                     {
                         if (createPos > 1)
                             goto ExcTooBig;
                         idxs[createPos++] = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-                        if (numiElecSoFar %2 == 0)
+                        if (eveniElecSoFar)
                             sign = !sign;
                     }
-                    if (js[k] == true)
+                    if (jsSet)
                     {
                         if (annihilatePos > 3)
                             goto ExcTooBig;
                         idxs[annihilatePos++] = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-                        if (numjElecSoFar %2 == 0)
+                        if (evenjElecSoFar)
                             sign = !sign;
                     }
                 }
