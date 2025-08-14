@@ -30,8 +30,8 @@ inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,
     fpCoeff = fopen((filePath+"_Ham_Coeff.dat").c_str(), "r");
     if(NULL == fpCoeff)
     {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",filePath.c_str());
         return 0;
     }
 
@@ -41,8 +41,8 @@ inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,
     if(NULL == fpIndex)
     {
         fclose(fpCoeff);
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",filePath.c_str());
         return 0;
     }
     realNumType coeffReal = 0;
@@ -55,8 +55,8 @@ inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,
 
     while(EOF != ret && EOF != ret2)
     {
-        // printf("Read Coeff: %lf \n ", coeff);
-        // printf("Read Index: %u,%u \n ", idxs[0]-1,idxs[1]-1);
+        // fprintf(stderr,"Read Coeff: %lf \n ", coeff);
+        // fprintf(stderr,"Read Index: %u,%u \n ", idxs[0]-1,idxs[1]-1);
 
         me->m_iIndexes.push_back(idxs[0]-1);
         me->m_jIndexes.push_back(idxs[1]-1);
@@ -80,8 +80,8 @@ inline bool s_loadMatrix(sparseMatrix<realNumType,vectorType>* me,std::string fi
     fpCoeff = fopen((filePath+"_Ham_Coeff.dat").c_str(), "r");
     if(NULL == fpCoeff)
     {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",(filePath + "_Ham_Coeff.dat").c_str());
         return 0;
     }
 
@@ -91,8 +91,8 @@ inline bool s_loadMatrix(sparseMatrix<realNumType,vectorType>* me,std::string fi
     if(NULL == fpIndex)
     {
         fclose(fpCoeff);
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",(filePath+"_Ham_Index.dat").c_str());
         return 0;
     }
     realNumType coeff = 0;
@@ -104,8 +104,8 @@ inline bool s_loadMatrix(sparseMatrix<realNumType,vectorType>* me,std::string fi
 
     while(EOF != ret && EOF != ret2)
     {
-        // printf("Read Coeff: %lf \n ", coeff);
-        // printf("Read Index: %u,%u \n ", idxs[0]-1,idxs[1]-1);
+        // fprintf(stderr,"Read Coeff: %lf \n ", coeff);
+        // fprintf(stderr,"Read Index: %u,%u \n ", idxs[0]-1,idxs[1]-1);
 
         me->m_iIndexes.push_back(idxs[0]-1);
         me->m_jIndexes.push_back(idxs[1]-1);
@@ -257,11 +257,13 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
     if (comp)
     {
         compressedSize = comp->getCompressedSize();
+        logger().log("MatrixCompressedSize",compressedSize);
     }
     else
     {
         compressedSize = 1<<numberOfQubits;
     }
+
     {
         for (size_t i = 0; i < compressedSize; i++)
         {
@@ -270,6 +272,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
                 comp->deCompressIndex(i,iBasisState);
             else
                 iBasisState = i;
+
             for (size_t j = 0; j < compressedSize; j++)
             {
                 uint32_t jBasisState;
@@ -277,6 +280,8 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
                     comp->deCompressIndex(j,jBasisState);
                 else
                     jBasisState = i;
+                if (bitwiseDot(iBasisState^jBasisState,-1,numberOfQubits) > 2)
+                    continue;
                 std::vector<bool> is(numberOfQubits);
                 std::vector<bool> js(numberOfQubits);
                 std::pair<size_t,bool> idxs[4];// a^\dagger a^\dagger a a
@@ -337,6 +342,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
                     logger().log("Not handled case construct Ham");
                     __builtin_trap();
                 }
+
                 me->m_iIndexes.push_back(iBasisState);
                 me->m_jIndexes.push_back(jBasisState);
                 me->m_data.push_back(Energy);

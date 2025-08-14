@@ -586,7 +586,15 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                     if (isCompressed)
                     {
                         for (uint32_t idx = 0; idx < localVectorSize; idx++)
+                        {
+                            // uint32_t bkp_idx = filledMap[idx];
                             comp->compressIndex(filledMap[idx],filledMap[idx]);
+                            // if (filledMap[idx] == (uint32_t)-1)
+                            // {
+                            //     logger().log("error",bkp_idx);
+                            //     __builtin_trap();
+                            // }
+                        }
                     }
                     totalRotcount += numberOfActiveRots*localVectorSize/2;
                 }
@@ -602,8 +610,14 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             assert(rotIdx < numberToFuse);
 
             *(currentMap.begin()+currentMapFilledSize) = currentBasisState;
+            // for (indexType t = 1; t < (1<<numberOfActiveRots); t++)
+            //     *(currentMap.begin() + currentMapFilledSize + t) = (uint32_t)-1;
+
             uint32_t currentSignsStep = numberOfActiveRots*currentMapFilledSize/2;
             fillCurrentMap<indexType,numberToFuse>(activeRotIdx,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
+            // for (indexType t = 0; t < (1<<numberOfActiveRots); t++)
+            //     if (*(currentMap.begin() + currentMapFilledSize + t) == (uint32_t)-1)
+            //         __builtin_trap();
             currentMapFilledSize += 1<<numberOfActiveRots;
         }
         for (indexType idx = 0; idx <  localVectorSize; idx++)
@@ -620,7 +634,11 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                 if (isCompressed)
                 {
                     for (uint32_t idx = 0; idx < filledSize; idx++)
+                    {
                         comp->compressIndex(potentiallyFilledMap[idx],potentiallyFilledMap[idx]);
+                        // if (potentiallyFilledMap[idx] == (uint32_t)-1)
+                        //     __builtin_trap();
+                    }
                 }
             }
         }

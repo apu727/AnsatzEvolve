@@ -15,14 +15,14 @@ bool loadPath(std::shared_ptr<stateRotate> sr, std::string filePath, std::vector
     fp = fopen(filePath.c_str(), "r");
     if(NULL == fp)
     {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",filePath.c_str());
         return 0;
     }
     int ret = fscanf(fp, "%hhd %hhd %hhd %hhd \n",&Excs[0],&Excs[1],&Excs[2],&Excs[3] );
     while(EOF != ret)
     {
-        // printf("Read Operator: %hhd %hhd %hhd %hhd\n ", Excs[0],Excs[1],Excs[2],Excs[3]);
+        // fprintf(stderr,"Read Operator: %hhd %hhd %hhd %hhd\n ", Excs[0],Excs[1],Excs[2],Excs[3]);
         for (int i = 0; i < 4; i++)
             Excs[i] -= 1;
         if (sr)
@@ -47,16 +47,16 @@ bool loadParameters(std::string filePath,
     fp = fopen((filePath+"_Parameters.dat").c_str(), "r");
     if(fp == nullptr)
     {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",(filePath+"_Parameters.dat").c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",(filePath+"_Parameters.dat").c_str());
         return 0;
     }
 
     fp2 = fopen((filePath+"_Order.dat").c_str(), "r");
     if(fp2 == nullptr)
     {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",(filePath+"_Order.dat").c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",(filePath+"_Order.dat").c_str());
         return 0;
     }
 
@@ -106,14 +106,14 @@ Energy of minimum      2=  -2.809247486912495 first found at step       12 after
 
         realNumType Energy = realNumType();
         ret = fscanf(fp,"%*[^=]= " realNumTypeCode " %*[^\n]",&Energy);
-        // printf("Path: %zu has energy " realNumTypeCode "\n",parameters.size()+1,Energy);
+        // fprintf(stderr,"Path: %zu has energy " realNumTypeCode "\n",parameters.size()+1,Energy);
 
         parameters.push_back(std::vector<realNumType>());
         for (int i = 0; i < numberOfParameters; i++)
         {
             ret = fscanf(fp,  realNumTypeCode,&parameter);
             parameters.back().push_back(parameter);
-            // printf("Read Angle: " numTypeCode "\n ", parameter);
+            // fprintf(stderr,"Read Angle: " numTypeCode "\n ", parameter);
         }
     }
     numberOfUniqueParameters = numberOfParameters;
@@ -170,8 +170,8 @@ int readCsvState(std::vector<std::complex<realNumType>>& Coeffs, const std::stri
     fp = fopen(filePath.c_str(), "r");
     if(NULL == fp)
     {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",filePath.c_str());
         return 0;
     }
 
@@ -194,7 +194,7 @@ int readCsvState(std::vector<std::complex<realNumType>>& Coeffs, const std::stri
             else
                 fprintf(stderr,"Unable to read initial state, missing bitstring?\n");
         }
-        //printf("Read: %s, " numTypeCode, str1, coeff);
+        //fprintf(stderr,"Read: %s, " numTypeCode, str1, coeff);
         std::string bitstring(str1);
         uint32_t bitstring_Int = 0;
         for (size_t i=0; i < bitstring.length(); i++)
@@ -222,8 +222,8 @@ int readCsvState(std::vector<realNumType>& Coeffs, const std::string& filePath)
     fp = fopen(filePath.c_str(), "r");
     if(NULL == fp)
     {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",filePath.c_str());
         return 0;
     }
 
@@ -249,7 +249,7 @@ int readCsvState(std::vector<realNumType>& Coeffs, const std::string& filePath)
         {
             logger().log("Imaginary coeff not zero: ",str1);
         }
-        //printf("Read: %s, " numTypeCode, str1, coeff);
+        //fprintf(stderr,"Read: %s, " numTypeCode, str1, coeff);
         std::string bitstring(str1);
         uint32_t bitstring_Int = 0;
         for (size_t i=0; i < bitstring.length(); i++)
@@ -273,8 +273,8 @@ void LoadNuclearEnergy(realNumType& NuclearEnergy, std::string filePath)
     FILE* fp = fopen((filePath + "_Nuclear_Energy.dat").c_str(),"r");
     if(NULL == fp)
     {
-        printf("\nError in opening file. ");
-        printf("fileGiven: %s\n",(filePath + "_Nuclear_Energy.dat").c_str());
+        fprintf(stderr,"\nError in opening file. ");
+        fprintf(stderr,"fileGiven: %s\n",(filePath + "_Nuclear_Energy.dat").c_str());
         NuclearEnergy = 0;
         return;
     }

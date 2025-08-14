@@ -173,14 +173,14 @@ bool stateRotate::loadOperators(std::string filePath, std::vector<stateRotate::e
     fp = fopen(filePath.c_str(), "r");
     if(NULL == fp)
     {
-        printf("\nError in opening file.");
-        printf("fileGiven: %s\n",filePath.c_str());
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",filePath.c_str());
         return 0;
     }
     int ret = fscanf(fp, "%hhd %hhd %hhd %hhd \n",&Excs[0],&Excs[1],&Excs[2],&Excs[3] );
     while(EOF != ret)
     {
-        //printf("Read Operator: %hhd %hhd %hhd %hhd\n ", Excs[0],Excs[1],Excs[2],Excs[3]);
+        //fprintf(stderr,"Read Operator: %hhd %hhd %hhd %hhd\n ", Excs[0],Excs[1],Excs[2],Excs[3]);
         for (int i = 0; i < 4; i++)
             Excs[i] -= 1;
         excs.push_back(Excs);

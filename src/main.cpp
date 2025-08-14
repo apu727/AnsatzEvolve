@@ -50,13 +50,13 @@ int main(int argc, char *argv[])
     {
         if (!readCsvState(statevectorCoeffs,filePath + "_Initial.dat"))
         {
-            printf("Failed to read CSV");
+            fprintf(stderr,"Failed to read CSV");
             return 1;
         }
     }
     else
     {
-        printf("No built in statevector");
+        fprintf(stderr,"No built in statevector");
         return 1;
     }
     uint32_t ones = -1;
@@ -122,6 +122,10 @@ int main(int argc, char *argv[])
     }
     logger().log("SZSym:",SZSym);
     logger().log("particleNumSym:",allSameParticleNumber);
+    logger().log("NumberOfQubits",numberOfQubits);
+    logger().log("NumberOfParticles",numberOfParticles);
+    logger().log("SpinUp",spinUp);
+    logger().log("spinDown",spinDown);
     std::shared_ptr<stateRotate> lie = nullptr;
     std::shared_ptr<compressor> comp;
     if (allSameParticleNumber && SZSym)
@@ -169,7 +173,8 @@ int main(int argc, char *argv[])
 
 
     sparseMatrix<realNumType,numType> Ham;
-    Ham.loadMatrix(filePath,numberOfQubits,comp);
+    if (!Ham.loadMatrix(filePath,numberOfQubits,comp))
+        return 1;
     // Ham.dumpMatrix(filePath);
 
 

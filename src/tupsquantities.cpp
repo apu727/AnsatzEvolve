@@ -1463,7 +1463,7 @@ void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const
 void TUPSQuantities::printOutputLine(std::vector<double>& toPrint, std::string name)
 {
     fprintf(m_file,"%-" textColumnSize "s",name.c_str());
-    //printf("%-" columnSize "s", "N/A");
+    //fprintf(stderr,"%-" columnSize "s", "N/A");
     for (auto n : toPrint)
     {
         fprintf(m_file,"%-" columnSize ".16lg", n);
@@ -1474,7 +1474,7 @@ void TUPSQuantities::printOutputLine(std::vector<double>& toPrint, std::string n
 void TUPSQuantities::printOutputLine(std::vector<long double>& toPrint, std::string name)
 {
     fprintf(m_file,"%-" textColumnSize "s",name.c_str());
-    //printf("%-" columnSize "s", "N/A");
+    //fprintf(stderr,"%-" columnSize "s", "N/A");
     for (auto n : toPrint)
     {
         fprintf(m_file,"%-" columnSize ".10Lg", n);
