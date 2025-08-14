@@ -6,6 +6,7 @@
 #include "sparsematrix.h"
 #include "logger.h"
 #include "myComplex.h"
+#include "threadpool.h"
 
 #include <algorithm>
 #include <cassert>
@@ -14,6 +15,7 @@
 #include <cstring>
 // #include <map>
 #include <iostream>
+#include <mutex>
 #include <numeric>
 
 //bool compare1(const std::pair<size_t,size_t> &a, const std::pair<size_t,size_t> &b ) {return a.first < b.first;};
@@ -273,8 +275,16 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
     me->m_jIndexes.reserve(expectedMatrixSize);
     me->m_data.reserve(expectedMatrixSize);
     logger().log("Reserved size", expectedMatrixSize);
+    std::mutex vectorLock;
+    threadpool& pool = threadpool::getInstance(NUM_CORES);
+    size_t stepSize = std::max(compressedSize/NUM_CORES,1ul);
+    std::vector<std::future<void>> futs;
+    for (size_t starti = 0; starti < compressedSize; starti+= stepSize)
     {
-        for (size_t i = 0; i < compressedSize; i++)
+        size_t stopi = std::min(starti+stepSize,compressedSize);
+        futs.push_back(pool.queueWork([me,comp,compressedSize,numberOfQubits,&getEnergy,getFockMatrixElem,getTwoElectronEnergy,starti,stopi,&vectorLock]()
+        {
+        for (size_t i = starti; i < stopi; i++)
         {
             uint32_t iBasisState;
             if (comp)
@@ -351,16 +361,21 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
                     logger().log("Not handled case construct Ham");
                     __builtin_trap();
                 }
-
-                me->m_iIndexes.push_back(iBasisState);
-                me->m_jIndexes.push_back(jBasisState);
-                me->m_data.push_back(Energy);
+                {
+                    std::unique_lock<std::mutex> lock(vectorLock);
+                    me->m_iIndexes.push_back(iBasisState);
+                    me->m_jIndexes.push_back(jBasisState);
+                    me->m_data.push_back(Energy);
+                }
                 ExcTooBig:
                 ;
             }
 
         }
+        }));
     }
+    for (auto&f : futs)
+        f.wait();
     logger().log("Actual size:", me->m_iIndexes.size());
     me->m_iIndexes.shrink_to_fit();
     me->m_jIndexes.shrink_to_fit();
