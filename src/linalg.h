@@ -370,6 +370,7 @@ public:
     vectorView<const Matrix,Eigen::ColMajor> getIVectorView(size_t j) const {return vectorView<const Matrix,Eigen::ColMajor>(j,this,false);}
     //Returns a vector that has Indices j. i.e. getJVector(i)[j] = (*this)(i,j)
     vectorView<const Matrix,Eigen::RowMajor> getJVectorView(size_t i) const {return vectorView<const Matrix,Eigen::RowMajor>(i,this,false);}
+    Matrix<realNumType> real();
 };
 
 template<>    Matrix<double> &Matrix<double>::addEquals(const Matrix &otherA, const Matrix &otherB);
@@ -436,6 +437,7 @@ public:
     operator vectorView<const Matrix<dataType>> () const {return this->getJVectorView(0);}
     vectorView<Matrix<dataType>,Eigen::RowMajor> getView(){return *this;}
     vectorView<const Matrix<dataType>,Eigen::RowMajor> getView()const {return *this;}
+    vector<realNumType> real();
 
 
 };

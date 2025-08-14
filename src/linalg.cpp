@@ -302,6 +302,21 @@ void Matrix<dataType>::mul(dataType scalar, Matrix<dataType> &dest) const
 }
 
 template<typename dataType>
+Matrix<realNumType> Matrix<dataType>::real()
+{
+    Matrix<realNumType> ret;
+    ret.resize(m_iSize,m_jSize,m_isCompressed,m_compressor);
+    for (size_t i = 0; i < m_iSize;i++)
+    {
+        for (size_t j = 0; j < m_jSize; j++)
+        {
+            ret(i,j) = std::real((*this)(i,j));
+        }
+    }
+    return ret;
+}
+
+template<typename dataType>
 Matrix<dataType>::~Matrix()
 {
     cleanup();
@@ -523,6 +538,20 @@ void vector<dataType>::conj()
             this->m_data[i] = std::conj(this->m_data[i]);
         }
     }
+}
+
+template<typename dataType>
+vector<realNumType> vector<dataType>::real()
+{
+    vector<realNumType> ret;
+    ret.resize(size(),this->m_isCompressed,this->m_compressor);
+
+    for (size_t j = 0; j < size(); j++)
+    {
+        ret[j] = std::real((*this)[j]);
+    }
+
+    return ret;
 }
 
 Matrix<numType>::EigenMatrix convert(const std::vector<vector<numType> > &AnsatzTangentSpace)

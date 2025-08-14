@@ -146,8 +146,8 @@ size_t CalculateFileSize(FILE *fp)
         return 0;
 }
 
-template<typename vectorType>
-bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp)
+template<typename dataType, typename vectorType>
+bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp)
 {
     FILE *fponeEInts;
 
@@ -335,7 +335,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
     {
         compressedSize = 1<<numberOfQubits;
     }
-    size_t expectedMatrixSize = 5*choose(numberOfQubits,2)*compressedSize; // An estimate;
+    size_t expectedMatrixSize = choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2)*compressedSize; // An estimate;
     me->m_iIndexes.reserve(expectedMatrixSize);
     me->m_jIndexes.reserve(expectedMatrixSize);
     me->m_data.reserve(expectedMatrixSize);

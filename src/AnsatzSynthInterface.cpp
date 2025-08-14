@@ -167,7 +167,7 @@ int setInitialState(int numQubits, int N, const int* iIndexes, const double* coe
     std::vector<int> iIndexesV(iIndexes,iIndexes+N);
     for (int& iIndex : iIndexesV)
         iIndex--;
-    std::vector<realNumType> CoeffsV(coeffs,coeffs+N);
+    std::vector<numType> CoeffsV(coeffs,coeffs+N);
     bool success = thisPtr->storeInitial(numQubits,iIndexesV,CoeffsV);
     if (!success)
         return 3;
@@ -247,7 +247,16 @@ int getFinalState (int NAngles, const double* angles, int NBasisVectors, double*
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
     std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
     vector<double> state;
+
+#ifdef useComplex
+    vector<numType> complexState;
+    logger().log("Warning casting complex values to real discards imaginary part, GetFinalState");
+    bool success = thisPtr->getFinalState(std::vector<double>(angles,angles+NAngles),complexState);
+    static_cast<Matrix<double>&>(state) = std::move(complexState.real());
+#else
+
     bool success = thisPtr->getFinalState(std::vector<double>(angles,angles+NAngles),state);
+#endif
     if (!success)
         return 6;
 

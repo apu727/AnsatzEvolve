@@ -128,8 +128,8 @@ template<typename vectorType>
 inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,std::string filePath);
 template<typename vectorType>
 inline bool s_loadMatrix(sparseMatrix<realNumType,vectorType>* me,std::string filePath);
-template<typename vectorType>
-bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp);
+template<typename dataType, typename vectorType>
+bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp);
 
 template<typename dataType, typename vectorType>
 class sparseMatrix : public targetMatrix<dataType,vectorType>
@@ -144,7 +144,7 @@ class sparseMatrix : public targetMatrix<dataType,vectorType>
     std::vector<uint32_t> m_blankingVector; // vector that multiplies by 1 or 0 depending of if the column/row is allowed.
 
     friend bool s_loadMatrix <>(sparseMatrix<dataType,vectorType>* me,std::string filePath);
-    friend bool s_loadOneAndTwoElectronsIntegrals <>(sparseMatrix<realNumType,vectorType>* me,std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp);
+    friend bool s_loadOneAndTwoElectronsIntegrals <>(sparseMatrix<dataType,vectorType>* me,std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp);
     std::shared_ptr<compressor> m_compressor;
     bool m_isCompressed = false;
     bool m_isRotationGenerator = false;// allows certain optimisations
