@@ -19,7 +19,12 @@
 //bool compare1(const std::pair<size_t,size_t> &a, const std::pair<size_t,size_t> &b ) {return a.first < b.first;};
 //bool compare2(const std::pair<size_t,size_t> &a, const std::pair<size_t,size_t> &b ) {return a.second < b.second;};
 
-
+size_t choose(size_t n, size_t k)
+{
+    if (k == 0)
+        return 1;
+    return (n * choose(n - 1, k - 1)) / k;
+}
 
 template<typename vectorType>
 inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,std::string filePath)
@@ -263,7 +268,11 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
     {
         compressedSize = 1<<numberOfQubits;
     }
-
+    size_t expectedMatrixSize = 2*choose(numberOfQubits,2)*compressedSize; // An estimate;
+    me->m_iIndexes.reserve(expectedMatrixSize);
+    me->m_jIndexes.reserve(expectedMatrixSize);
+    me->m_data.reserve(expectedMatrixSize);
+    logger().log("Reserved size", expectedMatrixSize);
     {
         for (size_t i = 0; i < compressedSize; i++)
         {
@@ -352,8 +361,13 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<realNumType,vectorType>* me,
 
         }
     }
+    logger().log("Actual size:", me->m_iIndexes.size());
+    me->m_iIndexes.shrink_to_fit();
+    me->m_jIndexes.shrink_to_fit();
+    me->m_data.shrink_to_fit();
     me->unblankAll();
-    me->compress(comp);
+    if (comp)
+        me->compress(comp);
     delete[] twoEInts;
     fclose(fponeEInts);
     fclose(fptwoEInts);
