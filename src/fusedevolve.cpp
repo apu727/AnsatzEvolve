@@ -520,7 +520,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
     assert(excPath.size() % numberToFuse == 0);
 
     std::vector<uint32_t> activebasisStates;
-    activebasisStates.resize(startVec.size());
+    activebasisStates.resize(startVec.size()*(isComplex?2:1));
 
     std::shared_ptr<compressor> comp;
     bool isCompressed = startVec.getIsCompressed(comp);
@@ -528,23 +528,20 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
     {
         for (uint32_t i = 0; i < startVec.size(); i++)
         {
-            comp->deCompressIndex(i,activebasisStates[i]);
+
             if (isComplex)
             {
-                activebasisStates[i] = activebasisStates[i]<<1;
+                comp->deCompressIndex(i,activebasisStates[2*i]);
+                activebasisStates[2*i] = activebasisStates[2*i]<<1;
+                activebasisStates[2*i+1] = activebasisStates[2*i] +1;
             }
+            else
+                comp->deCompressIndex(i,activebasisStates[i]);
         }
     }
     else
     {
         std::iota(activebasisStates.begin(),activebasisStates.end(),0);
-        if (isComplex)
-        {
-            for (uint32_t i = 0; i < startVec.size(); i++)
-            {
-                activebasisStates[i] = activebasisStates[i]<<1;
-            }
-        }
     }
 
     size_t totalRotcount = 0;
