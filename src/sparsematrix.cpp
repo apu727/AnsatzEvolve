@@ -1190,6 +1190,9 @@ void sparseMatrix<std::complex<realNumType>, std::complex<realNumType>>::rotateA
             std::complex<realNumType> destI = srcI*iu*(S) + srcI*C;
             dest[*iIdx] = destI;
             result += std::real(myConj(TBI)*destI*iu);
+            // 0.5*(conj(TBI)*destI*iu -  TBI*conj(destI)*iu)
+            //0.5*((a-bi)(c+di)i - (a+bi)(c-di)i)
+            //bc -ad
         }
         else
         {

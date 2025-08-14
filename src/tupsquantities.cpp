@@ -279,6 +279,11 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         if (useFusedEvolve)
         {
             FE->evolveHessian(Hmunu,gradVectorCalc,anglesV,&derivTangentSpaceEM);
+            vector<realNumType> gradVectorCalc2;
+            FE->evolveDerivative(dest,gradVectorCalc2,anglesV);
+            logger().log("sqrt1.1",std::sqrt(gradVectorCalc.dot(gradVectorCalc)));
+            logger().log("sqrt1.2",std::sqrt(gradVectorCalc.dot(gradVectorCalc2)));
+            logger().log("sqrt2.2",std::sqrt(gradVectorCalc2.dot(gradVectorCalc2)));
         }
         else
         {

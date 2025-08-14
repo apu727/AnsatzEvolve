@@ -132,30 +132,45 @@ public:
         bool commutes(const exc& other)
         {
             bool allNonEqual = true;
-            if (third == -1 && fourth == -1 && other.third == -1 && other.fourth == -1)
+            uint32_t first = 0;
+            uint32_t second = 0;
+            for (int8_t i = 0; i < 4; i++)
+            {
+                if ((*this)[i] != -1)
+                    first = first | 1<<(*this)[i];
+                if (other[i] != -1)
+                    second = second | 1<<other[i];
+            }
+            allNonEqual = !(first & second);
+            return allNonEqual;
+        }
+        bool hasDiagonal()
+        {
+            bool hasDiagonal = false;
+            if (third == -1 && fourth == -1)
             {
 
-                for (int8_t i = 0; i < 2 && allNonEqual; i++)
+                for (int8_t i = 0; i < 2 && !hasDiagonal; i++)
                 {
-                    for (int8_t j = 0; j < 2 && allNonEqual; j++)
+                    for (int8_t j = i+1; j < 2 && !hasDiagonal; j++)
                     {
-                        if ((*this)[i] == other[j])
-                            allNonEqual = false;
+                        if ((*this)[i] == (*this)[j])
+                            hasDiagonal = true;
                     }
                 }
             }
             else
             {
-                for (int8_t i = 0; i < 2 && allNonEqual; i++)
+                for (int8_t i = 0; i < 4 && !hasDiagonal; i++)
                 {
-                    for (int8_t j = 0; j < 2 && allNonEqual; j++)
+                    for (int8_t j = i+1; j < 4 && !hasDiagonal; j++)
                     {
-                        if ((*this)[i] == other[j])
-                            allNonEqual = false;
+                        if ((*this)[i] == (*this)[j])
+                            hasDiagonal = true;
                     }
                 }
             }
-            return allNonEqual;
+            return hasDiagonal;
         }
     }; // 0 indexed
 private:

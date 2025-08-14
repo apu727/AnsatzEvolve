@@ -187,8 +187,6 @@ void fillCurrentMap(indexType activeRotsIdx, indexType numberToFuse,
             assert(effect.first != currentMap[idx]);
             assert(effect.first == currentMap[idx + strideSize]);
             currentSigns[numberOfRotationsAddedOnThisLayer++ + (localVectorSize/2)*numberOfActiveRotationsSoFar] = effect.second;
-            if (!effect.second)
-                logger().log("Negative sign");
         }
         //Note idx = startIdx + strideSize -> startIdx + 2*strideSize are skipped. Hence the notation on currentSigns
     }
@@ -493,8 +491,6 @@ inline void storeTangents(realNumType* scratchSpace, const uint32_t*  const curr
 
             for (indexType startIdx = 0; startIdx < pseudoVectorSize-stride; startIdx += 2*stride)
             {
-#pragma GCC unroll 8
-#pragma GCC ivdep
                 for (indexType idx = startIdx; idx < startIdx + stride; idx++)
                 {
                     const bool sign = signs[numberOfRotationsPerformed++ + (pseudoVectorSize/2)*rotIdx + signsStride*i];
@@ -1575,7 +1571,7 @@ void FusedEvolve::regenCache()
             {
                 for (size_t k = startCommute; k < endCommute; k++)
                 {
-                    if (!m_excs[m_excPerm[k]].commutes(m_excs[m_excPerm[endCommute]]))
+                    if (!(m_excs[m_excPerm[k]].commutes(m_excs[m_excPerm[endCommute]]) && !m_excs[m_excPerm[k]].hasDiagonal()))
                     {
                         commuteWithAll = false;
                         break;
@@ -1591,7 +1587,7 @@ void FusedEvolve::regenCache()
                 bool commuteWithAll = true;
                 for (size_t k = startCommute; k < trial; k++)
                 {
-                    if (!m_excs[m_excPerm[k]].commutes(m_excs[m_excPerm[trial]]))
+                    if (!(m_excs[m_excPerm[k]].commutes(m_excs[m_excPerm[trial]]) && !m_excs[m_excPerm[k]].hasDiagonal()))
                     {
                         commuteWithAll = false;
                         break;
@@ -1623,7 +1619,7 @@ void FusedEvolve::regenCache()
     {
         for (size_t j = m_commuteBoundaries.back(); j < (size_t)i; j++ )
         {
-            if (!m_excs[m_excPerm[i]].commutes(m_excs[m_excPerm[j]]))
+            if (!(m_excs[m_excPerm[i]].commutes(m_excs[m_excPerm[j]]) && !m_excs[m_excPerm[i]].hasDiagonal()))
             {
                 m_commuteBoundaries.push_back(i);
                 break;
