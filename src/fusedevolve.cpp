@@ -2075,7 +2075,7 @@ RunFuseN<dataType,num,true,false>(FA->data(),&Ts.at(angleIdx,0),permAngles.data(
 break;\
 }
 
-void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& deriv,const std::vector<realNumType> &angles)
+void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& deriv,const std::vector<realNumType> &angles, Eigen::Matrix<numType,-1,-1>* TsCopy)
 {
     if (!m_excsCached)
         regenCache();
@@ -2195,6 +2195,8 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
     // compute HTs
     {
         Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> TMap(&Ts.at(0,0),Ts.m_iSize,Ts.m_jSize);
+        if (TsCopy)
+            *TsCopy = TMap.transpose();
         // Eigen::Map<Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> HTMap(&HTs.at(0,0),HTs.m_iSize,HTs.m_jSize);
         //For speed need to convert the ordering
         Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> TMapC = TMap;

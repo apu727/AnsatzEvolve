@@ -234,7 +234,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
          */
 
         // derivTangentSpaceEM_{ai} = \frac{d}{d\theta_i}\ket{\psi}
-        Matrix<numType>::EigenMatrix derivTangentSpaceEM = useFusedEvolve? Matrix<numType>::EigenMatrix() : convert(derivTangentSpace).transpose();
+
         vector<numType>::EigenVector destEM = dest;
         //Debugging if it is a phase away from the real eigenvector
         // vector<realNumType>::EigenVector destArg(destEM.rows());
@@ -254,10 +254,10 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         */
 
         //derivTangentSpaceEMCondensed_{a\mu} = compressMatrix_{\mu,i} derivTangentSpaceEM_{a,i}
-        Matrix<numType>::EigenMatrix derivTangentSpaceEMCondensed =  useFusedEvolve ? Matrix<numType>::EigenMatrix() : derivTangentSpaceEM * m_compressMatrix.transpose();
+
 
         //g_{\mu\nu} = derivTangentSpaceEMCondensed_{a\mu} derivTangentSpaceEMCondensed_{a\nu}
-        Matrix<numType>::EigenMatrix metricTensor = useFusedEvolve ? Matrix<numType>::EigenMatrix() : (derivTangentSpaceEMCondensed.adjoint() * derivTangentSpaceEMCondensed).real();
+
 
         //gradVector_{\mu} = 2 * \braket{\psi | H | \frac{d}{d\theta_\mu}\psi}
         vector<realNumType> gradVectorCalc;
@@ -275,16 +275,24 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         //Hessian_{ij}
 
         Matrix<realNumType>::EigenMatrix Hmunu(m_numberOfUniqueParameters,m_numberOfUniqueParameters); //uninitialized by default
-        // Matrix<realNumType>::EigenMatrix Hij; //uninitialized by default
+        Matrix<numType>::EigenMatrix derivTangentSpaceEM;
         if (useFusedEvolve)
         {
-            FE->evolveHessian(Hmunu,gradVectorCalc,anglesV);
+            FE->evolveHessian(Hmunu,gradVectorCalc,anglesV,&derivTangentSpaceEM);
         }
         else
         {
             vector<realNumType> temp;
             myAnsatz->getHessianAndDerivative(&m_Ham,Hmunu,gradVectorCalc,&m_compressMatrix);
         }
+
+        if (!useFusedEvolve)
+        {
+            derivTangentSpaceEM = convert(derivTangentSpace).transpose();
+        }
+        Matrix<numType>::EigenMatrix derivTangentSpaceEMCondensed =  derivTangentSpaceEM * m_compressMatrix.transpose();
+        Matrix<numType>::EigenMatrix metricTensor = (derivTangentSpaceEMCondensed.adjoint() * derivTangentSpaceEMCondensed).real();
+
         vector<realNumType>::EigenVector gradVector = m_compressMatrix * (vector<realNumType>::EigenVector)gradVectorCalc;
 
 
@@ -295,8 +303,13 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> esH(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
         vector<std::complex<realNumType>>::EigenVector hessianEigVal = esH.eigenvalues();
         auto hessianEigVec = esH.eigenvectors();
-
         vector<std::complex<realNumType>>::EigenVector hessianDiagVals = Hmunu.diagonal();
+
+        Eigen::SelfAdjointEigenSolver<Matrix<numType>::EigenMatrix> esM(metricTensor,Eigen::DecompositionOptions::ComputeEigenvectors);
+        vector<std::complex<realNumType>>::EigenVector metricEigVal = esM.eigenvalues();
+
+        auto metricEigenVectors = esM.eigenvectors();
+        vector<std::complex<realNumType>>::EigenVector metricDiagVals = metricTensor.diagonal();
 
 
         std::vector<vector<std::complex<realNumType>>::EigenVector> metricZeroEigenVectors;
@@ -354,39 +367,34 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
             if (std::fabs(he.imag()) > zeroThreshold)
                 fprintf(stderr,"Problem with Imag HDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n",he.real(),he.imag());
         }
-        if (!useFusedEvolve)
+
+
+
+        for (long int i =0; i < metricEigVal.rows();i++)
         {
-            Eigen::SelfAdjointEigenSolver<Matrix<numType>::EigenMatrix> esM(metricTensor,Eigen::DecompositionOptions::ComputeEigenvectors);
-            vector<std::complex<realNumType>>::EigenVector metricEigVal = esM.eigenvalues();
-
-            auto metricEigenVectors = esM.eigenvectors();
-            vector<std::complex<realNumType>>::EigenVector metricDiagVals = metricTensor.diagonal();
-
-            for (long int i =0; i < metricEigVal.rows();i++)
+            auto me = metricEigVal[i];
+            realNumType e = me.real();
+            if (e > zeroThreshold)
+                NumberOfPositiveMetricEValues[rpIndex]++;
+            else if (e >= -zeroThreshold && e <= zeroThreshold)
             {
-                auto me = metricEigVal[i];
-                realNumType e = me.real();
-                if (e > zeroThreshold)
-                    NumberOfPositiveMetricEValues[rpIndex]++;
-                else if (e >= -zeroThreshold && e <= zeroThreshold)
-                {
-                    NumberOfZeroMetricEValues[rpIndex]++;
-                    metricZeroEigenVectors.push_back(metricEigenVectors.col(i));
-                }
-                else
-                    fprintf(stderr,"Problem with MEigenvalue: " realNumTypeCode "\n",e);
-                if (std::fabs(me.imag()) > zeroThreshold)
-                    fprintf(stderr,"Problem with Imag MEigenvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
+                NumberOfZeroMetricEValues[rpIndex]++;
+                metricZeroEigenVectors.push_back(metricEigenVectors.col(i));
             }
-            for (auto me : metricDiagVals)
-            {
-                realNumType e = me.real();
-                if (e >= -zeroThreshold && e <= zeroThreshold)
-                    NumberOfZeroMetricDiagonalValues[rpIndex]++;
-                if (std::fabs(me.imag()) > zeroThreshold)
-                    fprintf(stderr,"Problem with Imag MDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
-            }
+            else
+                fprintf(stderr,"Problem with MEigenvalue: " realNumTypeCode "\n",e);
+            if (std::fabs(me.imag()) > zeroThreshold)
+                fprintf(stderr,"Problem with Imag MEigenvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
         }
+        for (auto me : metricDiagVals)
+        {
+            realNumType e = me.real();
+            if (e >= -zeroThreshold && e <= zeroThreshold)
+                NumberOfZeroMetricDiagonalValues[rpIndex]++;
+            if (std::fabs(me.imag()) > zeroThreshold)
+                fprintf(stderr,"Problem with Imag MDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
+        }
+
         NormOfGradVector[rpIndex] = gradVector.norm();
         realNumType Mag = dest.dot(dest);
         if (std::fabs(Mag-1.) > 1e-5)
@@ -410,12 +418,11 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     printOutputLine(NumberOfNegativeHessianDiagValues,"NumberOfNegativeHessianDiagValues");
     printOutputLine(NumberOfNearZeroHessianDiagValues,"NumberOfNearZeroHessianDiagValues");
     printOutputLine(NumberOfPositiveHessianDiagValues,"NumberOfPositiveHessianDiagValues");
-    if (!useFusedEvolve)
-    {
-        printOutputLine(NumberOfPositiveMetricEValues,"NumberOfPositiveMetricEValues");
-        printOutputLine(NumberOfZeroMetricEValues,"NumberOfZeroMetricEValues");
-        printOutputLine(NumberOfZeroMetricDiagonalValues,"NumberOfZeroMetricDiagonalValues");
-    }
+
+    printOutputLine(NumberOfPositiveMetricEValues,"NumberOfPositiveMetricEValues");
+    printOutputLine(NumberOfZeroMetricEValues,"NumberOfZeroMetricEValues");
+    printOutputLine(NumberOfZeroMetricDiagonalValues,"NumberOfZeroMetricDiagonalValues");
+
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
     if (m_HamEm.rows() < 1500)
