@@ -614,6 +614,29 @@ template<typename indexType, indexType numberToFuse, bool BraketWithTangentOfRes
          typename localVector = std::vector<uint32_t>,
          typename fusedDiagonalAnsatz = std::array<localVector,numberOfPairsOfRotations>>
 
+#define RunFuseNKernel(indexInUnroll)\
+scratchSpace[2*indexInUnroll + 0] = startVec[currLocalVector[indexInUnroll + doneCount]];\
+scratchSpace[2*indexInUnroll + 1] = startVec[currLocalVector[indexInUnroll + doneCount]+1];\
+startVec[currLocalVector[indexInUnroll + doneCount]] = -S*(scratchSpace[2*indexInUnroll + 1]) + C*scratchSpace[2*indexInUnroll + 0];\
+startVec[currLocalVector[indexInUnroll + doneCount]+1] = S*(scratchSpace[2*indexInUnroll + 0]) + C*scratchSpace[2*indexInUnroll + 1];\
+if constexpr(BraketWithTangentOfResult)\
+{\
+    scratchSpacehPsi[2*indexInUnroll + 0] = hPsi[currLocalVector[indexInUnroll + doneCount]];\
+    scratchSpacehPsi[2*indexInUnroll + 1] = hPsi[currLocalVector[indexInUnroll + doneCount]+1];\
+    hPsi[currLocalVector[indexInUnroll + doneCount]] = -S*(scratchSpacehPsi[2*indexInUnroll + 1]) + C*scratchSpacehPsi[2*indexInUnroll + 0];\
+    hPsi[currLocalVector[indexInUnroll + doneCount]+1] = S*(scratchSpacehPsi[2*indexInUnroll + 0]) + C*scratchSpacehPsi[2*indexInUnroll + 1];\
+    accumulatedDot -= scratchSpacehPsi[2*indexInUnroll + 0] * scratchSpace[2*indexInUnroll + 1];\
+    accumulatedDot += scratchSpacehPsi[2*indexInUnroll + 1] * scratchSpace[2*indexInUnroll + 0];\
+}\
+if constexpr(storeTangent)\
+{\
+    for (uint8_t r = 0; r < numberOfActiveRots; r++)\
+    {\
+        tangentStore[activeRots[r]+i][currLocalVector[indexInUnroll + doneCount]] = -scratchSpace[2*indexInUnroll + 1];\
+        tangentStore[activeRots[r]+i][currLocalVector[indexInUnroll + doneCount]+1] = scratchSpace[2*indexInUnroll + 0];\
+    }\
+}
+
 void RunFuseNDiagonal(fusedDiagonalAnsatz* const myFusedAnsatz, realNumType* startVec, const realNumType* angles, size_t nAngles,
               realNumType* hPsi = nullptr, realNumType** result = nullptr/*result is array of pointers to storage places. The array has length nAngles. IT IS NOT ZEROED BY THIS FUNCTION!*/,
               realNumType** tangentStore = nullptr/* tangents are stored before the evolution of each fused gate in myFusedAnsatz*/)
@@ -648,44 +671,31 @@ void RunFuseNDiagonal(fusedDiagonalAnsatz* const myFusedAnsatz, realNumType* sta
 
             //Manual unroll because im almost certain the compiler wont know that currLocalVector are all different
             constexpr uint8_t unrollCount = 8;
-            realNumType scratchSpace[2];
-            realNumType scratchSpacehPsi[2];
-            realNumType accumulatedDot;
-
-            for (size_t doneCount= 0; doneCount < currLocalVector.size(); doneCount++)
+            realNumType scratchSpace[2*unrollCount];
+            realNumType scratchSpacehPsi[2*unrollCount];
+            realNumType accumulatedDot = 0;
+            size_t doneCount= 0;
+            for (; doneCount + unrollCount < currLocalVector.size(); doneCount+= unrollCount)
             {
-                accumulatedDot = 0;
-                scratchSpace[0] = startVec[currLocalVector[doneCount]];
-                scratchSpace[1] = startVec[currLocalVector[doneCount]+1];
-                startVec[currLocalVector[doneCount]] = -S*(scratchSpace[1]) + C*scratchSpace[0];
-                startVec[currLocalVector[doneCount]+1] = S*(scratchSpace[0]) + C*scratchSpace[1];
-                if constexpr(BraketWithTangentOfResult)
+                RunFuseNKernel(0)
+                RunFuseNKernel(1)
+                RunFuseNKernel(2)
+                RunFuseNKernel(3)
+                RunFuseNKernel(4)
+                RunFuseNKernel(5)
+                RunFuseNKernel(6)
+                RunFuseNKernel(7)
+            }
+            //finish off
+            for (; doneCount < currLocalVector.size(); doneCount++)
+            {
+                RunFuseNKernel(0)
+            }
+            if constexpr(BraketWithTangentOfResult)
+            {
+                for (uint8_t r = 0; r < numberOfActiveRots; r++)
                 {
-                    scratchSpacehPsi[0] = hPsi[currLocalVector[doneCount]];
-                    scratchSpacehPsi[1] = hPsi[currLocalVector[doneCount]+1];
-                    hPsi[currLocalVector[doneCount]] = -S*(scratchSpacehPsi[1]) + C*scratchSpacehPsi[0];
-                    hPsi[currLocalVector[doneCount]+1] = S*(scratchSpacehPsi[0]) + C*scratchSpacehPsi[1];
-                    accumulatedDot -= scratchSpacehPsi[0] * scratchSpace[1];
-                    accumulatedDot += scratchSpacehPsi[1] * scratchSpace[0];
-                    // 0.5*(conj(TBI)*destI*iu -  TBI*conj(destI)*iu)
-                    //0.5*((a-bi)(c+di)i - (a+bi)(c-di)i)
-                    //bc -ad
-                }
-                if constexpr(storeTangent)
-                {
-                    for (uint8_t r = 0; r < numberOfActiveRots; r++)
-                    {
-                        tangentStore[activeRots[r]+i][currLocalVector[doneCount]] = -scratchSpace[1];
-                        tangentStore[activeRots[r]+i][currLocalVector[doneCount]+1] = scratchSpace[0];
-                    }
-                }
-
-                if constexpr(BraketWithTangentOfResult)
-                {
-                    for (uint8_t r = 0; r < numberOfActiveRots; r++)
-                    {
-                        (*result[activeRots[r]+i]) += accumulatedDot;
-                    }
+                    (*result[activeRots[r]+i]) += accumulatedDot;
                 }
             }
         }
@@ -1425,6 +1435,8 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
             // {
 
                 const localVector& currentLocalVectors = myFusedAnsatz[i/numberToFuse][activeRotIdx];
+                if (currentLocalVectors.size() == 0)
+                    continue;
                 std::array<indexType,numberToFuse> activeRots; // array with valid data until numberOfActiveRotations storing the index of the active rotations
                 indexType numberOfActiveRotations = 0;
 
