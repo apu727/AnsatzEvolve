@@ -18,7 +18,7 @@ class FusedEvolve
     std::vector<size_t> m_excInversePerm; // m_excInversePerm[j] = i means that the jth canonical ordered excitation is at position i
     bool m_excsCached;
     void regenCache();
-    static constexpr long maxFuse =
+    static constexpr int8_t maxFuse =
 #ifdef MakeParallelEvolveCode
         4;
 #else
@@ -36,8 +36,15 @@ class FusedEvolve
     template <uint16_t numberToFuse>
     using fusedAnsatzX = std::vector<std::array<localVectorX<numberToFuse>,1<<numberToFuse>> ; //\Sum_{k=1}^{n} n choose k = 2^n for n >=0
 
+
+    using localVectorDiagonal =  std::vector<uint32_t>;
+    template<uint16_t numberToFuse>
+    using fusedDiagonalAnsatzX = std::vector<std::array<localVectorDiagonal,1<<numberToFuse>>;
+
+
+
     std::vector<void*> m_fusedAnsatzes; // void* to avoid all the template horribleness
-    std::vector<uint16_t> m_fusedSizes;
+    std::vector<int8_t> m_fusedSizes;
     void cleanup();
 
     vector<numType> m_start;

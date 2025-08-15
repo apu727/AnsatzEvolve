@@ -502,8 +502,199 @@ inline void storeTangents(realNumType* scratchSpace, const uint32_t*  const curr
     }
 }
 template<typename indexType, indexType numberToFuse>
+auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vector<numType>& startVec)
+{
+    //Diagonal elements always commute. Theyre diagonal...
+    //Further they act as scalars on each given basis state. Therefore trivially they commute. Further the angles can be added
+    static_assert(numberToFuse < sizeof(indexType)*8);
+    constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
+    if (!isComplex)
+        __builtin_trap();//only complex exc can be diagonal and antihermitian
+
+    constexpr indexType numberOfPairsOfRotations = 1<<numberToFuse;
+    typedef std::vector<uint32_t> localVector; //each element represents a 2D subspace and a sign
+    typedef std::vector<std::array<localVector,numberOfPairsOfRotations>> fusedDiagonalAnsatz; //\Sum_{k=1}^{n} n choose k = 2^n for n >=0.
+    //Each element of the array is a specific set of rotations active. Each element of the vector is a repetition
+
+    fusedDiagonalAnsatz myFusedAnsatz;
+    std::vector<uint32_t> activebasisStates;
+    activebasisStates.resize(startVec.size()*(isComplex?2:1));
+
+    std::shared_ptr<compressor> comp;
+    bool isCompressed = startVec.getIsCompressed(comp);
+    if (isCompressed)
+    {
+        for (uint32_t i = 0; i < startVec.size(); i++)
+        {
+
+            if (isComplex)
+            {
+                comp->deCompressIndex(i,activebasisStates[2*i]);
+                activebasisStates[2*i] = activebasisStates[2*i]<<1;
+                activebasisStates[2*i+1] = activebasisStates[2*i] +1;
+            }
+            else
+                comp->deCompressIndex(i,activebasisStates[i]);
+        }
+    }
+    else
+    {
+        std::iota(activebasisStates.begin(),activebasisStates.end(),0);
+    }
+
+    for (size_t i = 0; i < excPath.size(); i+=numberToFuse)
+    {
+        std::array<stateRotate::exc,numberToFuse> rots;
+        for (indexType idx = 0; idx < numberToFuse; idx++)//TODO check that this exists in the path
+        {
+            rots[idx] = excPath[i+idx];
+            assert(rots[idx].isDiagonal());
+        }
+
+        //If rot0 and rot2 are active then the index is 0b101. Note that 0b000 is always empty
+        std::array<localVector,numberOfPairsOfRotations> currentLocalVectors;
+
+        for(uint32_t currentCompIndex = 0; currentCompIndex < activebasisStates.size(); currentCompIndex++)
+        {
+            uint32_t currentBasisState = activebasisStates[currentCompIndex];
+            if (currentBasisState & 1)
+                continue;//These are already the complex element and will lead to a negative phase
+
+            std::array<std::pair<uint32_t,bool>,numberToFuse> initialLinks;
+            indexType activeRotIdx = 0;
+            indexType numberOfActiveRots = 0;
+            uint32_t TheOtherThing = 0;
+            for (uint8_t idx = 0; idx < numberToFuse; idx++)
+            {
+                initialLinks[idx] = applyExcToBasisState_(currentBasisState,rots[idx]);
+                if (initialLinks[idx].first != currentBasisState)
+                {
+                    assert(initialLinks[idx].second);
+                    activeRotIdx |= 1<<idx;
+                    ++numberOfActiveRots;
+                    assert(currentBasisState == (initialLinks[idx].first & -2));
+                }
+            }
+            //All not active
+            if (numberOfActiveRots == 0)
+                continue;
+
+
+            localVector& currentMap = currentLocalVectors[activeRotIdx];
+            currentMap.push_back(currentBasisState);
+
+        }
+        for (indexType activeRotIdx = 0; activeRotIdx <  numberOfPairsOfRotations; activeRotIdx++)
+        {
+            if (currentLocalVectors[activeRotIdx].size() != 0) // for the first iteration
+            {
+                if (isCompressed)
+                {
+                    for (uint32_t idx = 0; idx < currentLocalVectors[activeRotIdx].size(); idx++)
+                    {
+                        bool complexOffset = currentLocalVectors[activeRotIdx][idx] & 1;
+                        assert(complexOffset == false);
+                        comp->compressIndex(currentLocalVectors[activeRotIdx][idx]>>1,currentLocalVectors[activeRotIdx][idx]);
+                        currentLocalVectors[activeRotIdx][idx] = currentLocalVectors[activeRotIdx][idx] << 1;
+                    }
+                }
+            }
+        }
+        myFusedAnsatz.emplace_back(std::move(currentLocalVectors));
+    }
+
+    return myFusedAnsatz;
+}
+
+#define DiagonalEvolve(offset)
+
+template<typename indexType, indexType numberToFuse, bool BraketWithTangentOfResult, bool storeTangent, bool parallelise = false,
+         //Various expressions that are needed to get the types right
+         indexType numberOfPairsOfRotations = 1<<numberToFuse,
+         typename localVector = std::vector<uint32_t>,
+         typename fusedDiagonalAnsatz = std::array<localVector,numberOfPairsOfRotations>>
+
+void RunFuseNDiagonal(fusedDiagonalAnsatz* const myFusedAnsatz, realNumType* startVec, const realNumType* angles, size_t nAngles,
+              realNumType* hPsi = nullptr, realNumType** result = nullptr/*result is array of pointers to storage places. The array has length nAngles. IT IS NOT ZEROED BY THIS FUNCTION!*/,
+              realNumType** tangentStore = nullptr/* tangents are stored before the evolution of each fused gate in myFusedAnsatz*/)
+{
+    for (size_t i = 0; i < nAngles; i+= numberToFuse)
+    {
+        fusedDiagonalAnsatz& currAnsatz = myFusedAnsatz[i/numberToFuse];
+        for (indexType activeRotIdx = 1; activeRotIdx < numberOfPairsOfRotations; activeRotIdx++)
+        {
+            const localVector& currLocalVector = currAnsatz[activeRotIdx];
+            if (currLocalVector.size() == 0)
+                continue;
+            realNumType totalAngle = 0;
+            uint8_t activeRots[numberToFuse];
+            uint8_t numberOfActiveRots = 0;
+            for (indexType rotIdx = 0; rotIdx < numberToFuse; rotIdx++)
+            {
+                if (activeRotIdx & (1<<rotIdx))
+                {
+                    totalAngle += angles[i+rotIdx];
+                    if constexpr(BraketWithTangentOfResult || storeTangent)
+                    {
+                        activeRots[numberOfActiveRots++] = rotIdx;
+                    }
+                }
+            }
+            realNumType S;
+            realNumType C;
+            sincos(totalAngle,&S,&C); // Its unclear whether this is faster or by expanding (cos + sin)(cos + sin). Unlikely to be bottleneck?
+
+
+
+            //Manual unroll because im almost certain the compiler wont know that currLocalVector are all different
+            constexpr uint8_t unrollCount = 8;
+            realNumType scratchSpace[2];
+            realNumType scratchSpacehPsi[2];
+            realNumType accumulatedDot;
+
+            for (size_t doneCount= 0; doneCount < currLocalVector.size(); doneCount++)
+            {
+                accumulatedDot = 0;
+                scratchSpace[0] = startVec[currLocalVector[doneCount]];
+                scratchSpace[1] = startVec[currLocalVector[doneCount]+1];
+                startVec[currLocalVector[doneCount]] = -S*(scratchSpace[1]) + C*scratchSpace[0];
+                startVec[currLocalVector[doneCount]+1] = S*(scratchSpace[0]) + C*scratchSpace[1];
+                if constexpr(BraketWithTangentOfResult)
+                {
+                    scratchSpacehPsi[0] = hPsi[currLocalVector[doneCount]];
+                    scratchSpacehPsi[1] = hPsi[currLocalVector[doneCount]+1];
+                    hPsi[currLocalVector[doneCount]] = -S*(scratchSpacehPsi[1]) + C*scratchSpacehPsi[0];
+                    hPsi[currLocalVector[doneCount]+1] = S*(scratchSpacehPsi[0]) + C*scratchSpacehPsi[1];
+                    accumulatedDot -= scratchSpacehPsi[0] * scratchSpace[1];
+                    accumulatedDot += scratchSpacehPsi[1] * scratchSpace[0];
+                    // 0.5*(conj(TBI)*destI*iu -  TBI*conj(destI)*iu)
+                    //0.5*((a-bi)(c+di)i - (a+bi)(c-di)i)
+                    //bc -ad
+                }
+                if constexpr(storeTangent)
+                {
+                    for (uint8_t r = 0; r < numberOfActiveRots; r++)
+                    {
+                        tangentStore[activeRots[r]+i][currLocalVector[doneCount]] = -scratchSpace[1];
+                        tangentStore[activeRots[r]+i][currLocalVector[doneCount]+1] = scratchSpace[0];
+                    }
+                }
+
+                if constexpr(BraketWithTangentOfResult)
+                {
+                    for (uint8_t r = 0; r < numberOfActiveRots; r++)
+                    {
+                        (*result[activeRots[r]+i]) += accumulatedDot;
+                    }
+                }
+            }
+        }
+    }
+}
+template<typename indexType, indexType numberToFuse>
 auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numType>& startVec)
 {//Note it is assumed that all Excs commute in ExcPath
+    static_assert(numberToFuse < sizeof(indexType)*8);
     constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
     constexpr indexType localVectorSize = 1<<numberToFuse;
     typedef std::array<bool,(localVectorSize/2)*numberToFuse> signMap; //true means +ve
@@ -646,6 +837,9 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             // for (indexType t = 0; t < (1<<numberOfActiveRots); t++)
             //     if (*(currentMap.begin() + currentMapFilledSize + t) == (uint32_t)-1)
             //         __builtin_trap();
+            for (size_t l = 0; l < 1<<numberOfActiveRots; l++)
+                for (size_t m = l+1; m < 1<<numberOfActiveRots; m++)
+                    assert(currentMap[currentMapFilledSize + l] != currentMap[currentMapFilledSize + m]);
             currentMapFilledSize += 1<<numberOfActiveRots;
         }
         for (indexType idx = 0; idx <  localVectorSize; idx++)
@@ -1544,6 +1738,27 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
         // delete toBraKet;
     }
 }
+
+#define SetupFuseN(N,dataType)\
+case N:\
+{\
+    constexpr int8_t num = N;\
+    void* FAVoid = new fusedAnsatzX<num>(setupFuseN<dataType,num>(v,m_start));\
+    m_fusedAnsatzes.push_back(FAVoid);\
+    m_fusedSizes.push_back(num);\
+    break;\
+}
+
+#define SetupFuseNDiagonalMacro(N,dataType)\
+case -N:\
+{\
+    constexpr int8_t num = N;\
+    void* FAVoid = new fusedDiagonalAnsatzX<num>(setupFuseNDiagonal<dataType,num>(v,m_start));\
+    m_fusedAnsatzes.push_back(FAVoid);\
+    m_fusedSizes.push_back(-num);\
+    break;\
+}
+
 //The class
 void FusedEvolve::regenCache()
 {
@@ -1554,6 +1769,7 @@ void FusedEvolve::regenCache()
     for (auto& e : m_excs)
     {
         fprintf(stderr,"%3.1hhd, %3.1hhd, %3.1hhd, %3.1hhd\n",e[0],e[1],e[2],e[3]);
+        assert(e.isDiagonal() == e.hasDiagonal());//Somethign like a^\dagger_1 a^\dagger_2 a_2 a_3 is unhandled
     }
 
 
@@ -1571,7 +1787,9 @@ void FusedEvolve::regenCache()
             {
                 for (size_t k = startCommute; k < endCommute; k++)
                 {
-                    if (!(m_excs[m_excPerm[k]].commutes(m_excs[m_excPerm[endCommute]]) && !m_excs[m_excPerm[k]].hasDiagonal()))
+                    bool canBeGrouped = m_excs[m_excPerm[k]].commutes(m_excs[m_excPerm[endCommute]]);
+                    canBeGrouped = canBeGrouped && (m_excs[m_excPerm[k]].isDiagonal() == m_excs[m_excPerm[endCommute]].isDiagonal());//diagonals commute but can only be grouped together.
+                    if (!canBeGrouped)
                     {
                         commuteWithAll = false;
                         break;
@@ -1581,13 +1799,22 @@ void FusedEvolve::regenCache()
                     endCommute++;
             }
 
-            //see if we can move any forwards. This requires it to commute with the box and with all subsequent elements
+            //see if we can move any forwards. This requires it to commute with the box or be diagonal if the box is diagonal, And commute with all subsequent elements
+            //E.g. the rearrangement 1234,11,5678->1234,5678,11 is allowed
+            //As also                11,22,5678,33-> 11,22,33,5678
+            //This is allowed but pointless 11,22,5678,34,->11,22,34,5678
+
             for (size_t trial = endCommute; trial < m_excPerm.size(); trial++)
             {
                 bool commuteWithAll = true;
                 for (size_t k = startCommute; k < trial; k++)
                 {
-                    if (!(m_excs[m_excPerm[k]].commutes(m_excs[m_excPerm[trial]]) && !m_excs[m_excPerm[k]].hasDiagonal()))
+                    if (m_excs[m_excPerm[startCommute]].isDiagonal() != m_excs[m_excPerm[trial]].isDiagonal())
+                    {//only allow diagonals to match diagonals. 1234 commutes with 55 but we cannot group
+                        commuteWithAll = false;
+                        break;
+                    }
+                    if (!(m_excs[m_excPerm[k]].commutes(m_excs[m_excPerm[trial]])))
                     {
                         commuteWithAll = false;
                         break;
@@ -1619,7 +1846,10 @@ void FusedEvolve::regenCache()
     {
         for (size_t j = m_commuteBoundaries.back(); j < (size_t)i; j++ )
         {
-            if (!(m_excs[m_excPerm[i]].commutes(m_excs[m_excPerm[j]]) && !m_excs[m_excPerm[i]].hasDiagonal()))
+            bool canExtend = m_excs[m_excPerm[i]].commutes(m_excs[m_excPerm[j]]);
+            canExtend = canExtend && (m_excs[m_excPerm[i]].isDiagonal() == m_excs[m_excPerm[j]].isDiagonal()); //diagonals commute but can only be grouped together
+
+            if (!canExtend)
             {
                 m_commuteBoundaries.push_back(i);
                 break;
@@ -1645,11 +1875,13 @@ void FusedEvolve::regenCache()
     for (long i = 0; i < (long)m_commuteBoundaries.size()-1;i++)
     {
         size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
+
+
         std::vector<stateRotate::exc> v(excs.begin() + m_commuteBoundaries[i],excs.begin()+m_commuteBoundaries[i+1]);
-        uint16_t fuseSize = diff;
+        int8_t fuseSize = diff;
         if (diff > maxFuse)
         {
-            for (uint16_t i = maxFuse;i > 0; i--)
+            for (int8_t i = maxFuse;i > 0; i--)
             {
                 if (diff % i == 0)
                 {
@@ -1658,121 +1890,40 @@ void FusedEvolve::regenCache()
                 }
             }
         }
+        if (m_excs[m_excPerm[m_commuteBoundaries[i]]].isDiagonal())
+            fuseSize *= -1;
         logger().log("Fused",fuseSize);
         switch (fuseSize)
         {
+            //Negative means diagonal
+            SetupFuseNDiagonalMacro(1,uint8_t);
+            SetupFuseNDiagonalMacro(2,uint8_t);
+            SetupFuseNDiagonalMacro(3,uint8_t);
+            SetupFuseNDiagonalMacro(4,uint8_t);
+            SetupFuseNDiagonalMacro(5,uint8_t);
+            SetupFuseNDiagonalMacro(6,uint8_t);
+            SetupFuseNDiagonalMacro(7,uint8_t);
+            SetupFuseNDiagonalMacro(8,uint16_t);
+            SetupFuseNDiagonalMacro(9,uint16_t);
+            SetupFuseNDiagonalMacro(10,uint16_t);
+            SetupFuseNDiagonalMacro(11,uint16_t);
+            SetupFuseNDiagonalMacro(12,uint16_t);
         case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
             break;
-        case 1:
-        {
-            constexpr uint8_t num = 1;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint8_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 2:
-        {
-            constexpr uint8_t num = 2;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint8_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 3:
-        {
-            constexpr uint8_t num = 3;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint8_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 4:
-        {
-            constexpr uint8_t num = 4;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint8_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 5:
-        {
-            constexpr uint8_t num = 5;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint8_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 6:
-        {
-            constexpr uint8_t num = 6;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint8_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 7:
-        {
-            constexpr uint8_t num = 7;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint8_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 8:
-        {
-            constexpr uint8_t num = 8;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint16_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 9:
-        {
-            constexpr uint8_t num = 9;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint16_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 10:
-        {
-            constexpr uint8_t num = 10;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint16_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 11:
-        {
-            constexpr uint8_t num = 11;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint16_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
-        case 12:
-        {
-            constexpr uint8_t num = 12;
-            void* FAVoid = new fusedAnsatzX<num>(setupFuseN<uint16_t,num>(v,m_start));
-            // logger().log("Alloc",(size_t)FAVoid);
-            m_fusedAnsatzes.push_back(FAVoid);
-            m_fusedSizes.push_back(num);
-            break;
-        }
+            SetupFuseN(1,uint8_t);
+            SetupFuseN(2,uint8_t);
+            SetupFuseN(3,uint8_t);
+            SetupFuseN(4,uint8_t);
+            SetupFuseN(5,uint8_t);
+            SetupFuseN(6,uint8_t);
+            SetupFuseN(7,uint8_t);
+            SetupFuseN(8,uint16_t);
+            SetupFuseN(9,uint16_t);
+            SetupFuseN(10,uint16_t);
+            SetupFuseN(11,uint16_t);
+            SetupFuseN(12,uint16_t);
         default:
             __builtin_trap();
             static_assert(maxFuse <=12);
@@ -1788,57 +1939,81 @@ void FusedEvolve::cleanup()
     {
         switch (m_fusedSizes[i])
         {
+        case -1:
+            delete static_cast<fusedDiagonalAnsatzX<1>*>(m_fusedAnsatzes[i]);
+            break;
+        case -2:
+            delete static_cast<fusedDiagonalAnsatzX<2>*>(m_fusedAnsatzes[i]);
+            break;
+        case -3:
+            delete static_cast<fusedDiagonalAnsatzX<3>*>(m_fusedAnsatzes[i]);
+            break;
+        case -4:
+            delete static_cast<fusedDiagonalAnsatzX<4>*>(m_fusedAnsatzes[i]);
+            break;
+        case -5:
+            delete static_cast<fusedDiagonalAnsatzX<5>*>(m_fusedAnsatzes[i]);
+            break;
+        case -6:
+            delete static_cast<fusedDiagonalAnsatzX<6>*>(m_fusedAnsatzes[i]);
+            break;
+        case -7:
+            delete static_cast<fusedDiagonalAnsatzX<7>*>(m_fusedAnsatzes[i]);
+            break;
+        case -8:
+            delete static_cast<fusedDiagonalAnsatzX<8>*>(m_fusedAnsatzes[i]);
+            break;
+        case -9:
+            delete static_cast<fusedDiagonalAnsatzX<9>*>(m_fusedAnsatzes[i]);
+            break;
+        case -10:
+            delete static_cast<fusedDiagonalAnsatzX<10>*>(m_fusedAnsatzes[i]);
+            break;
+        case -11:
+            delete static_cast<fusedDiagonalAnsatzX<11>*>(m_fusedAnsatzes[i]);
+            break;
+        case -12:
+            delete static_cast<fusedDiagonalAnsatzX<12>*>(m_fusedAnsatzes[i]);
+            break;
         case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
             break;
         case 1:
             delete static_cast<fusedAnsatzX<1>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 2:
             delete static_cast<fusedAnsatzX<2>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 3:
             delete static_cast<fusedAnsatzX<3>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 4:
             delete static_cast<fusedAnsatzX<4>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 5:
             delete static_cast<fusedAnsatzX<5>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 6:
             delete static_cast<fusedAnsatzX<6>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 7:
             delete static_cast<fusedAnsatzX<7>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 8:
             delete static_cast<fusedAnsatzX<8>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 9:
             delete static_cast<fusedAnsatzX<9>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 10:
             delete static_cast<fusedAnsatzX<10>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 11:
             delete static_cast<fusedAnsatzX<11>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         case 12:
             delete static_cast<fusedAnsatzX<12>*>(m_fusedAnsatzes[i]);
-            // logger().log("Deleting",(size_t)m_fusedAnsatzes[i]);
             break;
         default:
             __builtin_trap();
@@ -1882,6 +2057,15 @@ case N:\
     break;\
 }
 
+#define EvolveDiagonal(N,dataType)\
+case -N:\
+{\
+        constexpr uint8_t num = N;\
+        fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);\
+        RunFuseNDiagonal<dataType,num,false,false,true>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i],diff);\
+        break;\
+}
+
 void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& angles, vector<numType>* specifiedStart)
 {
     if (!m_excsCached)
@@ -1900,6 +2084,18 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
         size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
         switch (m_fusedSizes[i])
         {
+        EvolveDiagonal(1,uint8_t)
+        EvolveDiagonal(2,uint8_t)
+        EvolveDiagonal(3,uint8_t)
+        EvolveDiagonal(4,uint8_t)
+        EvolveDiagonal(5,uint8_t)
+        EvolveDiagonal(6,uint8_t)
+        EvolveDiagonal(7,uint8_t)
+        EvolveDiagonal(8,uint16_t)
+        EvolveDiagonal(9,uint16_t)
+        EvolveDiagonal(10,uint16_t)
+        EvolveDiagonal(11,uint16_t)
+        EvolveDiagonal(12,uint16_t)
         case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
@@ -1925,7 +2121,23 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("FusedEvolve Time taken:",duration);
 }
+#define EvolveDer(N,dataType)\
+case N:\
+{\
+    constexpr uint8_t num = N;\
+    fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
+    RunFuseN<dataType,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+    break;\
+}
 
+#define EvolveDerDiag(N,dataType)\
+case -N:\
+{\
+        constexpr uint8_t num = N;\
+        fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
+        RunFuseNDiagonal<dataType,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+        break;\
+}
 void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<realNumType>& deriv, const std::vector<realNumType> &angles)
 {
     static_assert(std::is_same_v<realNumType,numType> || std::is_same_v<std::complex<realNumType>,numType>);//we do magic bithacking so need to assure this
@@ -1964,102 +2176,42 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
         size_t diff = m_commuteBoundaries[i] -m_commuteBoundaries[i-1];
         switch (m_fusedSizes[i-1])
         {
+            EvolveDerDiag(1,uint8_t);
+            EvolveDerDiag(2,uint8_t);
+            EvolveDerDiag(3,uint8_t);
+            EvolveDerDiag(4,uint8_t);
+            EvolveDerDiag(5,uint8_t);
+            EvolveDerDiag(6,uint8_t);
+            EvolveDerDiag(7,uint8_t);
+            EvolveDerDiag(8,uint16_t);
+            EvolveDerDiag(9,uint16_t);
+            EvolveDerDiag(10,uint16_t);
+            EvolveDerDiag(11,uint16_t);
+            EvolveDerDiag(12,uint16_t);
         case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
             break;
-        case 1:
-        {
-            constexpr uint8_t num = 1;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint8_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 2:
-        {
-            constexpr uint8_t num = 2;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint8_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 3:
-        {
-            constexpr uint8_t num = 3;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint8_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 4:
-        {
-            constexpr uint8_t num = 4;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint8_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 5:
-        {
-            constexpr uint8_t num = 5;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint8_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 6:
-        {
-            constexpr uint8_t num = 6;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint8_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 7:
-        {
-            constexpr uint8_t num = 7;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint8_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 8:
-        {
-            constexpr uint8_t num = 8;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint16_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 9:
-        {
-            constexpr uint8_t num = 9;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint16_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 10:
-        {
-            constexpr uint8_t num = 10;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint16_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 11:
-        {
-            constexpr uint8_t num = 11;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint16_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-        case 12:
-        {
-            constexpr uint8_t num = 12;
-            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);
-            RunFuseN<uint16_t,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);
-            break;
-        }
-
+            EvolveDer(1,uint8_t);
+            EvolveDer(2,uint8_t);
+            EvolveDer(3,uint8_t);
+            EvolveDer(4,uint8_t);
+            EvolveDer(5,uint8_t);
+            EvolveDer(6,uint8_t);
+            EvolveDer(7,uint8_t);
+            EvolveDer(8,uint16_t);
+            EvolveDer(9,uint16_t);
+            EvolveDer(10,uint16_t);
+            EvolveDer(11,uint16_t);
+            EvolveDer(12,uint16_t);
         default:
             __builtin_trap();
         }
     }
     deriv*=2;
 
-    // logger().log("dest.dot start deriv", dest.dot(m_start)); // this should be 1
+    logger().log("dest.dot start deriv", dest.dot(m_start)); // this should be 1
+    logger().log("hpsi.dot start deriv", hPsi.dot(m_start)); // this should be E
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     // logger().log("DerivTimeTaken (ms)", duration);
@@ -2072,6 +2224,15 @@ case N:\
     fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i]);\
     RunFuseN<dataType,num,false,true>(FA->data(),(realNumType*)&psi[0],permAngles.data() + m_commuteBoundaries[i],diff,nullptr,nullptr,(realNumType**)(TPtrs.data() + m_commuteBoundaries[i]));\
 break;\
+}
+
+#define GenerateTangentsDiag(N, dataType)\
+case -N:\
+{\
+        constexpr uint8_t num = N;\
+        fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);\
+        RunFuseNDiagonal<dataType,num,false,true>(FA->data(),(realNumType*)&psi[0],permAngles.data() + m_commuteBoundaries[i],diff,nullptr,nullptr,(realNumType**)(TPtrs.data() + m_commuteBoundaries[i]));\
+        break;\
 }
 
 #define EvolveTangents(N,dataType)\
@@ -2101,6 +2262,33 @@ case N:\
     break;\
 }
 
+#define EvolveTangentsDiag(N,dataType)\
+case -N:\
+{\
+        constexpr uint8_t num = N;\
+        fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);\
+        if (ang < m_commuteBoundaries[i])\
+    {\
+            RunFuseNDiagonal<dataType,num,false,false>(FA->data(),(realNumType*)TPtrs[ang],permAngles.data() + m_commuteBoundaries[i],diff);\
+    }\
+        else\
+    {\
+            for (size_t currDiff = 0; currDiff < diff; currDiff += num)\
+        {\
+                numType** startTPtr = TPtrs.data() + m_commuteBoundaries[i] + currDiff;\
+                for (numType** TPtr = startTPtr; TPtr < startTPtr + num; TPtr++)\
+            {\
+                    if (*TPtr == TPtrs[ang])\
+                {\
+                        RunFuseNDiagonal<dataType,num,false,false>(FA->data() + currDiff/num,(realNumType*)*TPtr,permAngles.data() + m_commuteBoundaries[i] + currDiff,diff-currDiff);\
+                        break;\
+                }\
+            }\
+        }\
+    }\
+        break;\
+}
+
 #define GenerateHPsiT(N,dataType)\
 case N:\
 {\
@@ -2108,6 +2296,15 @@ constexpr uint8_t num = N;\
 fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
 RunFuseN<dataType,num,true,false>(FA->data(),(realNumType*)&Ts.at(angleIdx,0),permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&localHpsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
 break;\
+}
+
+#define GenerateHPsiTDiagonal(N,dataType)\
+case -N:\
+{\
+        constexpr uint8_t num = N;\
+        fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
+        RunFuseNDiagonal<dataType,num,true,false>(FA->data(),(realNumType*)&Ts.at(angleIdx,0),permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&localHpsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+        break;\
 }
 
 void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& deriv,const std::vector<realNumType> &angles, Eigen::Matrix<numType,-1,-1>* TsCopy)
@@ -2155,6 +2352,18 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
         size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
         switch (m_fusedSizes[i])
         {
+        GenerateTangentsDiag(1,uint8_t)
+        GenerateTangentsDiag(2,uint8_t)
+        GenerateTangentsDiag(3,uint8_t)
+        GenerateTangentsDiag(4,uint8_t)
+        GenerateTangentsDiag(5,uint8_t)
+        GenerateTangentsDiag(6,uint8_t)
+        GenerateTangentsDiag(7,uint8_t)
+        GenerateTangentsDiag(8,uint16_t)
+        GenerateTangentsDiag(9,uint16_t)
+        GenerateTangentsDiag(10,uint16_t)
+        GenerateTangentsDiag(11,uint16_t)
+        GenerateTangentsDiag(12,uint16_t)
         case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
@@ -2186,10 +2395,47 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
               for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
               {
                   size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
-                  if (ang > m_commuteBoundaries[i+1])
+                  if (ang >= m_commuteBoundaries[i+1])
                       continue;
                   switch (m_fusedSizes[i])
                   {
+                  // EvolveTangentsDiag(1,uint8_t)
+                  case -1:
+                  {
+                      constexpr uint8_t num = 1;
+                      fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);
+                      if (ang < m_commuteBoundaries[i])
+                      {
+                          RunFuseNDiagonal<uint8_t,num,false,false>(FA->data(),(realNumType*)TPtrs[ang],permAngles.data() + m_commuteBoundaries[i],diff);
+                      }
+                      else
+                      {
+                          for (size_t currDiff = 0; currDiff < diff; currDiff += num)
+                          {
+                              numType** startTPtr = TPtrs.data() + m_commuteBoundaries[i] + currDiff;
+                              for (numType** TPtr = startTPtr; TPtr < startTPtr + num; TPtr++)
+                              {
+                                  if (*TPtr == TPtrs[ang])
+                                  {
+                                      RunFuseNDiagonal<uint8_t,num,false,false>(FA->data() + currDiff/num,(realNumType*)*TPtr,permAngles.data() + m_commuteBoundaries[i] + currDiff,diff-currDiff);
+                                      break;
+                                  }
+                              }
+                          }
+                      }
+                      break;
+                  }
+                  EvolveTangentsDiag(2,uint8_t)
+                  EvolveTangentsDiag(3,uint8_t)
+                  EvolveTangentsDiag(4,uint8_t)
+                  EvolveTangentsDiag(5,uint8_t)
+                  EvolveTangentsDiag(6,uint8_t)
+                  EvolveTangentsDiag(7,uint8_t)
+                  EvolveTangentsDiag(8,uint16_t)
+                  EvolveTangentsDiag(9,uint16_t)
+                  EvolveTangentsDiag(10,uint16_t)
+                  EvolveTangentsDiag(11,uint16_t)
+                  EvolveTangentsDiag(12,uint16_t)
                   case 0:
                       logger().log("Unhandled case 0");
                       __builtin_trap();
@@ -2303,6 +2549,18 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
                           break;
                       switch (m_fusedSizes[i-1])
                       {
+                      GenerateHPsiTDiagonal(1,uint8_t)
+                      GenerateHPsiTDiagonal(2,uint8_t)
+                      GenerateHPsiTDiagonal(3,uint8_t)
+                      GenerateHPsiTDiagonal(4,uint8_t)
+                      GenerateHPsiTDiagonal(5,uint8_t)
+                      GenerateHPsiTDiagonal(6,uint8_t)
+                      GenerateHPsiTDiagonal(7,uint8_t)
+                      GenerateHPsiTDiagonal(8,uint16_t)
+                      GenerateHPsiTDiagonal(9,uint16_t)
+                      GenerateHPsiTDiagonal(10,uint16_t)
+                      GenerateHPsiTDiagonal(11,uint16_t)
+                      GenerateHPsiTDiagonal(12,uint16_t)
                       case 0:
                       {
                           logger().log("Unhandled case 0");

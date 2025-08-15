@@ -142,9 +142,10 @@ public:
                     second = second | 1<<other[i];
             }
             allNonEqual = !(first & second);
-            return allNonEqual;
+
+            return allNonEqual || (isDiagonal() && other.isDiagonal());
         }
-        bool hasDiagonal()
+        bool hasDiagonal() const
         {
             bool hasDiagonal = false;
             if (third == -1 && fourth == -1)
@@ -171,6 +172,20 @@ public:
                 }
             }
             return hasDiagonal;
+        }
+        bool isDiagonal() const
+        {
+            if (third == -1)
+            {
+                assert(fourth == -1);
+                return first == second;
+            }
+            uint32_t create = (1<<first) | (1<<second);
+            uint32_t annihilate = (1<<third) | (1<<fourth);
+            assert(third != fourth);//Double destroy
+            assert(first != second); //Double create
+            //dont care about order
+            return (create ^ annihilate) == 0;
         }
     }; // 0 indexed
 private:
