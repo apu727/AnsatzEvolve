@@ -176,7 +176,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     //Jacobian?
 
     vector<numType> temp; //temporary
-
+    vector<numType> dest;
 
 
 
@@ -202,7 +202,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         }
         //myAnsatz->calcRotationAlongPath(rp,dest,start);
         //writeVector("dest.csv",dest,*lie);
-        vector<numType> dest;
+
         std::vector<realNumType> anglesV(rotationPaths[rpIndex].size());
         if (useFusedEvolve)
         {
@@ -430,15 +430,27 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    if (m_HamEm.rows() < 1500)
+    if (m_HamEm.rows() < 20000)
     {
-        auto TrueEigenValues = Eigen::SelfAdjointEigenSolver<Matrix<numType>::EigenMatrix> (m_HamEm).eigenvalues();
-        Matrix<numType>::EigenMatrix h = m_HamEm.toDense();
-        writeMatrix("HamMatrix",h);
-        fprintf(stderr,"TrueEigenValues:\n");
-        for (long i = 0; i < TrueEigenValues.rows() && i < 10; i++)
-            fprintf(stderr,"%20.10lg",TrueEigenValues[i]);
-        fprintf(stderr,"\n");
+        fprintf(stderr,"Finding lowest EigenValue");
+        Eigen::SparseMatrix<double> H = m_HamEm;
+        Eigen::VectorXd start = dest;
+        Eigen::VectorXd next = H * start;
+        while((next+start).norm() > 1e-10)
+        {
+            start = std::move(next);
+            next = H*start;
+            // fprintf(stderr,"NExtNorm: %lg\n", next.norm());
+            next.normalize();
+            // fprintf(stderr,"error: %lg\n", (next+start).norm());
+        }
+        fprintf(stderr, "Largest E Value,%.16lg",(next.transpose()*H*next).coeff(0,0));
+
+        // auto TrueEigenValues = Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> (m_HamEm,Eigen::EigenvaluesOnly).eigenvalues();
+        // fprintf(stderr,"TrueEigenValues:\n");
+        // for (long i = 0; i < TrueEigenValues.rows() && i < 10; i++)
+        //     fprintf(stderr,"%20.10lg",TrueEigenValues[i]);
+        // fprintf(stderr,"\n");
     }
     else
         logger().log("Hamiltonian too big to diagonalise here");
@@ -547,7 +559,8 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
     realNumType zeroThreshold = 1e-10;
 
     int count = maxStepCount;
-
+    size_t HessianEvals =0;
+    size_t EnergyEvals = 0;
     vector<numType> temp;
     while(count-- > 0)
     {
@@ -586,11 +599,13 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         Matrix<realNumType>::EigenMatrix Hmunu;
         // myAnsatz->getHessianAndDerivative(&m_Ham,Hmunu,gradVectorCalc,&m_compressMatrix);
         myAnsatz->evolveHessian(Hmunu,gradVectorCalc,angles);
+        HessianEvals++;
         Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> gradVectorCalcEm(&gradVectorCalc[0],gradVectorCalc.size(),1);
 
         vector<realNumType>::EigenVector gradVector_mu = m_compressMatrix * gradVectorCalcEm;
         // realNumType Energy = (destEM.adjoint() * HamEm * destEM).real()(0,0);
         realNumType Energy = myAnsatz->getEnergy(dest);//m_Ham.braket(dest,dest,&temp);
+        EnergyEvals++;
 
         /* some notation:
              * quantities in `compressed' notation after taking into account which angles are equivalent are denoted by the greek subscripts \mu \nu
@@ -688,9 +703,10 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             // vector<numType>::EigenVector destEMTrial = trial;
             // EnergyTrial = (destEMTrial.adjoint() * HamEm * destEMTrial).real()(0,0);
             EnergyTrial = myAnsatz->getEnergy(trial);//m_Ham.braket(trial,trial,&temp);
+            EnergyEvals++;
             if (EnergyTrial > Energy && BacktrackCount < 30)
             {//Backtracking
-                logger().log("Backtracking",BacktrackCount);
+                // logger().log("Backtracking",BacktrackCount);
                 for (size_t i = 0; i < angles.size();i++)
                 {
                     updateAngles[i] /=2;
@@ -702,7 +718,8 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                 break;
         }
         auto stop = std::chrono::high_resolution_clock::now();
-        fprintf(stderr,"Energy: " realNumTypeCode " GradNorm: " realNumTypeCode " Time (ms): %li\n", Energy,gradVector_mu.norm(),std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count());
+        fprintf(stderr,"Energy: " realNumTypeCode " GradNorm: " realNumTypeCode " Time (ms): %li, Energy Evals: %zu, Hess Evals: %zu\n",
+                Energy,gradVector_mu.norm(),std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count(),EnergyEvals,HessianEvals);
 
         if (gradVector_mu.norm() < 1e-12)
             break;
