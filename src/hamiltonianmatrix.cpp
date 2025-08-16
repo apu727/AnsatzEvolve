@@ -1,6 +1,13 @@
 #include "hamiltonianmatrix.h"
 #include "logger.h"
+#include "threadpool.h"
 #include <chrono>
+static size_t choose(size_t n, size_t k)
+{
+    if (k == 0)
+        return 1;
+    return (n * choose(n - 1, k - 1)) / k;
+}
 
 template<typename dataType>
 inline bool s_loadMatrix(Eigen::SparseMatrix<dataType, Eigen::ColMajor>& destMat,std::string filePath, std::shared_ptr<compressor> comp, size_t linearSize)
@@ -726,6 +733,7 @@ void HamiltonianMatrix<dataType, vectorType>::constructFromSecQuant()
     }
     m_fullyConstructedMatrix.resize(m_linearSize,m_linearSize);
     m_fullyConstructedMatrix.setFromTriplets(tripletList.begin(),tripletList.end());
+    logger().log("Element count", tripletList.size());
 
 }
 
@@ -767,23 +775,23 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
 
     success = s_loadOneAndTwoElectronsIntegrals<dataType,vectorType>(m_operators,m_vals,filePath,numberOfQubits);
     m_isSecQuantConstructed = success;
-    size_t sizeEstimate = (1<<numberOfQubits)*(1<<numberOfQubits);
+    size_t sizeEstimate = 0.3*choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2)*(1<<numberOfQubits);
     if (comp)
     {
-        sizeEstimate = comp->getCompressedSize() * (numberOfQubits * numberOfQubits * numberOfQubits * numberOfQubits);
+        sizeEstimate = 0.3*comp->getCompressedSize() * choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2);
         //This is an overestimate but we can always add more complicated estimate functions later
     }
     if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction && false)
     {
         //Construct Fully
-        logger().log("Constructing fully");
+        logger().log("Constructing fully, size estimate", sizeEstimate);
         constructFromSecQuant();
         m_isFullyConstructed = true;
         s_loadOneAndTwoElectronsIntegrals_Check(m_fullyConstructedMatrix,filePath,numberOfQubits,m_compressor);
     }
     else
     {
-        logger().log("Loaded secQuant");
+        logger().log("Loaded secQuant, size estimate", sizeEstimate);
     }
     if (!success)
         logger().log("Could not construct Hamiltonian");
@@ -810,7 +818,14 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
 
         //Ready
         // T_{ik} H_{kj}
-        for (long k = 0; k < numberOfCols; k++)
+        threadpool& pool = threadpool::getInstance(NUM_CORES);
+        long stepSize = std::min(numberOfCols/NUM_CORES,1ul);
+        std::vector<std::future<void>> futs;
+        for (long startk = 0; startk < numberOfCols; startk+= stepSize)
+        {
+            long endK = std::min(startk + stepSize,numberOfCols);
+            futs.push_back(pool.queueWork([this,&src,&dest,startk,endK](){
+        for (long k = startk; k < endK; k++)
         {//across
             uint32_t iBasisState = k;
             if (m_isCompressed)
@@ -883,6 +898,10 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
                 dest.col(j) += src.col(k) * ((sign ? -1 : 1)* *valIt); // Should be nicely SIMD but eigen may betray me for small vectors
             }
         }
+        }));
+        }
+        for (auto& f : futs)
+            f.wait();
         return;
     }
     else

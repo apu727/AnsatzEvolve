@@ -2131,7 +2131,7 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
     }
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
-    // logger().log("FusedEvolve Time taken:",duration);
+    logger().log("FusedEvolve Time taken:",duration);
 }
 #define EvolveDer(N,dataType)\
 case N:\
@@ -2227,7 +2227,7 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
     // logger().log("hpsi.dot start deriv", hPsi.dot(m_start)); // this should be E
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
-    // logger().log("DerivTimeTaken (ms)", duration);
+    logger().log("DerivTimeTaken (ms)", duration);
 
 }
 #define GenerateTangents(N, dataType)\
@@ -2626,11 +2626,11 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
     auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(time4-time3).count();
     auto duration4 = std::chrono::duration_cast<std::chrono::milliseconds>(time5-time4).count();
     auto duration5 = std::chrono::duration_cast<std::chrono::milliseconds>(time6-time5).count();
-    // logger().log("FusedEvolve Hessian Time taken 1 (ms)",duration1);
-    // logger().log("FusedEvolve Hessian Time taken 2 (ms)",duration2);
-    // logger().log("FusedEvolve Hessian Time taken 3 (ms)",duration3);
-    // logger().log("FusedEvolve Hessian Time taken 4 (ms)",duration4);
-    // logger().log("FusedEvolve Hessian Time taken 5 (ms)",duration5);
+    logger().log("FusedEvolve Hessian Time taken 1 (ms)",duration1);
+    logger().log("FusedEvolve Hessian Time taken 2 (ms)",duration2);
+    logger().log("FusedEvolve Hessian Time taken 3 (ms)",duration3);
+    logger().log("FusedEvolve Hessian Time taken 4 (ms)",duration4);
+    logger().log("FusedEvolve Hessian Time taken 5 (ms)",duration5);
     // Eigen::MatrixXd M = Hessian - Hessian.transpose();
     // logger().log("Symmetric?:",(Hessian - Hessian.transpose()).norm());
 }
