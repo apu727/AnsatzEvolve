@@ -796,15 +796,15 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
         threadpool& pool = threadpool::getInstance(NUM_CORES);
         long stepSize = std::min(numberOfCols/NUM_CORES,1ul);
         std::vector<std::future<void>> futs;
-        for (long startk = 0; startk < numberOfCols; startk+= stepSize)
+        for (long startj = 0; startj < numberOfCols; startj+= stepSize)
         {
-            long endK = std::min(startk + stepSize,numberOfCols);
-            futs.push_back(pool.queueWork([this,&src,&dest,startk,endK](){
-        for (long k = startk; k < endK; k++)
+            long endj = std::min(startj + stepSize,numberOfCols);
+            futs.push_back(pool.queueWork([this,&src,&dest,startj,endj](){
+        for (long j = startj; j < endj; j++)
         {//across
-            uint32_t iBasisState = k;
+            uint32_t jBasisState = j;
             if (m_isCompressed)
-                m_compressor->deCompressIndex(iBasisState,iBasisState);
+                m_compressor->deCompressIndex(jBasisState,jBasisState);
 
             auto opIt = m_operators.cbegin();
             auto valIt = m_vals.cbegin();
@@ -812,29 +812,29 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
             //The j loop
             for (;valIt != valItEnd; ++valIt,++opIt)
             {
-                uint32_t j;
+                uint32_t i;
                 bool sign;
 
-                uint32_t destroy = iBasisState ^ opIt->destroy;
+                uint32_t destroy = jBasisState ^ opIt->destroy;
                 bool canDestroy = (destroy & opIt->destroy) == 0;
                 if (!canDestroy)
                     continue;
                 bool canCreate =  (destroy & opIt->create) == 0;
                 if (!canCreate)
                     continue;
-                j  = destroy | opIt->create;
+                i  = destroy | opIt->create;
 
-                sign = __builtin_popcount(iBasisState & opIt->signBitMask) & 1;
+                sign = __builtin_popcount(jBasisState & opIt->signBitMask) & 1;
                 if (m_isCompressed)
-                    m_compressor->compressIndex(j,j);
-                if (j == (uint32_t)-1)
+                    m_compressor->compressIndex(i,i);
+                if (i == (uint32_t)-1)
                     continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
                 // for (long i = 0; i < numberOfRows; i++)
                 // {//down
                 //     HT_C(i,j) += T_C(i,k) * valIt;
                 // }
-                dest.col(j) += src.col(k) * ((sign ? -1 : 1)* *valIt); // Should be nicely SIMD but eigen may betray me for small vectors
+                dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt); // Should be nicely SIMD but eigen may betray me for small vectors
             }
         }
         }));

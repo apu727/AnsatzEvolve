@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #include "threadpool.h"
-unsigned long NUM_CORES = 1;
+unsigned long NUM_CORES = 8;
 
 void workFunction(threadpool* pool)
 {
