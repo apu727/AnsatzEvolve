@@ -9,6 +9,7 @@
 #include <vector>
 //#include <cblas.h>
 #include "globals.h"
+#include "hamiltonianmatrix.h"
 #include "linalg.h"
 
 #include "operatorpool.h"
@@ -21,9 +22,7 @@ protected:
     operatorPool* m_lie;
     bool m_lieIsCompressed = false;
     std::shared_ptr<compressor> m_compressor;
-    //TODO this is a hack and will cause caching problems
-    Eigen::SparseMatrix<realNumType, Eigen::ColMajor> m_HamEm;
-    bool m_HamEmIsSet = false;
+
 
     targetMatrix<numType,numType>* m_target;
     vector<numType> m_start;
@@ -73,8 +72,8 @@ public:
     void calcRotationAlongPath(const std::vector<rotationElement>& rotationPath,vector<numType>& dest, const vector<numType>& start);
 
     //Note that ExpMat is cached. Call resetPath to clear the cached version.
-    void getDerivativeVec(sparseMatrix<realNumType,numType> *ExpMat, vector<realNumType>& dest);
-    void getHessianAndDerivative(sparseMatrix<realNumType,numType> *ExpMat, Matrix<realNumType>::EigenMatrix& dest, vector<realNumType>& deriv, Eigen::SparseMatrix<realNumType,Eigen::RowMajor>* compressMatrix = nullptr);
+    void getDerivativeVec(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> ExpMat, vector<realNumType>& dest);
+    void getHessianAndDerivative(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> ExpMat, Matrix<realNumType>::EigenMatrix& dest, vector<realNumType>& deriv, Eigen::SparseMatrix<realNumType,Eigen::RowMajor>* compressMatrix = nullptr);
 
     void getDerivativeVecProj(const vector<numType>& projVec, vector<realNumType>& dest);
     void getHessianAndDerivativeProj(const vector<numType>& projVec, Matrix<realNumType>::EigenMatrix& dest, vector<realNumType>& deriv);

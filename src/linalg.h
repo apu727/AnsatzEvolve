@@ -438,6 +438,7 @@ public:
     vectorView<Matrix<dataType>,Eigen::RowMajor> getView(){return *this;}
     vectorView<const Matrix<dataType>,Eigen::RowMajor> getView()const {return *this;}
     vector<realNumType> real();
+    void normalize();
 
 
 };

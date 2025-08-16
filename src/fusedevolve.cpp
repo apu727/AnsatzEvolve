@@ -2037,11 +2037,11 @@ void FusedEvolve::cleanup()
     m_excInversePerm.clear();
 }
 
-FusedEvolve::FusedEvolve(const vector<numType> &start, const sparseMatrix<realNumType, numType> &Ham,
+FusedEvolve::FusedEvolve(const vector<numType> &start, std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham,
                          Eigen::SparseMatrix<realNumType, Eigen::RowMajor> compressMatrix, Eigen::SparseMatrix<realNumType, Eigen::RowMajor> deCompressMatrix)
 {
     m_start.copy(start);
-    m_HamEm = (typename sparseMatrix<realNumType, numType>::EigenSparseMatrix)(Ham);
+    m_Ham = Ham;
     m_lieIsCompressed = m_start.getIsCompressed(m_compressor);
     m_compressMatrix = std::move(compressMatrix);
     m_deCompressMatrix = std::move(deCompressMatrix);
@@ -2175,10 +2175,11 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
 
     vector<numType> hPsi;
     {
-        hPsi.resize(finalVector.size(),m_lieIsCompressed,m_compressor,false);
-        Eigen::Map<const Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&finalVector.at(0,0),finalVector.m_iSize,finalVector.m_jSize);
-        Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> destMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
-        destMap.noalias() = currentMap*m_HamEm;
+        // hPsi.resize(finalVector.size(),m_lieIsCompressed,m_compressor,false);
+        // Eigen::Map<const Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&finalVector.at(0,0),finalVector.m_iSize,finalVector.m_jSize);
+        // Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> destMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
+        // destMap.noalias() = currentMap*m_HamEm;
+        m_Ham->apply(finalVector,hPsi);
     }
 
 
@@ -2480,9 +2481,10 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
     // compute hPsi
     {
 
-        Eigen::Map<const Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&psi.at(0,0),psi.m_iSize,psi.m_jSize);
-        Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> destMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
-        destMap.noalias() = currentMap*m_HamEm;
+        // Eigen::Map<const Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&psi.at(0,0),psi.m_iSize,psi.m_jSize);
+        // Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> destMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
+        // destMap.noalias() = currentMap*m_HamEm;
+        m_Ham->apply(psi,hPsi);
         //psi no longer needed
     }
     auto time3 = std::chrono::high_resolution_clock::now();
@@ -2498,7 +2500,8 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
         T_C.noalias() = m_compressMatrix * TMapC;
 
         Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> HT_C;
-        HT_C.noalias() = T_C*m_HamEm;
+        // HT_C.noalias() = T_C*m_HamEm;
+        m_Ham->apply(T_C,HT_C);
 
         //We can now compute the <THT> terms
         // Hessian.triangularView<Eigen::Lower>() += 2*TMap * HT_C.transpose();
@@ -2635,9 +2638,9 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
 realNumType FusedEvolve::getEnergy(const vector<numType> &psi)
 {
 
-    Eigen::Map<const Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&psi.at(0,0),psi.m_iSize,psi.m_jSize);
-    Eigen::Matrix<numType,1,-1,Eigen::RowMajor> hPsi;
-    hPsi.noalias() = currentMap*m_HamEm;
-
-    return std::real((hPsi*currentMap.adjoint()).coeff(0,0));
+    // Eigen::Map<const Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&psi.at(0,0),psi.m_iSize,psi.m_jSize);
+    // Eigen::Matrix<numType,1,-1,Eigen::RowMajor> hPsi;
+    vector<numType> hPsi;
+    // hPsi.noalias() = currentMap*m_HamEm;
+    return m_Ham->apply(psi,hPsi).dot(psi);
 }

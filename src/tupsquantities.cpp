@@ -130,14 +130,15 @@ void writeMatrix(std::string filename, Matrix<std::complex<long double>>::EigenM
     fclose(fp);
 }
 
-TUPSQuantities::TUPSQuantities(sparseMatrix<realNumType,numType>& Ham, std::vector<std::pair<int,realNumType>> order,
+TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::vector<std::pair<int,realNumType>> order,
                                int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile)
 {
     m_file = logfile;
     if (m_file == nullptr)
         m_file = stdout;
 
-    m_Ham.copy(Ham);
+    m_Ham = Ham;
+    // m_Ham.copy(Ham);
     // m_HamEm = Ham;
     m_NuclearEnergy = NuclearEnergy;
     m_numberOfUniqueParameters = numberOfUniqueParameters;
@@ -153,7 +154,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     bool useFusedEvolve = false;
     if (!myAnsatz)
         useFusedEvolve = true;
-    m_HamEm = m_Ham;
+    // m_HamEm = m_Ham;
     /* calculate the energy for all rotation paths*/
     std::vector<realNumType> Energies(rotationPaths.size());
     std::vector<realNumType> RealEnergies(rotationPaths.size());
@@ -287,8 +288,8 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         }
         else
         {
-            vector<realNumType> temp;
-            myAnsatz->getHessianAndDerivative(&m_Ham,Hmunu,gradVectorCalc,&m_compressMatrix);
+            // vector<realNumType> temp;
+            myAnsatz->getHessianAndDerivative(m_Ham,Hmunu,gradVectorCalc,&m_compressMatrix);
         }
 
         if (!useFusedEvolve)
@@ -319,9 +320,14 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
         std::vector<vector<std::complex<realNumType>>::EigenVector> metricZeroEigenVectors;
 
-        Energies[rpIndex] = m_Ham.braket(dest, dest, &temp);
-        RealEnergies[rpIndex] = destEM.real().transpose() * m_HamEm * destEM.real();
-        RealEnergies[rpIndex] /= destEM.real().squaredNorm();
+        // Energies[rpIndex] = m_Ham.braket(dest, dest, &temp);
+        Energies[rpIndex] = m_Ham->apply(dest,temp).dot(dest);
+
+        {
+            vector<realNumType> r = dest.real();
+            RealEnergies[rpIndex] = m_Ham->apply(r).dot(r);
+            RealEnergies[rpIndex] /= r.dot(r);
+        }
         EnergiesAndNucEnergy[rpIndex] = Energies[rpIndex]+m_NuclearEnergy;
 
         // es.compute(Hij,true);
@@ -430,21 +436,22 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    if (m_HamEm.rows() < 20000)
+    if (m_Ham->rows() < 20000)
     {
-        fprintf(stderr,"Finding lowest EigenValue");
-        Eigen::SparseMatrix<double> H = m_HamEm;
-        Eigen::VectorXd start = dest;
-        Eigen::VectorXd next = H * start;
-        while((next+start).norm() > 1e-10)
+        fprintf(stderr,"Finding lowest EigenValue\n");
+        vector<numType> start;
+        start.copy(dest);
+        vector<numType> next;
+        m_Ham->apply(start,next);
+        while(abs(next.dot(start) + 1) > 1e-10)
         {
-            start = std::move(next);
-            next = H*start;
+            static_cast<Matrix<numType>&>(start) = std::move(next);
+            m_Ham->apply(start,next);
             // fprintf(stderr,"NExtNorm: %lg\n", next.norm());
             next.normalize();
             // fprintf(stderr,"error: %lg\n", (next+start).norm());
         }
-        fprintf(stderr, "Largest E Value,%.16lg",(next.transpose()*H*next).coeff(0,0));
+        fprintf(stderr, "Largest E Value,%.16lg",(m_Ham->apply(next).dot(next)));
 
         // auto TrueEigenValues = Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> (m_HamEm,Eigen::EigenvaluesOnly).eigenvalues();
         // fprintf(stderr,"TrueEigenValues:\n");
@@ -748,7 +755,7 @@ void TUPSQuantities::runNewtonMethodProjected(stateAnsatz *myAnsatz,bool avoidNe
     vector<numType> psiH;
     vector<numType> previousDestCopy;
     previousDestCopy.copy(myAnsatz->getVec());
-    mul(m_Ham,previousDestCopy,psiH);
+    m_Ham->apply(previousDestCopy,psiH);
     realNumType InvnormOfPsiH =1./std::sqrt(psiH.dot(psiH));
     bool amStuck = false;
     while(count-- > 0)
@@ -868,7 +875,7 @@ void TUPSQuantities::runNewtonMethodProjected(stateAnsatz *myAnsatz,bool avoidNe
     }
 }
 
-bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(sparseMatrix<realNumType,numType> *Ham, FusedEvolve *myAnsatz,std::vector<realNumType>& angles, bool doDerivativeSteps = true)
+bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(FusedEvolve *myAnsatz, std::vector<realNumType>& angles, bool doDerivativeSteps = true)
 {
     realNumType stepSize = 0.01;
 
@@ -979,7 +986,7 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(sparseMatrix<realNumT
         gradVectorEM = gradVec;
         gradVectorEM = m_deCompressMatrix *(m_compressMatrix * gradVectorEM);
 
-        realNumType Energy = m_Ham.braket(dest,dest,&temp);
+        realNumType Energy = m_Ham->apply(dest,temp).dot(dest);
 
 
 
@@ -1008,7 +1015,7 @@ void TUPSQuantities::doSubspaceDiagonalisation(std::shared_ptr<stateAnsatz> myAn
     if (!myAnsatz)
         useFusedEvolve = true;
     //skip over HF state
-    m_HamEm = m_Ham;
+    // m_HamEm = m_Ham;
     numberOfMinima = std::min(rotationPaths.size()-1,numberOfMinima);
     Matrix<numType>::EigenMatrix HMat(numberOfMinima,numberOfMinima);
     Matrix<numType>::EigenMatrix SMat(numberOfMinima,numberOfMinima);
@@ -1027,7 +1034,7 @@ void TUPSQuantities::doSubspaceDiagonalisation(std::shared_ptr<stateAnsatz> myAn
         }
         else
             myAnsatz->calcRotationAlongPath(rotationPaths[i+1],states[i],myAnsatz->getStart());
-        mul(m_Ham,states[i],hstates[i]);
+        m_Ham->apply(states[i],hstates[i]);
     }
 
 #ifdef useComplex
@@ -1088,9 +1095,9 @@ void TUPSQuantities::doSubspaceDiagonalisation(std::shared_ptr<stateAnsatz> myAn
     for (long i = 0; i < foundEigenValues.rows() && i < 10; i++)
         fprintf(stderr,"%20.16lf",foundEigenValues[i]);
     fprintf(stderr,"\n");
-    if (m_HamEm.rows() < 1500)
+    if (m_Ham->rows() < 1500 && m_Ham->canGetSparse())
     {
-        Eigen::SelfAdjointEigenSolver<Matrix<numType>::EigenMatrix> es(m_HamEm,Eigen::ComputeEigenvectors);
+        Eigen::SelfAdjointEigenSolver<Matrix<numType>::EigenMatrix> es(m_Ham->getSparse(),Eigen::ComputeEigenvectors);
         auto TrueEigenValues = es.eigenvalues();
         fprintf(stderr,"TrueEigenValues:\n");
         for (long i = 0; i < TrueEigenValues.rows() && i < 10; i++)
@@ -1347,7 +1354,7 @@ realNumType TUPSQuantities::OptimiseTups(FusedEvolve& FE, std::vector<baseAnsatz
     while (true)
     {
         runNewtonMethod(&FE,anglesV,avoidNegativeHessianValues);
-        bool foundOne  = doStepsUntilHessianIsPositiveDefinite(&m_Ham,&FE,anglesV,false);
+        bool foundOne  = doStepsUntilHessianIsPositiveDefinite(&FE,anglesV,false);
 
         vector<numType> dest;
         FE.evolve(dest,anglesV);
@@ -1373,7 +1380,7 @@ realNumType TUPSQuantities::OptimiseTups(FusedEvolve& FE, std::vector<baseAnsatz
         gradVectorEm = m_compressMatrix * gradVectorEm;
 
         normOfGradVector = gradVectorEm.norm();
-        Energy = m_Ham.braket(dest,dest);
+        Energy = m_Ham->apply(dest).dot(dest);
         fprintf(stderr, "Energy: " realNumTypeCode " GradNorm: " realNumTypeCode "\n", Energy, normOfGradVector);
 
         if (normOfGradVector < 1e-12)
@@ -1468,7 +1475,7 @@ void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const
         //gradVector_{\mu} = \braket{\psi | H | \frac{d}{d\theta_\mu}\psi} + \braket{\frac{d}{d\theta_\mu}\psi | H | \psi}
         vector<realNumType> gradVector;
 
-        myAnsatz.getDerivativeVec(&m_Ham,gradVector); // True Derivative
+        myAnsatz.getDerivativeVec(m_Ham,gradVector); // True Derivative
         // myAnsatz.getDerivativeVecProj(psiH,gradVector); // True Derivative
         vector<realNumType>::EigenVector gradVectorEm  = gradVector;
         gradVectorEm = m_compressMatrix * gradVectorEm;

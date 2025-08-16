@@ -42,6 +42,7 @@ add_library(cppAnsatzSynthLib STATIC
     benchmark.h benchmark.cpp
     diis.h diis.cpp
     fusedevolve.cpp fusedevolve.h
+    hamiltonianmatrix.h hamiltonianmatrix.cpp
 )
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 else()

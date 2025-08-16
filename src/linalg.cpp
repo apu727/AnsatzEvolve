@@ -554,6 +554,13 @@ vector<realNumType> vector<dataType>::real()
     return ret;
 }
 
+template<typename dataType>
+void vector<dataType>::normalize()
+{
+    Eigen::Map<Eigen::Matrix<dataType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> thisMap(this->m_data,this->m_iSize,this->m_jSize);
+    thisMap.normalize();
+}
+
 Matrix<numType>::EigenMatrix convert(const std::vector<vector<numType> > &AnsatzTangentSpace)
 {
     Matrix<numType>::EigenMatrix ret(AnsatzTangentSpace.size(),AnsatzTangentSpace[0].size());

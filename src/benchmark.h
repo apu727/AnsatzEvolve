@@ -7,6 +7,6 @@
 #define BENCHMARK_H
 #include "ansatz.h"
 
-void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, sparseMatrix<realNumType,numType>& Ham,sparseMatrix<realNumType,numType>::EigenSparseMatrix& compressMatrix, sparseMatrix<realNumType,numType>::EigenSparseMatrix &m_deCompressMatrix);
+void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham,sparseMatrix<realNumType,numType>::EigenSparseMatrix& compressMatrix, sparseMatrix<realNumType,numType>::EigenSparseMatrix &m_deCompressMatrix);
 
 #endif // BENCHMARK_H

@@ -2,6 +2,7 @@
  * https://creativecommons.org/publicdomain/zero/1.0/ */
 
 #include "benchmark.h"
+#include "hamiltonianmatrix.h"
 #include "operatorpool.h"
 #include "ansatz.h"
 #include "threadpool.h"
@@ -173,8 +174,11 @@ int main(int argc, char *argv[])
 
 
 
-    sparseMatrix<realNumType,numType> Ham;
-    if (!Ham.loadMatrix(filePath,numberOfQubits,comp))
+    // sparseMatrix<realNumType,numType> Ham;
+    // if (!Ham.loadMatrix(filePath,numberOfQubits,comp))
+    //     return 1;
+    std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(filePath,numberOfQubits,comp);
+    if (!Ham->ok())
         return 1;
     // Ham.dumpMatrix(filePath);
 

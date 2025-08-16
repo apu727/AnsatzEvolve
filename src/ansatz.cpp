@@ -244,22 +244,19 @@ void baseAnsatz::calcRotationAlongPath(const std::vector<rotationElement> &rotat
     }
 }
 
-void baseAnsatz::getDerivativeVec(sparseMatrix<realNumType,numType> *ExpMat, vector<realNumType>& deriv)
+void baseAnsatz::getDerivativeVec(std::shared_ptr<HamiltonianMatrix<realNumType, numType> > ExpMat, vector<realNumType>& deriv)
 {
     deriv.resize(m_rotationPath.size(),false,nullptr);
     vector<numType> hPsi;
     auto superstart = std::chrono::high_resolution_clock::now();
     // ExpMat->multiply(m_current,hPsi);
-    if (!m_HamEmIsSet)
+
     {
-        m_HamEm = ((Eigen::SparseMatrix<realNumType,Eigen::RowMajor>)*ExpMat);
-        m_HamEmIsSet = true;
-    }
-    {
-        hPsi.resize(m_current.size(),m_lieIsCompressed,m_compressor,false);
-        Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&m_current.at(0,0),m_current.m_iSize,m_current.m_jSize);
-        Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> destMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
-        destMap.noalias() = currentMap*m_HamEm;
+        // hPsi.resize(m_current.size(),m_lieIsCompressed,m_compressor,false);
+        // Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&m_current.at(0,0),m_current.m_iSize,m_current.m_jSize);
+        // Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> destMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
+        // destMap.noalias() = currentMap*m_HamEm;
+        ExpMat->apply(m_current,hPsi);
     }
 
     m_hPsiEvolvedList.resize(m_rotationPath.size());
@@ -295,7 +292,7 @@ void baseAnsatz::getDerivativeVec(sparseMatrix<realNumType,numType> *ExpMat, vec
     logger().log("DerivEvolve Time taken (ms)",duration2);
 }
 
-void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *ExpMat, Matrix<realNumType>::EigenMatrix &Hessian, vector<realNumType>& deriv, Eigen::SparseMatrix<realNumType,Eigen::RowMajor>* compressMatrix)
+void baseAnsatz::getHessianAndDerivative(std::shared_ptr<HamiltonianMatrix<realNumType, numType> > ExpMat, Matrix<realNumType>::EigenMatrix &Hessian, vector<realNumType>& deriv, Eigen::SparseMatrix<realNumType,Eigen::RowMajor>* compressMatrix)
 {
     //Its better to assume nothing is cached since we need to recompute everything anyway basically.
 
@@ -409,12 +406,6 @@ void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *Exp
             derivList.push_back(mat.getJVectorView(x_i));
         }
 
-        if (!m_HamEmIsSet)
-        {
-            m_HamEm = ((Eigen::SparseMatrix<realNumType,Eigen::RowMajor>)*ExpMat);
-            m_HamEmIsSet = true;
-        }
-
         Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> HPsiDerivC;
         Eigen::Map<Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32>matMapR(&mat.at(0,0),mat.m_iSize,mat.m_jSize);
 
@@ -433,7 +424,8 @@ void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *Exp
         {
             Eigen::Matrix<numType,-1,-1,Eigen::RowMajor> matMapR_Comp = *compressMatrix*matMapR; //Has roughly the same cost as the dot product. I.e. cheap compared to matrix multiplication
             Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> matMapC = matMapR_Comp;
-            HPsiDerivC.noalias() = matMapC * m_HamEm;
+            // HPsiDerivC.noalias() = matMapC * m_HamEm;
+            ExpMat->apply(matMapC,HPsiDerivC);
             THT.resize(compressMatrix->rows(),compressMatrix->rows());
 
             start3 = std::chrono::high_resolution_clock::now();
@@ -460,7 +452,8 @@ void baseAnsatz::getHessianAndDerivative(sparseMatrix<realNumType, numType> *Exp
         else
         {
             Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> matMapC = matMapR; //Has roughly the same cost as the dot product. I.e. cheap compared to matrix multiplication
-            HPsiDerivC.noalias() = matMapC * m_HamEm;
+            // HPsiDerivC.noalias() = matMapC * m_HamEm;
+            ExpMat->apply(matMapC,HPsiDerivC);
             THT.resize(m_rotationPath.size(),m_rotationPath.size());
 
             start3 = std::chrono::high_resolution_clock::now();
@@ -629,7 +622,6 @@ void baseAnsatz::resetPath()
 {
     resetState();
     m_rotationPath.clear();
-    m_HamEmIsSet = false;
 }
 
 

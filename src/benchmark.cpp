@@ -55,7 +55,7 @@ void Benchmark_applyPermutationAndStore(const std::vector<T>& vec, const std::ve
                    [&](std::size_t i){ return vec[i]; });
 }
 
-void benchmarkDeriv(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rotationPath, sparseMatrix<realNumType,numType> & Ham)
+void benchmarkDeriv(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rotationPath, std::shared_ptr<HamiltonianMatrix<realNumType,numType>> & Ham)
 {
 
     std::vector<realNumType> angles;
@@ -72,7 +72,7 @@ void benchmarkDeriv(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> ro
     for (int i = 0; i < 100; i++)
     {
         vector<realNumType> deriv;
-        ansatz->getDerivativeVec(&Ham,deriv);
+        ansatz->getDerivativeVec(Ham,deriv);
     }
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
@@ -2491,7 +2491,7 @@ void benchmarkApplyHam(stateAnsatz* ansatz, std::vector<ansatz::rotationElement>
 
 
 }
-void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, sparseMatrix<realNumType,numType>& Ham,
+void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham,
                sparseMatrix<realNumType,numType>::EigenSparseMatrix& compressMatrix, sparseMatrix<realNumType,numType>::EigenSparseMatrix &m_deCompressMatrix)
 {
     vector<numType> dest1;
@@ -2675,7 +2675,7 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, spa
     logger().log("Derivative");
     vector<realNumType> derivExpt;
     vector<realNumType> derivFound;
-    ansatz->getDerivativeVec(&Ham,derivExpt);
+    ansatz->getDerivativeVec(Ham,derivExpt);
     startTime = std::chrono::high_resolution_clock::now();
     for (long i = 0; i < 40; i++)
     {
@@ -2688,7 +2688,7 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, spa
     startTime = std::chrono::high_resolution_clock::now();
     for (long i = 0; i < 40; i++)
     {
-        ansatz->getDerivativeVec(&Ham,derivExpt);
+        ansatz->getDerivativeVec(Ham,derivExpt);
     }
     endTime = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
@@ -2702,7 +2702,7 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, spa
     Eigen::MatrixXd HessianFound;
     ansatz->updateAngles(angles);
     startTime = std::chrono::high_resolution_clock::now();
-    ansatz->getHessianAndDerivative(&Ham,HessianExpt,derivExpt,&compressMatrix);
+    ansatz->getHessianAndDerivative(Ham,HessianExpt,derivExpt,&compressMatrix);
     endTime = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("Ansatz Hessian Time taken total:",duration);

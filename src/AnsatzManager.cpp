@@ -94,7 +94,7 @@ bool stateAnsatzManager::construct()
                 m_compressor = std::make_shared<SZAndnumberOperatorCompressor>(1<<m_numberOfQubits,m_spinUp,m_spinDown);
             else
                 m_compressor = std::make_shared<numberOperatorCompressor>(m_numberOfParticles,1<<m_numberOfQubits);
-            m_Ham.compress(m_compressor);
+            // m_Ham.compress(m_compressor);
         }
         logger().log("SZSym:",m_SZSym);
         logger().log("particleNumSym:",m_particleSym);
@@ -317,7 +317,7 @@ bool stateAnsatzManager::storeHamiltonian(const std::vector<int> &iIndexes, cons
         logger().log("Hamiltonian Matrix indexes and coeffs are a different size");
     }
     if (success)
-        m_Ham = sparseMatrix<realNumType,numType>(Coeffs,iIndexes,jIndexes,bool());
+        m_Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(Coeffs,iIndexes,jIndexes);
     return success;
 }
 
@@ -450,7 +450,7 @@ bool stateAnsatzManager::getExpectationValue(realNumType &exptValue)
     }
     else
     {
-        exptValue = m_Ham.braket(m_ansatz->getVec(),m_ansatz->getVec(),&tempNumType);
+        exptValue = m_Ham->apply(m_ansatz->getVec(),tempNumType).dot(m_ansatz->getVec());
     }
     return success;
 }
@@ -483,7 +483,7 @@ bool stateAnsatzManager::getGradient(vector<realNumType> &gradient)
     if (useFused)
         m_FA->evolveDerivative(m_current,gradient,m_angles);
     else
-        m_ansatz->getDerivativeVec(&m_Ham,gradient);
+        m_ansatz->getDerivativeVec(m_Ham,gradient);
 
     return success;
 }
@@ -516,7 +516,7 @@ bool stateAnsatzManager::getHessian(Matrix<realNumType>::EigenMatrix &hessian)
         __builtin_trap();
     }
     else
-        m_ansatz->getHessianAndDerivative(&m_Ham,hessian,tempRealNumType);
+        m_ansatz->getHessianAndDerivative(m_Ham,hessian,tempRealNumType);
     return success;
 }
 

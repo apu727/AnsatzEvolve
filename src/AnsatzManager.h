@@ -46,7 +46,7 @@ private:
     //Things needed to construct
     std::vector<stateRotate::exc> m_excitations;
     vector<numType> m_start; // Size != 0
-    sparseMatrix<realNumType,numType> m_Ham; // Size != 0
+    std::shared_ptr<HamiltonianMatrix<realNumType,numType>> m_Ham; // Size != 0
     int m_numberOfParticles = -1;
     int m_spinUp = -1;
     int m_spinDown = -1;

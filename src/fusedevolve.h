@@ -5,6 +5,7 @@
  */
 #ifndef FUSEDEVOLVE_H
 #define FUSEDEVOLVE_H
+#include "hamiltonianmatrix.h"
 #include "operatorpool.h"
 #include <vector>
 // #define MakeParallelEvolveCode
@@ -48,7 +49,7 @@ class FusedEvolve
     void cleanup();
 
     vector<numType> m_start;
-    Eigen::SparseMatrix<realNumType, Eigen::ColMajor> m_HamEm;
+    std::shared_ptr<HamiltonianMatrix<realNumType,numType>> m_Ham;
     bool m_lieIsCompressed;
     std::shared_ptr<compressor> m_compressor;
 
@@ -56,7 +57,7 @@ class FusedEvolve
     Eigen::SparseMatrix<realNumType, Eigen::RowMajor> m_deCompressMatrix; //Stores equivalent parameters
 
 public:
-    FusedEvolve(const vector<numType> &start, const sparseMatrix<realNumType,numType>& Ham,
+    FusedEvolve(const vector<numType> &start, std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham,
                 Eigen::SparseMatrix<realNumType, Eigen::RowMajor>compressMatrix, Eigen::SparseMatrix<realNumType, Eigen::RowMajor>deCompressMatrix);
     ~FusedEvolve();
     void updateExc(const std::vector<stateRotate::exc>& excs);

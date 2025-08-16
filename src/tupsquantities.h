@@ -11,6 +11,7 @@
 
 #include "Eigen/Eigenvalues"
 #include "ansatz.h"
+#include "hamiltonianmatrix.h"
 
 #include <vector>
 #include <string>
@@ -23,8 +24,9 @@ class TUPSQuantities
     void printOutputHeaders(size_t numberOfPathsExHF);
 
     FILE* m_file = nullptr;
-    sparseMatrix<realNumType,numType> m_Ham;
-    sparseMatrix<realNumType,numType>::EigenSparseMatrix m_HamEm;
+    // sparseMatrix<realNumType,numType> m_Ham;
+    std::shared_ptr<HamiltonianMatrix<realNumType,numType>> m_Ham = nullptr;
+    // sparseMatrix<realNumType,numType>::EigenSparseMatrix m_HamEm;
     realNumType m_NuclearEnergy = 0;
 
     int m_numberOfUniqueParameters = 0;
@@ -42,8 +44,7 @@ class TUPSQuantities
     void runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumType> &angles,bool avoidNegativeHessianValues = true);
     void runNewtonMethodProjected(stateAnsatz *myAnsatz,bool avoidNegativeHessianValues = true);
 
-    bool doStepsUntilHessianIsPositiveDefinite(sparseMatrix<realNumType,numType> *Ham,
-                                               FusedEvolve *myAnsatz,std::vector<realNumType>& angles, bool doDerivativeSteps);
+    bool doStepsUntilHessianIsPositiveDefinite(FusedEvolve *myAnsatz,std::vector<realNumType>& angles, bool doDerivativeSteps);
     realNumType computeFrechetDistanceBetweenPaths(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE,
                                                    const std::vector<baseAnsatz::rotationElement> &rotationPath, const std::vector<baseAnsatz::rotationElement> &rotationPath2);
 
@@ -54,7 +55,7 @@ public:
     sparseMatrix<realNumType,numType>::EigenSparseMatrix m_deCompressMatrix;
     sparseMatrix<realNumType,numType>::EigenSparseMatrix m_normCompressMatrix;
     sparseMatrix<realNumType,numType>::EigenSparseMatrix m_compressMatrix;
-    TUPSQuantities(sparseMatrix<realNumType,numType>& Ham, std::vector<std::pair<int,realNumType>> order,
+    TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::vector<std::pair<int,realNumType>> order,
                    int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile = nullptr);
 
     void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths);

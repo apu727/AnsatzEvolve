@@ -21,7 +21,7 @@
 //bool compare1(const std::pair<size_t,size_t> &a, const std::pair<size_t,size_t> &b ) {return a.first < b.first;};
 //bool compare2(const std::pair<size_t,size_t> &a, const std::pair<size_t,size_t> &b ) {return a.second < b.second;};
 
-size_t choose(size_t n, size_t k)
+static size_t choose(size_t n, size_t k)
 {
     if (k == 0)
         return 1;
@@ -127,12 +127,12 @@ inline bool s_loadMatrix(sparseMatrix<realNumType,vectorType>* me,std::string fi
     return 1;
 }
 
-unsigned long ReadFile(FILE *fp, unsigned char *Buffer, unsigned long BufferSize)
+static unsigned long ReadFile(FILE *fp, unsigned char *Buffer, unsigned long BufferSize)
 {
     return(fread(Buffer, 1, BufferSize, fp));
 }
 
-size_t CalculateFileSize(FILE *fp)
+static size_t CalculateFileSize(FILE *fp)
 {
     size_t size;
     fseek (fp,0,SEEK_END);
