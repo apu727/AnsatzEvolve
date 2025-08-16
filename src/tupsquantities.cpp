@@ -282,9 +282,9 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
             FE->evolveHessian(Hmunu,gradVectorCalc,anglesV,&derivTangentSpaceEM);
             vector<realNumType> gradVectorCalc2;
             FE->evolveDerivative(dest,gradVectorCalc2,anglesV);
-            logger().log("sqrt1.1",std::sqrt(gradVectorCalc.dot(gradVectorCalc)));
-            logger().log("sqrt1.2",std::sqrt(gradVectorCalc.dot(gradVectorCalc2)));
-            logger().log("sqrt2.2",std::sqrt(gradVectorCalc2.dot(gradVectorCalc2)));
+            logger().log("1.1",(gradVectorCalc.dot(gradVectorCalc)));
+            logger().log("1.2",(gradVectorCalc.dot(gradVectorCalc2)));
+            logger().log("2.2",(gradVectorCalc2.dot(gradVectorCalc2)));
         }
         else
         {
@@ -321,6 +321,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         std::vector<vector<std::complex<realNumType>>::EigenVector> metricZeroEigenVectors;
 
         // Energies[rpIndex] = m_Ham.braket(dest, dest, &temp);
+        // logger().log("Mag2",dest.dot(dest));
         Energies[rpIndex] = m_Ham->apply(dest,temp).dot(dest);
 
         {
@@ -436,7 +437,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    if (m_Ham->rows() < 20000)
+    if (m_Ham->rows() < 20000 && false)
     {
         fprintf(stderr,"Finding lowest EigenValue\n");
         vector<numType> start;

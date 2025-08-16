@@ -587,7 +587,7 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<typename HamiltonianMatrix<da
     auto start = std::chrono::high_resolution_clock::now();
 
 
-
+    constexpr double tol = 0;
     assert(numberOfQubits < 32);
     for (std::uint_fast8_t a = 0; a < numberOfQubits; a++) //create
     {
@@ -615,9 +615,14 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<typename HamiltonianMatrix<da
                     double Energy = getTwoElectronEnergy(idxs); // Both fock and exchange
                     double Energy2 = getElement(iBasisState,jBasisState,true);
                     assert(Energy == Energy2);
-                    if (abs(Energy) > 1e-15)//TODO threshold
+                    if (abs(Energy) > tol)//TODO threshold
                     {
-                        operators.push_back({a,b,c,d});
+                        // operators.push_back({a,b,c,d});
+                        uint32_t create = (1<<a) | (1<<b);
+                        uint32_t destroy = (1<<c) | (1<<d);
+                        uint32_t signMask = ((1<<a)-1) ^ ((1<<b)-1) ^((1<<c)-1) ^((1<<d)-1);
+                        signMask = signMask & ~((1<<a) | (1<<b) | (1<<c) | (1<<d));
+                        operators.push_back({create,destroy,signMask});
                         vals.push_back(Energy);
                     }
                 }
@@ -635,9 +640,14 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<typename HamiltonianMatrix<da
             realNumType Energy = oneEInts(a % (numberOfQubits/2), c % (numberOfQubits/2));
             double Energy2 = getElement(iBasisState,jBasisState,false);
             assert(Energy == Energy2);
-            if (abs(Energy) > 1e-15)//TODO threshold
+            if (abs(Energy) > tol)//TODO threshold
             {
-                operators.push_back({a,a,c,c});
+                // operators.push_back({a,a,c,c});
+                uint32_t create = (1<<a);
+                uint32_t destroy = (1<<c);
+                uint32_t signMask = ((1<<a)-1) ^ ((1<<c)-1);
+                signMask = signMask & ~((1<<a) | (1<<c));
+                operators.push_back({create,destroy,signMask});
                 vals.push_back(Energy);
             }
         }
@@ -677,57 +687,21 @@ void HamiltonianMatrix<dataType, vectorType>::constructFromSecQuant()
             //Can apply to this basisState;.
             uint32_t j;
             bool sign;
-            if (opIt->a == opIt->b)
-            {
-                assert(opIt->c == opIt->d);
-                uint32_t destroyOp = (1<<opIt->a);
-                uint32_t createOp = (1<<opIt->c);
-                uint32_t destroy = iBasisState ^ destroyOp;
-                bool canDestroy = ((iBasisState & destroyOp) ^ destroyOp) == 0;
-                if (!canDestroy)
-                    continue;
-                bool canCreate =  (destroy & createOp) == 0;
-                if (!canCreate)
-                    continue;
-                j  = destroy | createOp;
 
-                sign = (bitwiseDot(iBasisState,-1,opIt->a) & 1);
+            uint32_t destroy = iBasisState ^ opIt->destroy;
+            bool canDestroy = (destroy & opIt->destroy) == 0;
+            if (!canDestroy)
+                continue;
+            bool canCreate =  (destroy & opIt->create) == 0;
+            if (!canCreate)
+                continue;
+            j  = destroy | opIt->create;
 
-                if (bitwiseDot(j,-1,opIt->c) & 1)
-                    sign = !sign;
-                if (m_isCompressed)
-                    m_compressor->compressIndex(j,j);
-                if (j == (uint32_t)-1)
-                    continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
-            }
-            else
-            {
-                assert(opIt->c != opIt->d);
-                uint32_t destroyOp = ((1<<opIt->a) | (1<<opIt->b));
-                uint32_t createOp = (1<<opIt->c) | (1<<opIt->d);
-                uint32_t destroy = iBasisState ^ destroyOp;
-                bool canDestroy = ((iBasisState & destroyOp) ^ destroyOp) == 0;
-                if (!canDestroy)
-                    continue;
-                bool canCreate =  (destroy & createOp) == 0;
-                if (!canCreate)
-                    continue;
-                j  = destroy | createOp;
-
-                sign = (bitwiseDot(iBasisState,-1,opIt->a) & 1);
-                if ((bitwiseDot(iBasisState,-1,opIt->b) & 1))
-                    sign = !sign;
-
-                if (bitwiseDot(j,-1,opIt->c) & 1)
-                    sign = !sign;
-                if ((bitwiseDot(j,-1,opIt->d) & 1))
-                    sign = !sign;
-
-                if (m_isCompressed)
-                    m_compressor->compressIndex(j,j);
-                if (j == (uint32_t)-1)
-                    continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
-            }
+            sign = __builtin_popcount(iBasisState & opIt->signBitMask) & 1;
+            if (m_isCompressed)
+                m_compressor->compressIndex(j,j);
+            if (j == (uint32_t)-1)
+                continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
             tripletList.push_back(Eigen::Triplet<dataType>(k,j,(sign ? -1 : 1)* *valIt));
         }
     }
@@ -781,7 +755,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
         sizeEstimate = 0.3*comp->getCompressedSize() * choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2);
         //This is an overestimate but we can always add more complicated estimate functions later
     }
-    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction)
+    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction && false)
     {
         //Construct Fully
         logger().log("Constructing fully, size estimate", sizeEstimate);
@@ -815,6 +789,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
         long numberOfRows = src.rows();
         dest.resize(numberOfRows,numberOfCols);
         dest.setZero();
+        assert(m_compressor->getCompressedSize() == (size_t)numberOfCols);
 
         //Ready
         // T_{ik} H_{kj}
@@ -839,57 +814,21 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
             {
                 uint32_t j;
                 bool sign;
-                if (opIt->a == opIt->b)
-                {
-                    assert(opIt->c == opIt->d);
-                    uint32_t destroyOp = (1<<opIt->a);
-                    uint32_t createOp = (1<<opIt->c);
-                    uint32_t destroy = iBasisState ^ destroyOp;
-                    bool canDestroy = ((iBasisState & destroyOp) ^ destroyOp) == 0;
-                    if (!canDestroy)
-                        continue;
-                    bool canCreate =  (destroy & createOp) == 0;
-                    if (!canCreate)
-                        continue;
-                    j  = destroy | createOp;
 
-                    sign = (bitwiseDot(iBasisState,-1,opIt->a) & 1);
+                uint32_t destroy = iBasisState ^ opIt->destroy;
+                bool canDestroy = (destroy & opIt->destroy) == 0;
+                if (!canDestroy)
+                    continue;
+                bool canCreate =  (destroy & opIt->create) == 0;
+                if (!canCreate)
+                    continue;
+                j  = destroy | opIt->create;
 
-                    if (bitwiseDot(j,-1,opIt->c) & 1)
-                        sign = !sign;
-                    if (m_isCompressed)
-                        m_compressor->compressIndex(j,j);
-                    if (j == (uint32_t)-1)
-                        continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
-                }
-                else
-                {
-                    assert(opIt->c != opIt->d);
-                    uint32_t destroyOp = ((1<<opIt->a) | (1<<opIt->b));
-                    uint32_t createOp = (1<<opIt->c) | (1<<opIt->d);
-                    uint32_t destroy = iBasisState ^ destroyOp;
-                    bool canDestroy = ((iBasisState & destroyOp) ^ destroyOp) == 0;
-                    if (!canDestroy)
-                        continue;
-                    bool canCreate =  (destroy & createOp) == 0;
-                    if (!canCreate)
-                        continue;
-                    j  = destroy | createOp;
-
-                    sign = (bitwiseDot(iBasisState,-1,opIt->a) & 1);
-                    if ((bitwiseDot(iBasisState,-1,opIt->b) & 1))
-                        sign = !sign;
-
-                    if (bitwiseDot(j,-1,opIt->c) & 1)
-                        sign = !sign;
-                    if ((bitwiseDot(j,-1,opIt->d) & 1))
-                        sign = !sign;
-
-                    if (m_isCompressed)
-                        m_compressor->compressIndex(j,j);
-                    if (j == (uint32_t)-1)
-                        continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
-                }
+                sign = __builtin_popcount(iBasisState & opIt->signBitMask) & 1;
+                if (m_isCompressed)
+                    m_compressor->compressIndex(j,j);
+                if (j == (uint32_t)-1)
+                    continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
                 // for (long i = 0; i < numberOfRows; i++)
                 // {//down

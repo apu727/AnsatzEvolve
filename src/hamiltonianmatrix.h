@@ -10,10 +10,13 @@ class HamiltonianMatrix
 public:
     struct excOp
     {
-        uint8_t a; //create
-        uint8_t b; //create
-        uint8_t c; //destroy
-        uint8_t d; //destroy
+        // uint8_t a; //create
+        // uint8_t b; //create
+        // uint8_t c; //destroy
+        // uint8_t d; //destroy
+        uint32_t create;
+        uint32_t destroy;
+        uint32_t signBitMask;
     };
 private:
 
