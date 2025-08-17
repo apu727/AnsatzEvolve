@@ -3,21 +3,22 @@
 
 #include "linalg.h"
 #include <Eigen/Sparse>
+struct excOp
+{
+    // uint8_t a; //create
+    // uint8_t b; //create
+    // uint8_t c; //destroy
+    // uint8_t d; //destroy
+    uint32_t create;
+    uint32_t destroy;
+    uint32_t signBitMask;
+};
 
 template <typename dataType,typename vectorType>
 class HamiltonianMatrix
 {
 public:
-    struct excOp
-    {
-        // uint8_t a; //create
-        // uint8_t b; //create
-        // uint8_t c; //destroy
-        // uint8_t d; //destroy
-        uint32_t create;
-        uint32_t destroy;
-        uint32_t signBitMask;
-    };
+
 private:
 
     static constexpr size_t maxSizeForFullConstruction = 1000000000; // Doesnt fully construct if there are more qubits than this, Currently 1GB
@@ -28,6 +29,7 @@ private:
     std::vector<excOp> m_operators;
     std::vector<dataType> m_vals;
     void constructFromSecQuant();
+    void postProcessOperators();
 
     std::shared_ptr<compressor> m_compressor = nullptr;
     bool m_isCompressed = false;
@@ -41,11 +43,15 @@ public:
     void apply(const Eigen::Matrix<vectorType,-1,-1,Eigen::ColMajor> &src,
                Eigen::Matrix<vectorType,-1,-1,Eigen::ColMajor> &dest) const;
 
+    void apply(const Eigen::Map<const Eigen::Matrix<vectorType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> &src,
+               Eigen::Map<Eigen::Matrix<vectorType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> &dest) const;
+
     void apply(const Eigen::Map<const Eigen::Matrix<vectorType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> &src,
                Eigen::Map<Eigen::Matrix<vectorType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> &dest,
                const Eigen::SparseMatrix<realNumType, Eigen::RowMajor>* compress = nullptr) const;
 
     //utility
+
     vector<vectorType> apply(const vector<vectorType> &src) const;
     vector<vectorType>& apply(const vector<vectorType> &src, vector<vectorType>& dest) const;
     bool ok()const {return m_isFullyConstructed || m_isSecQuantConstructed;}

@@ -73,13 +73,19 @@ public:
         }
     }
     virtual void dummyImplement(){}
+    virtual bool opDoesSomething(excOp&){return true;} // Always true for now. All operators are particle conserving
 };
 
 class SZAndnumberOperatorCompressor : public compressor
 {
+    uint32_t m_numberOfQubits;
+    uint32_t m_qubitBitMask;
+    uint32_t m_spinUpBitMask;
+    uint32_t m_spinDownBitMask;
 public:
     SZAndnumberOperatorCompressor(uint32_t stateVectorSize, uint32_t spinUp, uint32_t spinDown);
     virtual void dummyImplement(){}
+    virtual bool opDoesSomething(excOp&);
 };
 
 class stateRotate : public operatorPool

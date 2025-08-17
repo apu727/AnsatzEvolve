@@ -55,16 +55,19 @@ inline bool s_loadMatrix(Eigen::SparseMatrix<dataType, Eigen::ColMajor>& destMat
             comp->compressIndex(compi,compi);
             comp->compressIndex(compj,compj);
         }
-        if constexpr (std::is_same_v<dataType,typename Eigen::NumTraits<dataType>::Real>)
-            tripletList.push_back(Eigen::Triplet<dataType>(compi,compj,coeffReal));
-        else
-            tripletList.push_back(Eigen::Triplet<dataType>(compi,compj,dataType(coeffReal,coeffImag)));
-
+        if (compi != (uint32_t)-1 && compj != (uint32_t)-1)
+        {
+            if constexpr (std::is_same_v<dataType,typename Eigen::NumTraits<dataType>::Real>)
+                tripletList.push_back(Eigen::Triplet<dataType>(compi,compj,coeffReal));
+            else
+                tripletList.push_back(Eigen::Triplet<dataType>(compi,compj,dataType(coeffReal,coeffImag)));
+        }
         ret = fscanf(fpCoeff, realNumTypeCode ", " realNumTypeCode " \n", &coeffReal, &coeffImag);
         ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
     }
     destMat.resize(linearSize,linearSize);
     destMat.setFromTriplets(tripletList.begin(),tripletList.end());
+    logger().log("Full sparse size", tripletList.size());
     fclose(fpIndex);
     fclose(fpCoeff);
     return 1;
@@ -104,8 +107,9 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
     }
     FILE *fptwoEInts;
     fptwoEInts = fopen((filePath+"_twoEInts.bin").c_str(), "rb");
-    if(!fponeEInts)
+    if(!fptwoEInts)
     {
+        fclose(fponeEInts);
         fprintf(stderr,"\nError in opening file.");
         fprintf(stderr,"fileGiven: %s\n",(filePath + +"_twoEInts.bin").c_str());
         return 0;
@@ -273,7 +277,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
     if (comp)
     {
         compressedSize = comp->getCompressedSize();
-        logger().log("MatrixCompressedSize",compressedSize);
+        logger().log("Matrix linear Size",compressedSize);
     }
     else
     {
@@ -390,8 +394,8 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
     return true;
 }
 
-template<typename dataType,typename vectorType>
-bool s_loadOneAndTwoElectronsIntegrals(std::vector<typename HamiltonianMatrix<dataType,vectorType>::excOp>& operators,
+template<typename dataType>
+bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
                                        std::vector<dataType>& vals,const std::string& filePath, const size_t numberOfQubits)
 {
     FILE *fponeEInts;
@@ -460,122 +464,6 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<typename HamiltonianMatrix<da
         return Energy;
     };
 
-    auto getFockMatrixElem = [&getTwoElectronEnergy,&oneEInts,numberOfQubits]
-        (std::pair<size_t,bool> (&idxs)[4], size_t jBasisState)
-    {
-        assert(idxs[0] != idxs[2]);
-        size_t trueIdx0 = idxs[0].first + (idxs[0].second ? numberOfQubits/2 : 0);
-        size_t trueIdx2 = idxs[2].first + (idxs[2].second ? numberOfQubits/2 : 0);
-        realNumType Energy = 0;
-        Energy += oneEInts(idxs[0].first,idxs[2].first);
-        for (size_t k = 0; k < numberOfQubits; k++)
-        {
-            std::pair kIdx = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-            if (jBasisState & (1<<k))
-            {
-                if (k != trueIdx0 && k != trueIdx2)
-                    Energy += getTwoElectronEnergy({idxs[0],kIdx,idxs[2],kIdx});
-            }
-        }
-        return Energy;
-    };
-
-    auto getEnergy = [numberOfQubits,&oneEInts,&getTwoElectronEnergy](size_t jBasisState)
-    {
-        realNumType Energy = 0;
-        for (size_t k = 0; k < numberOfQubits; k++)
-        {
-            if (!(jBasisState & (1<<k)))
-                continue;
-            std::pair kIdx = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-            //h_ii
-            Energy += oneEInts(kIdx.first,kIdx.first);
-
-            for (size_t l = k+1; l < numberOfQubits; l++)
-            {
-                if (!(jBasisState & (1<<l)))
-                    continue;
-                std::pair lIdx = {l % (numberOfQubits/2),l >= (numberOfQubits/2)};
-                Energy += getTwoElectronEnergy({kIdx,lIdx,kIdx,lIdx});
-            }
-        }
-        return Energy;
-    };
-
-    auto getElement = [numberOfQubits,&getEnergy,&getTwoElectronEnergy,getFockMatrixElem,&oneEInts](uint32_t iBasisState, uint32_t jBasisState, bool onlyTwoElectron)
-    {
-        std::pair<size_t,bool> idxs[4];// a^\dagger a^\dagger a a
-        int8_t annihilatePos = 2;
-        int8_t createPos = 0;
-        bool eveniElecSoFar = 0;
-        bool evenjElecSoFar = 0;
-
-        bool sign = true; //True => positive
-        realNumType Energy = 0;
-
-        for (size_t k = 0; k < numberOfQubits; k++)
-        {
-            bool isSet = false;
-            bool jsSet = false;
-            if (iBasisState & (1<< k))
-            {
-                isSet = true;
-                eveniElecSoFar = !eveniElecSoFar;
-            }
-            if (jBasisState & (1<<k))
-            {
-                jsSet = true;
-                evenjElecSoFar = !evenjElecSoFar;
-            }
-            // if (isSet == jsSet)
-            //     continue;
-            if (isSet)
-            {
-                if (createPos > 1)
-                    __builtin_trap();
-                idxs[createPos++] = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-                if (eveniElecSoFar)
-                    sign = !sign;
-            }
-            if (jsSet)
-            {
-                if (annihilatePos > 3)
-                    __builtin_trap();
-                idxs[annihilatePos++] = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-                if (evenjElecSoFar)
-                    sign = !sign;
-            }
-        }
-
-        // if(annihilatePos == 2 && createPos == 0)
-        // {
-        //     Energy = getEnergy(jBasisState);
-        // }
-        // else if (annihilatePos == 3 && createPos == 1)
-        // {
-        //     Energy = (sign ? 1 : -1)*getFockMatrixElem(idxs,jBasisState);
-        // }
-        // else if (annihilatePos == 4 && createPos == 2)
-        // {
-        //     Energy = (sign ? 1 : -1)*getTwoElectronEnergy(idxs);
-        // }
-        // else
-        // {
-        //     logger().log("Not handled case construct Ham");
-        //     __builtin_trap();
-        // }
-        if (onlyTwoElectron)
-        {
-            Energy = (sign ? 1 : -1)*getTwoElectronEnergy(idxs);
-        }
-        if (!onlyTwoElectron)
-        {
-           Energy = oneEInts(idxs[0].first,idxs[2].first);
-        }
-        return Energy;
-    };
-
-
     operators.clear();
     vals.clear();
 
@@ -587,20 +475,20 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<typename HamiltonianMatrix<da
     auto start = std::chrono::high_resolution_clock::now();
 
 
-    constexpr double tol = 0;
+    constexpr double tol = 1e-13;
     assert(numberOfQubits < 32);
     for (std::uint_fast8_t a = 0; a < numberOfQubits; a++) //create
     {
         for (std::uint_fast8_t b = a+1; b < numberOfQubits; b++) //create
         {
-            uint32_t iBasisState = (1<<a) | (1<<b);
+            // uint32_t iBasisState = (1<<a) | (1<<b);
             for (std::uint_fast8_t c = 0; c < numberOfQubits; c++) //annihilate
             {
                 for (std::uint_fast8_t d = c+1; d < numberOfQubits; d++) //annihilate
                 {
                     //Note we include the permutation abcd,abdc, bacd, badc as the same thing. This is guaranteed by a < b, c < d
 
-                    uint32_t jBasisState = (1<<c) | (1<<d);
+                    // uint32_t jBasisState = (1<<c) | (1<<d);
 
                     // realNumType Energy = getElement(iBasisState,jBasisState); //TODO optimise since we know these are
                     std::pair<size_t,bool> idxs[4];
@@ -613,8 +501,6 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<typename HamiltonianMatrix<da
                     //The factor of two goes due to pqrs = qpsr. Exchange takes care of the pqrs->pqsr perm
 
                     double Energy = getTwoElectronEnergy(idxs); // Both fock and exchange
-                    double Energy2 = getElement(iBasisState,jBasisState,true);
-                    assert(Energy == Energy2);
                     if (abs(Energy) > tol)//TODO threshold
                     {
                         // operators.push_back({a,b,c,d});
@@ -632,14 +518,12 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<typename HamiltonianMatrix<da
 
     for (std::uint_fast8_t a = 0; a < numberOfQubits; a++)
     {
-         uint32_t iBasisState = (1<<a);
+         // uint32_t iBasisState = (1<<a);
         for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
         {
-            uint32_t jBasisState = (1<<c);
+            // uint32_t jBasisState = (1<<c);
 
             realNumType Energy = oneEInts(a % (numberOfQubits/2), c % (numberOfQubits/2));
-            double Energy2 = getElement(iBasisState,jBasisState,false);
-            assert(Energy == Energy2);
             if (abs(Energy) > tol)//TODO threshold
             {
                 // operators.push_back({a,a,c,c});
@@ -712,6 +596,31 @@ void HamiltonianMatrix<dataType, vectorType>::constructFromSecQuant()
 }
 
 template<typename dataType, typename vectorType>
+void HamiltonianMatrix<dataType, vectorType>::postProcessOperators()
+{
+    size_t opSize = m_operators.size();
+    std::vector<excOp> newOps;
+    std::vector<dataType> newVals;
+    logger().log("Ops before",opSize);
+    newOps.reserve(opSize);
+    newVals.reserve(opSize);
+
+    for (size_t i = 0; i < opSize; i++)
+    {
+        if (m_compressor->opDoesSomething(m_operators[i]))
+        {
+            newOps.push_back(m_operators[i]);
+            newVals.push_back(m_vals[i]);
+        }
+    }
+    logger().log("Ops after", newOps.size());
+    newOps.shrink_to_fit();
+    newVals.shrink_to_fit();
+    m_operators = std::move(newOps);
+    m_vals = std::move(newVals);
+}
+
+template<typename dataType, typename vectorType>
 HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::vector<dataType> &value, const std::vector<int> &iIndex, const std::vector<int> &jIndex)
 {
     assert(value.size() == iIndex.size() && value.size() == jIndex.size());
@@ -739,6 +648,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
     {
         m_linearSize = 1<<numberOfQubits;
     }
+    logger().log("Matrix linear size",m_linearSize);
     bool success  = s_loadMatrix(m_fullyConstructedMatrix,filePath,comp,m_linearSize);
     if (success)
     {
@@ -747,7 +657,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
         return;
     }
 
-    success = s_loadOneAndTwoElectronsIntegrals<dataType,vectorType>(m_operators,m_vals,filePath,numberOfQubits);
+    success = s_loadOneAndTwoElectronsIntegrals<dataType>(m_operators,m_vals,filePath,numberOfQubits);
     m_isSecQuantConstructed = success;
     size_t sizeEstimate = 0.3*choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2)*(1<<numberOfQubits);
     if (comp)
@@ -755,7 +665,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
         sizeEstimate = 0.3*comp->getCompressedSize() * choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2);
         //This is an overestimate but we can always add more complicated estimate functions later
     }
-    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction && false)
+    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction)
     {
         //Construct Fully
         logger().log("Constructing fully, size estimate", sizeEstimate);
@@ -763,8 +673,9 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
         m_isFullyConstructed = true;
         s_loadOneAndTwoElectronsIntegrals_Check(m_fullyConstructedMatrix,filePath,numberOfQubits,m_compressor);
     }
-    else
+    else if (m_isSecQuantConstructed)
     {
+        postProcessOperators();
         logger().log("Loaded secQuant, size estimate", sizeEstimate);
     }
     if (!success)
@@ -772,13 +683,164 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
 }
 
 template<typename dataType, typename vectorType>
-void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorType, -1, -1, Eigen::ColMajor> &src, Eigen::Matrix<vectorType, -1, -1, Eigen::ColMajor> &dest) const
+void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorType,-1, -1, Eigen::ColMajor> &src,
+                                                    Eigen::Matrix<vectorType, -1, -1, Eigen::ColMajor> &dest) const
 {
     //The witchcraft and wizadry
-    if (m_isFullyConstructed)
+    constexpr bool EigenMultiply = true;
+    if (m_isFullyConstructed && EigenMultiply)
     {
         dest.noalias() = src*m_fullyConstructedMatrix;
         return;
+    }
+    else if (m_isFullyConstructed && !EigenMultiply)
+    {
+        //D_{ij} = src_{ik} H_{kj}
+        long numberOfCols = src.cols();
+        long numberOfRows = src.rows();
+        dest.resize(numberOfRows,numberOfCols);
+        dest.setZero();
+        threadpool& pool = threadpool::getInstance(NUM_CORES);
+        long stepSize = std::min(numberOfCols/NUM_CORES,1ul);
+        std::vector<std::future<void>> futs;
+        for (long startj = 0; startj < numberOfCols; startj+= stepSize)
+        {
+            long endj = std::min(startj + stepSize,numberOfCols);
+            futs.push_back(pool.queueWork([this,&src,&dest,startj,endj,numberOfRows](){
+                for (long j = startj; j < endj; j++)
+                {
+                    //k axis
+                    for (typename Eigen::SparseMatrix<dataType, Eigen::ColMajor>::InnerIterator it(m_fullyConstructedMatrix,j); it; ++it)
+                    {
+                        // dest.col(j) += src.col(it.row())*it.value();
+#pragma GCC unroll 8
+#pragma GCC ivdep
+                        for (long i = 0; i < numberOfRows; i++)
+                        {
+                            dest(i,j) += src(i,it.row()) * it.value();
+                        }
+                    }
+                }}));
+        }
+        for (auto& f : futs)
+            f.wait();
+
+    }
+    else if (m_isSecQuantConstructed)
+    {
+        //Need to go over the operators and apply them to the basisState one by one;
+        //For now no unrolling and no SIMD
+
+        long numberOfCols = src.cols();
+        long numberOfRows = src.rows();
+        dest.resize(numberOfRows,numberOfCols);
+        dest.setZero();
+        assert(m_compressor->getCompressedSize() == (size_t)numberOfCols);
+
+        //Ready
+        // T_{ik} H_{kj}
+        threadpool& pool = threadpool::getInstance(NUM_CORES);
+        long stepSize = std::min(numberOfCols/NUM_CORES,1ul);
+        std::vector<std::future<void>> futs;
+        for (long startj = 0; startj < numberOfCols; startj+= stepSize)
+        {
+            long endj = std::min(startj + stepSize,numberOfCols);
+            futs.push_back(pool.queueWork([this,&src,&dest,startj,endj,numberOfRows](){
+                for (long j = startj; j < endj; j++)
+                {//across
+                    uint32_t jBasisState = j;
+                    if (m_isCompressed)
+                        m_compressor->deCompressIndex(jBasisState,jBasisState);
+
+                    auto opIt = m_operators.cbegin();
+                    auto valIt = m_vals.cbegin();
+                    const auto valItEnd = m_vals.cend();
+                    //The j loop
+                    for (;valIt != valItEnd; ++valIt,++opIt)
+                    {
+                        uint32_t i;
+                        bool sign;
+
+                        uint32_t destroy = jBasisState ^ opIt->destroy;
+                        bool canDestroy = (destroy & opIt->destroy) == 0;
+                        if (!canDestroy)
+                            continue;
+                        bool canCreate =  (destroy & opIt->create) == 0;
+                        if (!canCreate)
+                            continue;
+                        i  = destroy | opIt->create;
+
+                        sign = __builtin_popcount(jBasisState & opIt->signBitMask) & 1;
+                        if (m_isCompressed)
+                            m_compressor->compressIndex(i,i);
+                        if (i == (uint32_t)-1)
+                            continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
+
+                        // for (long i = 0; i < numberOfRows; i++)
+                        // {//down
+                        //     HT_C(i,j) += T_C(i,k) * valIt;
+                        // }
+                        // dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt);
+                        dataType v = (sign ? -1 : 1)* *valIt;
+#pragma GCC unroll 8
+#pragma GCC ivdep
+                        for (long r = 0; r < numberOfRows; r++)
+                        {
+                            dest(r,j) += src(r,i) * v;
+                        }
+                    }
+                }
+            }));
+        }
+        for (auto& f : futs)
+            f.wait();
+        return;
+    }
+    else
+    {
+        logger().log("Hamiltonian is in error state");
+        __builtin_trap();
+    }
+}
+
+template<typename dataType, typename vectorType>
+void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>, Eigen::Aligned32> &src,
+                                                    Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>, Eigen::Aligned32> &dest) const
+{//This is a copy paste from above. TODO work with Dense base?
+    //The witchcraft and wizadry
+    constexpr bool EigenMultiply = true;
+    if (m_isFullyConstructed && EigenMultiply)
+    {
+        dest.noalias() = src*m_fullyConstructedMatrix;
+        return;
+    }
+    else if (m_isFullyConstructed && !EigenMultiply)
+    {
+        //D_{ij} = src_{ik} H_{kj}
+        long numberOfCols = src.cols();
+        assert(dest.cols() == numberOfCols);
+        dest.setZero();
+        threadpool& pool = threadpool::getInstance(NUM_CORES);
+        long stepSize = std::min(numberOfCols/NUM_CORES,1ul);
+        std::vector<std::future<void>> futs;
+        for (long startj = 0; startj < numberOfCols; startj+= stepSize)
+        {
+            long endj = std::min(startj + stepSize,numberOfCols);
+            futs.push_back(pool.queueWork([this,&src,&dest,startj,endj](){
+                for (long j = startj; j < endj; j++)
+                {
+                    //k axis
+                    for (typename Eigen::SparseMatrix<dataType, Eigen::ColMajor>::InnerIterator it(m_fullyConstructedMatrix,j); it; ++it)
+                    {
+                        // dest.col(j) += src.col(it.row())*it.value();
+                        dest(0,j) += src(0,it.row()) * it.value();
+
+                    }
+                }}));
+        }
+        for (auto& f : futs)
+            f.wait();
+
     }
     else if (m_isSecQuantConstructed)
     {
@@ -800,44 +862,50 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
         {
             long endj = std::min(startj + stepSize,numberOfCols);
             futs.push_back(pool.queueWork([this,&src,&dest,startj,endj](){
-        for (long j = startj; j < endj; j++)
-        {//across
-            uint32_t jBasisState = j;
-            if (m_isCompressed)
-                m_compressor->deCompressIndex(jBasisState,jBasisState);
+                for (long j = startj; j < endj; j++)
+                {//across
+                    uint32_t jBasisState = j;
+                    if (m_isCompressed)
+                        m_compressor->deCompressIndex(jBasisState,jBasisState);
 
-            auto opIt = m_operators.cbegin();
-            auto valIt = m_vals.cbegin();
-            const auto valItEnd = m_vals.cend();
-            //The j loop
-            for (;valIt != valItEnd; ++valIt,++opIt)
-            {
-                uint32_t i;
-                bool sign;
+                    auto opIt = m_operators.cbegin();
+                    auto valIt = m_vals.cbegin();
+                    const auto valItEnd = m_vals.cend();
+                    //The j loop
+                    for (;valIt != valItEnd; ++valIt,++opIt)
+                    {
+                        uint32_t i;
+                        bool sign;
 
-                uint32_t destroy = jBasisState ^ opIt->destroy;
-                bool canDestroy = (destroy & opIt->destroy) == 0;
-                if (!canDestroy)
-                    continue;
-                bool canCreate =  (destroy & opIt->create) == 0;
-                if (!canCreate)
-                    continue;
-                i  = destroy | opIt->create;
+                        uint32_t destroy = jBasisState ^ opIt->destroy;
+                        bool canDestroy = (destroy & opIt->destroy) == 0;
+                        if (!canDestroy)
+                            continue;
+                        bool canCreate =  (destroy & opIt->create) == 0;
+                        if (!canCreate)
+                            continue;
+                        i  = destroy | opIt->create;
 
-                sign = __builtin_popcount(jBasisState & opIt->signBitMask) & 1;
-                if (m_isCompressed)
-                    m_compressor->compressIndex(i,i);
-                if (i == (uint32_t)-1)
-                    continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
+                        sign = __builtin_popcount(jBasisState & opIt->signBitMask) & 1;
+                        if (m_isCompressed)
+                            m_compressor->compressIndex(i,i);
+                        if (i == (uint32_t)-1)
+                            continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
-                // for (long i = 0; i < numberOfRows; i++)
-                // {//down
-                //     HT_C(i,j) += T_C(i,k) * valIt;
-                // }
-                dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt); // Should be nicely SIMD but eigen may betray me for small vectors
-            }
-        }
-        }));
+                        // for (long i = 0; i < numberOfRows; i++)
+                        // {//down
+                        //     HT_C(i,j) += T_C(i,k) * valIt;
+                        // }
+                        // dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt);
+                        dataType v = (sign ? -1 : 1)* *valIt;
+                        if (i == 10 && j == 10 && v == 0)
+                            logger().log("Now");
+
+                        dest(0,j) += src(0,i) * v;
+
+                    }
+                }
+            }));
         }
         for (auto& f : futs)
             f.wait();
@@ -849,6 +917,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
         __builtin_trap();
     }
 }
+
 
 
 
@@ -864,6 +933,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
     {
         srcC = src;
         T_C.noalias() = *compress * srcC;
+
     }
     else
         T_C = src;
@@ -883,8 +953,8 @@ vector<vectorType> & HamiltonianMatrix<dataType, vectorType>::apply(const vector
     }
 
     dest.resize(src.size(),m_isCompressed,m_compressor);
-    Eigen::Map<const Eigen::Matrix<vectorType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> srcMap(&src[0],1,src.size());
-    Eigen::Map<Eigen::Matrix<vectorType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> retMap(&dest[0],1,dest.size());
+    Eigen::Map<const Eigen::Matrix<vectorType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> srcMap(&src[0],1,src.size());
+    Eigen::Map<Eigen::Matrix<vectorType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> retMap(&dest[0],1,dest.size());
     apply(srcMap,retMap);
     return dest;
 }
@@ -897,8 +967,8 @@ vector<vectorType> HamiltonianMatrix<dataType, vectorType>::apply(const vector<v
     }
     vector<numType> ret;
     ret.resize(src.size(),m_isCompressed,m_compressor);
-    Eigen::Map<const Eigen::Matrix<vectorType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> srcMap(&src[0],1,src.size());
-    Eigen::Map<Eigen::Matrix<vectorType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> retMap(&ret[0],1,ret.size());
+    Eigen::Map<const Eigen::Matrix<vectorType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> srcMap(&src[0],1,src.size());
+    Eigen::Map<Eigen::Matrix<vectorType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> retMap(&ret[0],1,ret.size());
     apply(srcMap,retMap);
     return ret;
 }
@@ -917,11 +987,5 @@ template class HamiltonianMatrix<numType,numType>;
 #else
 template class HamiltonianMatrix<numType,numType>;
 #endif
-
-
-
-
-
-
 
 

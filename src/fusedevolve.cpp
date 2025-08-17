@@ -1591,7 +1591,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                                 S[x] = sines[activeRots[x]];
                                 C[x] = cosines[activeRots[x]];
                                 resultArr[x] = result[activeRots[x]+i];
-                                tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
                             }
                             if constexpr(storeTangent)
                                 storeTangents<indexType,8>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/256);
@@ -1608,7 +1608,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                                 S[x] = sines[activeRots[x]];
                                 C[x] = cosines[activeRots[x]];
                                 resultArr[x] = result[activeRots[x]+i];
-                                tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
                             }
                             if constexpr(storeTangent)
                                 storeTangents<indexType,9>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/512);
@@ -1625,7 +1625,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                                 S[x] = sines[activeRots[x]];
                                 C[x] = cosines[activeRots[x]];
                                 resultArr[x] = result[activeRots[x]+i];
-                                tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
                             }
                             if constexpr(storeTangent)
                                 storeTangents<indexType,10>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/1024);
@@ -1642,7 +1642,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                                 S[x] = sines[activeRots[x]];
                                 C[x] = cosines[activeRots[x]];
                                 resultArr[x] = result[activeRots[x]+i];
-                                tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
                             }
                             if constexpr(storeTangent)
                                 storeTangents<indexType,11>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/2048);
@@ -1659,7 +1659,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                                 S[x] = sines[activeRots[x]];
                                 C[x] = cosines[activeRots[x]];
                                 resultArr[x] = result[activeRots[x]+i];
-                                tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
                             }
                             if constexpr(storeTangent)
                                 storeTangents<indexType,12>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/4096);
@@ -1676,7 +1676,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                                 S[x] = sines[activeRots[x]];
                                 C[x] = cosines[activeRots[x]];
                                 resultArr[x] = result[activeRots[x]+i];
-                                tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
                             }
                             if constexpr(storeTangent)
                                 storeTangents<indexType,13>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/8192);
@@ -1693,7 +1693,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                                 S[x] = sines[activeRots[x]];
                                 C[x] = cosines[activeRots[x]];
                                 resultArr[x] = result[activeRots[x]+i];
-                                tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
                             }
                             if constexpr(storeTangent)
                                 storeTangents<indexType,14>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/16384);
@@ -1710,7 +1710,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                                 S[x] = sines[activeRots[x]];
                                 C[x] = cosines[activeRots[x]];
                                 resultArr[x] = result[activeRots[x]+i];
-                                tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
                             }
                             if constexpr(storeTangent)
                                 storeTangents<indexType,15>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/32768);
@@ -2044,6 +2044,10 @@ FusedEvolve::FusedEvolve(const vector<numType> &start, std::shared_ptr<Hamiltoni
     m_Ham = Ham;
     m_lieIsCompressed = m_start.getIsCompressed(m_compressor);
     m_compressMatrix = std::move(compressMatrix);
+    m_compressMatrixPsi.resize(m_compressMatrix.rows()+1,m_compressMatrix.cols()+1);
+    m_compressMatrixPsi.middleRows(0,m_compressMatrix.rows()) = m_compressMatrix.middleRows(0,m_compressMatrix.rows());
+
+    m_compressMatrixPsi.coeffRef(m_compressMatrix.rows(),m_compressMatrix.cols()) = 1;
     m_deCompressMatrix = std::move(deCompressMatrix);
 }
 
@@ -2222,7 +2226,9 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
         }
     }
     deriv*=2;
-
+    Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> gradVector_mu(&deriv[0],deriv.size(),1);
+    Eigen::VectorXd derivCompressed = m_compressMatrix * gradVector_mu;
+    deriv.copyFromBuffer(derivCompressed.data(),derivCompressed.rows());
     // logger().log("dest.dot start deriv", dest.dot(m_start)); // this should be 1
     // logger().log("hpsi.dot start deriv", hPsi.dot(m_start)); // this should be E
     auto endTime = std::chrono::high_resolution_clock::now();
@@ -2320,7 +2326,7 @@ case -N:\
         break;\
 }
 
-void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& deriv,const std::vector<realNumType> &angles, Eigen::Matrix<numType,-1,-1>* TsCopy)
+void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& derivCompressed,const std::vector<realNumType> &angles, Eigen::Matrix<numType,-1,-1>* TsCopy, realNumType* Energy)
 {
     constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
     if (!m_excsCached)
@@ -2334,17 +2340,18 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
 
     //A not memory efficient version.
     vector<numType> hPsi;
-    vector<numType> psi;
+    // vector<numType> psi;
     Matrix<numType> Ts;
     // Matrix<numType> HTs;
-    Ts.resize(angles.size(),m_start.size(),m_lieIsCompressed,m_compressor);
+    Ts.resize(angles.size()+1,m_start.size(),m_lieIsCompressed,m_compressor);
+    //The last one is psi
+    vectorView<Matrix<numType>,Eigen::RowMajor> psi = Ts.getJVectorView(angles.size());
     // HTs.resize(angles.size(),m_start.size(),m_lieIsCompressed,m_compressor);
     psi.copy(m_start);
     hPsi.resize(psi.size(),m_lieIsCompressed,m_compressor,false);
     Eigen::MatrixXd THT;
     Hessian.resize(angles.size(),angles.size());
     Hessian.setZero();
-    deriv.resize(angles.size(),m_lieIsCompressed,m_compressor,false);
 
     //Get the |T>s
     //We could save one evolution by getting psi aswell here
@@ -2484,7 +2491,8 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
         // Eigen::Map<const Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&psi.at(0,0),psi.m_iSize,psi.m_jSize);
         // Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> destMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
         // destMap.noalias() = currentMap*m_HamEm;
-        m_Ham->apply(psi,hPsi);
+
+        // m_Ham->apply(psi,hPsi); // This is now done the same time as the Ts
         //psi no longer needed
     }
     auto time3 = std::chrono::high_resolution_clock::now();
@@ -2492,38 +2500,62 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
     {
         Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> TMap(&Ts.at(0,0),Ts.m_iSize,Ts.m_jSize);
         if (TsCopy)
-            *TsCopy = TMap.transpose();
+        {
+            Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> TMapOnly(&Ts.at(0,0),angles.size(),Ts.m_jSize);
+            *TsCopy = TMapOnly.transpose();
+        }
         // Eigen::Map<Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> HTMap(&HTs.at(0,0),HTs.m_iSize,HTs.m_jSize);
         //For speed need to convert the ordering
         Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> TMapC = TMap;
         Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> T_C;
-        T_C.noalias() = m_compressMatrix * TMapC;
+        T_C.noalias() = m_compressMatrixPsi * TMapC;
 
         Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> HT_C;
         // HT_C.noalias() = T_C*m_HamEm;
         m_Ham->apply(T_C,HT_C);
+        Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> hPsiMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
+        //extract hPsi
+        hPsiMap.noalias() = HT_C.row(HT_C.rows()-1);
 
         //We can now compute the <THT> terms
         // Hessian.triangularView<Eigen::Lower>() += 2*TMap * HT_C.transpose();
         //TODO bithacks
-        THT.noalias() = (2*T_C * HT_C.adjoint()).real();
-        for (long i = 0; i < THT.rows(); i++)
+        //Need to lie to eigen since .topRows is slow so instead we compute the extra overlap. This generates <psi|hpsi>, along with <psi|T> i.e. energy and derivative
+        Eigen::MatrixXd temp;
+        temp.noalias() = (2*T_C * HT_C.adjoint()).real();
+
+        THT.resize(temp.rows()-1,temp.cols()-1);
+        derivCompressed.resize(temp.rows()-1,false,nullptr);
+
+        for (long i = 0; i < temp.rows()-1; i++)
         {
-            for (long j = i; j < THT.cols(); j++)
+            for (long j = i; j < temp.cols()-1; j++)
             {
-                THT(j,i) = THT(i,j);
+                THT(i,j) = temp(i,j);
+                THT(j,i) = temp(i,j);
             }
         }
+        for (long i = 0; i < temp.rows()-1; i++)
+        {
+            derivCompressed[i] = temp(i,temp.cols()-1);
+        }
+        if (Energy)
+            *Energy = temp(temp.rows()-1,temp.cols()-1)/2;
+        assert(THT.rows() == m_compressMatrix.rows() && THT.cols() == m_compressMatrix.rows());
     }
     auto time4 = std::chrono::high_resolution_clock::now();
     //Compute <Psi|H|T> = deriv
-    {
-        Eigen::Map<Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> derivMap(&deriv.at(0,0),deriv.m_iSize,deriv.m_jSize);
+    // {
+    //     Eigen::Map<Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> derivMap(&deriv.at(0,0),deriv.m_iSize,deriv.m_jSize);
 
-        Eigen::Map<const Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> hPsiMap((realNumType*)&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize*(isComplex ? 2 : 1));
-        Eigen::Map<const Eigen::Matrix<realNumType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> TMap((realNumType*)&Ts.at(0,0),Ts.m_iSize,Ts.m_jSize*(isComplex ? 2 : 1));
-        derivMap.noalias() = 2*hPsiMap*TMap.transpose();
-    }
+    //     Eigen::Map<const Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> hPsiMap((realNumType*)&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize*(isComplex ? 2 : 1));
+    //     Eigen::Map<const Eigen::Matrix<realNumType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> TMap((realNumType*)&Ts.at(0,0),angles.size(),Ts.m_jSize*(isComplex ? 2 : 1));
+    //     derivMap.noalias() = 2*hPsiMap*TMap.transpose();
+    //     if (Energy)
+    //     {
+    //         *Energy = std::real(hPsiMap.dot(TMap.row(angles.size())));
+    //     }
+    // }
     auto time5 = std::chrono::high_resolution_clock::now();
     //Remains to do the backwards evolution of |H|Psi> and |T>
     //This is basically the same as evolveDerivative
@@ -2640,7 +2672,12 @@ realNumType FusedEvolve::getEnergy(const vector<numType> &psi)
 
     // Eigen::Map<const Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&psi.at(0,0),psi.m_iSize,psi.m_jSize);
     // Eigen::Matrix<numType,1,-1,Eigen::RowMajor> hPsi;
+    auto start = std::chrono::high_resolution_clock::now();
     vector<numType> hPsi;
     // hPsi.noalias() = currentMap*m_HamEm;
-    return m_Ham->apply(psi,hPsi).dot(psi);
+    realNumType E =  m_Ham->apply(psi,hPsi).dot(psi);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+    logger().log("FusedEvolve Energy Time taken 1 (ms)",duration);
+    return E;
 }

@@ -54,6 +54,7 @@ class FusedEvolve
     std::shared_ptr<compressor> m_compressor;
 
     Eigen::SparseMatrix<realNumType, Eigen::RowMajor> m_compressMatrix; //Stores equivalent parameters
+    Eigen::SparseMatrix<realNumType, Eigen::RowMajor> m_compressMatrixPsi; //Stores equivalent parameters and also an extra row for psi to calculate hpsi easily
     Eigen::SparseMatrix<realNumType, Eigen::RowMajor> m_deCompressMatrix; //Stores equivalent parameters
 
 public:
@@ -64,7 +65,7 @@ public:
     void evolve(vector<numType>& dest, const std::vector<realNumType>& angles, vector<numType>* specifiedStart  = nullptr);
     //finalVector is the result of an evolve operation. Since we dont cache the angles this is up to the user to provide correctly.
     void evolveDerivative(const vector<numType>& finalVector,vector<realNumType>& deriv,const std::vector<realNumType>& angles);
-    void evolveHessian(Eigen::MatrixXd& Hessian,vector<realNumType>& deriv,const std::vector<realNumType>& angles, Eigen::Matrix<numType,-1,-1>* Ts = nullptr);
+    void evolveHessian(Eigen::MatrixXd& Hessian,vector<realNumType>& derivCompressed,const std::vector<realNumType>& angles, Eigen::Matrix<numType,-1,-1>* Ts = nullptr, realNumType* Energy = nullptr);
     realNumType getEnergy(const vector<numType> &psi);
 };
 

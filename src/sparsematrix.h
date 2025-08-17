@@ -6,6 +6,7 @@
 #ifndef SPARSEMATRIX_H
 #define SPARSEMATRIX_H
 #include "globals.h"
+#include "hamiltonianmatrix.h"
 #include "linalg.h"
 
 #include <Eigen/Sparse>
@@ -123,6 +124,7 @@ public:
     size_t getCompressedSize(){return decompressPerm.size();}
     size_t getUnCompressedSize(){return compressPerm.size();}
     virtual void dummyImplement() = 0; // To make this an abstract base class. Derived class needs to implement the construction of compressPerm and decompressPerm
+    virtual bool opDoesSomething(excOp& op) = 0;
 };
 template<typename vectorType>
 inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,std::string filePath);

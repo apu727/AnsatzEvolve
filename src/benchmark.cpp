@@ -2710,7 +2710,7 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, std
     startTime = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 1; i++)
     {
-    FE.evolveHessian(HessianFound,derivFound,angles);
+    FE.evolveHessian(HessianFound,derivFound,angles); //TODO this is now the compressed derivative.
     }
     endTime = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();

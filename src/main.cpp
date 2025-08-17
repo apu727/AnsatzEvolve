@@ -196,7 +196,7 @@ int main(int argc, char *argv[])
     // return 0;
 
     //TODO command line switches
-    bool optimise = false;
+    bool optimise = true;
     bool subspaceDiag = false;
     bool writeProperties = true;
     bool generatePathsForSubspace = false;

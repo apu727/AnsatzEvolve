@@ -160,8 +160,9 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
     }
     FILE *fptwoEInts;
     fptwoEInts = fopen((filePath+"_twoEInts.bin").c_str(), "rb");
-    if(!fponeEInts)
+    if(!fptwoEInts)
     {
+        fclose(fponeEInts);
         fprintf(stderr,"\nError in opening file.");
         fprintf(stderr,"fileGiven: %s\n",(filePath + +"_twoEInts.bin").c_str());
         return 0;

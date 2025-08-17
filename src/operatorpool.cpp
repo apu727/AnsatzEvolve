@@ -203,7 +203,9 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint32_t stateVecto
     }
     assert(numberOfQubits %2 == 0);
     assert(numberOfQubits < 32);
-
+    m_numberOfQubits = numberOfQubits;
+    m_spinUpBitMask = (1<<(numberOfQubits/2))-1;
+    m_spinDownBitMask = ((1<<(numberOfQubits))-1) ^ m_spinUpBitMask;
 
     compressPerm.resize(stateVectorSize);
     uint32_t activeCount = 0;
@@ -223,4 +225,15 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint32_t stateVecto
             compressPerm[i] = -1;
         }
     }
+}
+
+bool SZAndnumberOperatorCompressor::opDoesSomething(excOp &e)
+{
+    int spinUpCreate = __builtin_popcount(e.create & m_spinUpBitMask);
+    int spinDownCreate = __builtin_popcount(e.create & m_spinDownBitMask);
+
+    int spinUpDestroy = __builtin_popcount(e.destroy & m_spinUpBitMask);
+    int spinDownDestroy = __builtin_popcount(e.destroy & m_spinDownBitMask);
+    return (spinUpCreate == spinUpDestroy) && (spinDownCreate == spinDownDestroy);
+
 }

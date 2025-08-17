@@ -279,7 +279,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         Matrix<numType>::EigenMatrix derivTangentSpaceEM;
         if (useFusedEvolve)
         {
-            FE->evolveHessian(Hmunu,gradVectorCalc,anglesV,&derivTangentSpaceEM);
+            FE->evolveHessian(Hmunu,gradVectorCalc,anglesV,&derivTangentSpaceEM,&Energies[rpIndex]);
             vector<realNumType> gradVectorCalc2;
             FE->evolveDerivative(dest,gradVectorCalc2,anglesV);
             logger().log("1.1",(gradVectorCalc.dot(gradVectorCalc)));
@@ -299,7 +299,11 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         Matrix<numType>::EigenMatrix derivTangentSpaceEMCondensed =  derivTangentSpaceEM * m_compressMatrix.transpose();
         Matrix<numType>::EigenMatrix metricTensor = (derivTangentSpaceEMCondensed.adjoint() * derivTangentSpaceEMCondensed).real();
 
-        vector<realNumType>::EigenVector gradVector = m_compressMatrix * (vector<realNumType>::EigenVector)gradVectorCalc;
+        vector<realNumType>::EigenVector gradVector;
+        if (!useFusedEvolve)
+            gradVector = m_compressMatrix * (vector<realNumType>::EigenVector)gradVectorCalc;
+        else
+            gradVector = gradVectorCalc;
 
 
         writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Hessian",Hmunu);
@@ -322,7 +326,8 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
         // Energies[rpIndex] = m_Ham.braket(dest, dest, &temp);
         // logger().log("Mag2",dest.dot(dest));
-        Energies[rpIndex] = m_Ham->apply(dest,temp).dot(dest);
+        if (!useFusedEvolve)
+            Energies[rpIndex] = m_Ham->apply(dest,temp).dot(dest);
 
         {
             vector<realNumType> r = dest.real();
@@ -437,7 +442,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    if (m_Ham->rows() < 20000 && false)
+    if (m_Ham->rows() < 100000)
     {
         fprintf(stderr,"Finding lowest EigenValue\n");
         vector<numType> start;
@@ -450,7 +455,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
             m_Ham->apply(start,next);
             // fprintf(stderr,"NExtNorm: %lg\n", next.norm());
             next.normalize();
-            // fprintf(stderr,"error: %lg\n", (next+start).norm());
+            fprintf(stderr,"error: %lg\n", abs(next.dot(start) + 1));
         }
         fprintf(stderr, "Largest E Value,%.16lg",(m_Ham->apply(next).dot(next)));
 
@@ -603,17 +608,19 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         // vector<realNumType>::EigenVector gradVector_i = m_deCompressMatrix * gradVector_mu;
 
         vector<realNumType> gradVectorCalc;
+        realNumType Energy;
         // Matrix<realNumType>::EigenMatrix Hij;
         Matrix<realNumType>::EigenMatrix Hmunu;
         // myAnsatz->getHessianAndDerivative(&m_Ham,Hmunu,gradVectorCalc,&m_compressMatrix);
-        myAnsatz->evolveHessian(Hmunu,gradVectorCalc,angles);
+        myAnsatz->evolveHessian(Hmunu,gradVectorCalc,angles,nullptr,&Energy);
         HessianEvals++;
-        Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> gradVectorCalcEm(&gradVectorCalc[0],gradVectorCalc.size(),1);
-
-        vector<realNumType>::EigenVector gradVector_mu = m_compressMatrix * gradVectorCalcEm;
-        // realNumType Energy = (destEM.adjoint() * HamEm * destEM).real()(0,0);
-        realNumType Energy = myAnsatz->getEnergy(dest);//m_Ham.braket(dest,dest,&temp);
         EnergyEvals++;
+        Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> gradVector_mu(&gradVectorCalc[0],gradVectorCalc.size(),1);
+
+        // vector<realNumType>::EigenVector gradVector_mu = m_compressMatrix * gradVectorCalcEm;
+        // realNumType Energy = (destEM.adjoint() * HamEm * destEM).real()(0,0);
+        // realNumType Energy = myAnsatz->getEnergy(dest);//m_Ham.braket(dest,dest,&temp);
+
 
         /* some notation:
              * quantities in `compressed' notation after taking into account which angles are equivalent are denoted by the greek subscripts \mu \nu
@@ -1378,7 +1385,7 @@ realNumType TUPSQuantities::OptimiseTups(FusedEvolve& FE, std::vector<baseAnsatz
         vector<realNumType> gradVector;
         FE.evolveDerivative(dest,gradVector,anglesV);
         vector<realNumType>::EigenVector gradVectorEm  = gradVector;
-        gradVectorEm = m_compressMatrix * gradVectorEm;
+        // gradVectorEm = m_compressMatrix * gradVectorEm;
 
         normOfGradVector = gradVectorEm.norm();
         Energy = m_Ham->apply(dest).dot(dest);
