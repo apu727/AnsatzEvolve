@@ -21,7 +21,9 @@ endif()
 # set(CMAKE_VERBOSE_MAKEFILE on)
 # include(GNUInstallDirs)
 include_directories(./third-party/eigen-3.4.0)
-
+if (COMPLEX_MODE)
+    add_compile_definitions(useComplex)
+endif()
 
 #Core library
 add_library(cppAnsatzSynthLib STATIC

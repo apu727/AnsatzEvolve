@@ -4,7 +4,7 @@ program myfortran
 
     ! --- Put use statements here
     !
-    use iso_c_binding, only: c_int, c_ptr, c_double
+    use iso_c_binding, only: c_int, c_ptr, c_double, c_double_complex
     use AnsatzSynthInterface
 
     implicit none
@@ -36,6 +36,7 @@ program myfortran
     real(c_double),dimension(9,9) :: hessian
 
     real(c_double),dimension(256) :: state
+    complex(c_double_complex),dimension(256) :: stateComplex
 
 !    call setTraceInterfaceCalls(1)
     ctx = init()
@@ -127,6 +128,100 @@ program myfortran
 
     status =  cleanup(ctx)
     call checkStatus(status)
+
+#ifdef useComplex
+    print *, "#####################Now doing the same in complex mode"
+    ctx = init()
+
+    ! Setup inital state
+
+    initialIIndexes(1) = 171
+    initialCoeffs(1) = 1.0
+    status = setInitialStateComplex(8,size(initialIIndexes),initialIIndexes,CMPLX(initialCoeffs,0_dp,C_DOUBLE_COMPLEX),ctx)
+    call checkStatus(status)
+
+    ! Setup Hamiltonian
+
+    status = setHamiltonian(size(HamiIndexes),HamiIndexes,HamjIndexes,HamCoeffs,ctx)
+    call checkStatus(status)
+
+    ! set operators
+
+    status = setExcitation(15,operators,order,ctx)
+    call checkStatus(status)
+
+    !Setup is now complete
+
+    !-----------At the HF angles (This Hamiltonian is actually broken and doesnt correspond to the HF energy but oh well
+    !Energy
+    print *, ""
+    print *, "Evaluate at HF Angles"
+    angles = 0_dp
+    status = getEnergy(9, angles, Energy,ctx)
+    call checkStatus(status)
+    print *, "Energy:  ", Energy
+    print *, "Expected:", -2.2506796656654822_dp
+
+    !Gradient
+
+    status = getGradient_COMP(9, angles, gradient,ctx)
+    call checkStatus(status)
+    !print *, "gradient:", gradient
+    print *, "gradient Norm:         ", norm2(gradient)
+    print *, "gradient Norm Expected:", 0.56168441173471617_dp
+
+    !Hessian
+
+    status = getHessian_COMP(9, angles, hessian,ctx)
+    call checkStatus(status)
+    !print *, "hessian:", hessian
+
+    !Full state
+
+    status = getFinalStateComplex(9, angles, 256, stateComplex, ctx)
+    call checkStatus(status)
+    print *, "state Norm:", norm2(state)
+    print *, "expected   ", 1.0_dp
+
+    !----------A Minima
+    print *, ""
+    print *, "Evaluate at Global Minimum"
+    angles = [0.182710385127496_dp, 1.657072388288146_dp, 0.110549543159596_dp, 0.878483796766535_dp,    0.225437898626115_dp,    1.095597930656243_dp,   -0.000000000027978_dp,    0.797060942289907_dp,   -1.570796326773916_dp]
+
+    status = getEnergy(9, angles, Energy,ctx)
+    call checkStatus(status)
+    print *, "Energy:  ", Energy
+    print *, "Expected:", -2.844887240192931_dp
+
+    !Gradient
+
+    status = getGradient_COMP(9, angles, gradient,ctx)
+    call checkStatus(status)
+    !print *, "gradient:", gradient
+    print *, "gradient Norm:         ", norm2(gradient)
+    print *, "gradient Norm Expected:", 1.1413822446980523E-11_dp
+
+    !Hessian
+
+    status = getHessian_COMP(9, angles, hessian,ctx)
+    call checkStatus(status)
+    !print *, "hessian:", hessian
+
+    !Full state
+
+    status = getFinalStateComplex(9, angles, 256,stateComplex, ctx)
+    call checkStatus(status)
+    print *, "state Norm:", norm2(state)
+    print *, "expected   ", 1.0_dp
+
+
+
+
+
+
+    status =  cleanup(ctx)
+    call checkStatus(status)
+#endif
 contains
     subroutine checkStatus(status)
         use iso_c_binding, only: c_int

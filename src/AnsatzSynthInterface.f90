@@ -88,6 +88,24 @@
         end function setInitialState
 
         !----------------------------------------------------------
+        ! Sets the initial quantum state vector (sparse form).
+        ! Inputs:
+        ! - numQubits: total number of qubits
+        ! - N: number of non-zero components
+        ! - iIndexes: basis indices. the |XXX> qubit corresponds to the number 0bXXX + 1. E.g |100> => 9
+        ! - coeffs: corresponding complex amplitudes
+        !----------------------------------------------------------
+        function setInitialStateComplex(numQubits, N, iIndexes, coeffs, ctx) result(status) bind(C, name="setInitialStateComplex")
+            use iso_c_binding, only: c_int, c_double_complex, c_ptr
+            integer(c_int), value :: numQubits
+            integer(c_int), value :: N
+            integer(c_int), intent(in) :: iIndexes(*)
+            complex(c_double_complex), intent(in) :: coeffs(*)
+            type(c_ptr), value :: ctx
+            integer(c_int) :: status
+        end function setInitialStateComplex
+
+        !----------------------------------------------------------
         ! Computes the energy <psi|H|psi> for a given angle parameterization.
         ! Inputs:
         ! - NAngles: number of parameters
@@ -123,6 +141,17 @@
             type(c_ptr), value :: ctx
             integer(c_int) :: status
         end function getFinalState
+
+        function getFinalStateComplex(NAngles, angles, NBasisVectors, finalState, ctx) result(status)&
+        bind(C, name="getFinalStateComplex")
+            use iso_c_binding, only: c_double, c_double_complex, c_ptr, c_int
+            integer(c_int), value :: NAngles
+            real(c_double), intent(in) :: angles(*)
+            integer(c_int), value :: NBasisVectors
+            complex(c_double_complex), intent(out) :: finalState(*)
+            type(c_ptr), value :: ctx
+            integer(c_int) :: status
+        end function getFinalStateComplex
 
         !----------------------------------------------------------
         ! Computes gradient of the energy with respect to parameters.

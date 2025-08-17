@@ -149,7 +149,7 @@ int setInitialState(int numQubits, int N, const int* iIndexes, const double* coe
         logger().log("numQubits", numQubits);
         logger().log("N", N);
         logger().log("iIndexes", std::vector<int>(iIndexes,iIndexes+N));
-        logger().log("coeffs", std::vector<int>(coeffs,coeffs+N));
+        logger().log("coeffs", std::vector<double>(coeffs,coeffs+N));
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
@@ -172,6 +172,49 @@ int setInitialState(int numQubits, int N, const int* iIndexes, const double* coe
     if (!success)
         return 3;
     return 0;
+}
+
+int setInitialStateComplex (int numQubits, int N, const int *iIndexes, const __GFORTRAN_DOUBLE_COMPLEX *coeffs, void *ctx)
+{
+#ifdef useComplex
+    if (ctx == nullptr)
+    {
+        logger().log("nullptr ctx passed");
+        return 1;
+    }
+    if (traceInterfaceCalls)
+    {
+        logger().log("setInitialState called with:");
+        logger().log("numQubits", numQubits);
+        logger().log("N", N);
+        logger().log("iIndexes", std::vector<int>(iIndexes,iIndexes+N));
+        logger().log("coeffs", std::vector<std::complex<double>>(coeffs,coeffs+N));
+        logger().log("ctx", ctx);
+    }
+    stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
+    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    if (N < 1)
+    {
+        logger().log("N < 1");
+        return 2;
+    }
+    if (numQubits < 1)
+    {
+        logger().log("numQubits < 1");
+        return 2;
+    }
+    std::vector<int> iIndexesV(iIndexes,iIndexes+N);
+    for (int& iIndex : iIndexesV)
+        iIndex--;
+    std::vector<std::complex<double>> CoeffsV(coeffs,coeffs+N);
+    bool success = thisPtr->storeInitial(numQubits,iIndexesV,CoeffsV);
+    if (!success)
+        return 3;
+    return 0;
+#else
+    logger().log("Cannot set a complex initial state without building in complex mode");
+    return 4;
+#endif
 }
 
 int getEnergy(int NAngles, const double* angles, double* energy, void* ctx)
@@ -267,6 +310,64 @@ int getFinalState (int NAngles, const double* angles, int NBasisVectors, double*
     }
     memcpy(finalState,state.begin(),state.size()*sizeof(state[0]));
     return 0;
+}
+
+int getFinalStateComplex (int NAngles, const double *angles, int NBasisVectors, __GFORTRAN_DOUBLE_COMPLEX *finalState, void *ctx)
+{
+#ifdef useComplex
+    if (ctx == nullptr)
+    {
+        logger().log("nullptr ctx passed");
+        return 1;
+    }
+    if (angles == nullptr)
+    {
+        logger().log("nullptr angles passed");
+        return 2;
+    }
+    if (finalState == nullptr)
+    {
+        logger().log("nullptr finalState passed");
+        return 3;
+    }
+    if (NBasisVectors < 1)
+    {
+        logger().log("NBasisVectors < 1");
+        return 4;
+    }
+    if (NAngles < 1)
+    {
+        logger().log("NAngles < 1");
+        return 5;
+    }
+    if (traceInterfaceCalls)
+    {
+        logger().log("get_UCC_finalState called with:");
+        logger().log("NAngles", NAngles);
+        logger().logAccurate("angles", std::vector<double>(angles,angles+NAngles));
+        logger().log("NBasisVectors", NBasisVectors);
+        //Not logging final state because its massive!
+        logger().log("ctx", ctx);
+    }
+    stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
+    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    vector<std::complex<double>> state;
+    bool success = thisPtr->getFinalState(std::vector<double>(angles,angles+NAngles),state);
+
+    if (!success)
+        return 6;
+
+    if (state.size() != (size_t)NBasisVectors)
+    {
+        logger().log("Final state does not have the write number allocated, NBasisVectors should be", state.size());
+        return 7;
+    }
+    memcpy(finalState,state.begin(),state.size()*sizeof(state[0]));
+    return 0;
+#else
+    logger().log("Cannot get a complex final state without building in complex mode");
+    return 4;
+#endif
 }
 
 int getGradient_COMP (int NAngles, const double* angles, double* gradient, void* ctx)
