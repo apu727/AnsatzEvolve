@@ -688,7 +688,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
         sizeEstimate = 0.3*comp->getCompressedSize() * choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2);
         //This is an overestimate but we can always add more complicated estimate functions later
     }
-    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction && false)
+    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction)
     {
         //Construct Fully
         logger().log("Constructing fully, size estimate", sizeEstimate);

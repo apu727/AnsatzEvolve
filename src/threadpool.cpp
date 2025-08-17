@@ -5,7 +5,9 @@
  */
 #include "threadpool.h"
 #include "logger.h"
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 unsigned long NUM_CORES = 2;
 
 void workFunction(threadpool* pool)

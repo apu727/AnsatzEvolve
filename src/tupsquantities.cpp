@@ -580,8 +580,8 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
     {
         auto start = std::chrono::high_resolution_clock::now();
 
-        vector<numType> dest;
-        myAnsatz->evolve(dest,angles);
+        // vector<numType> dest;
+        // myAnsatz->evolve(dest,angles);
 
         // vector<numType>::EigenVector destEM = dest;
         // const std::vector<vector<numType>>& derivTangentSpace = myAnsatz->getDerivTangentSpace();
