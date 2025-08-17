@@ -688,7 +688,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
         sizeEstimate = 0.3*comp->getCompressedSize() * choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2);
         //This is an overestimate but we can always add more complicated estimate functions later
     }
-    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction)
+    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction && false)
     {
         //Construct Fully
         logger().log("Constructing fully, size estimate", sizeEstimate);
@@ -704,7 +704,25 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
     if (!success)
         logger().log("Could not construct Hamiltonian");
 }
-
+// void AVXFMA(double* destPtr,const double* srcPtr, double scalar, long numberOfRows)
+// {
+//     auto scalar4 = _mm256_broadcast_sd(&scalar);
+//     int i = numberOfRows;
+//     for ( ;i > 4; i-=4)
+//     {
+//         auto Double4A = _mm256_loadu_pd(srcPtr);
+//         auto Double4destA = _mm256_loadu_pd(destPtr);
+//         auto Double4FMAA = _mm256_fmadd_pd(Double4A,scalar4,Double4destA);
+//         _mm256_storeu_pd(destPtr,Double4FMAA);
+//         srcPtr+=4;
+//         destPtr+=4;
+//     }
+//     for (;i>0; i--)
+//     {
+//         *destPtr++ += scalar*(*srcPtr);
+//         srcPtr++;
+//     }
+// }
 template<typename dataType, typename vectorType>
 void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorType,-1, -1, Eigen::ColMajor> &src,
                                                     Eigen::Matrix<vectorType, -1, -1, Eigen::ColMajor> &dest) const
@@ -724,7 +742,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
         dest.resize(numberOfRows,numberOfCols);
         dest.setZero();
         threadpool& pool = threadpool::getInstance(NUM_CORES);
-        long stepSize = std::min(numberOfCols/NUM_CORES,1ul);
+        long stepSize = std::max(numberOfCols/NUM_CORES,1ul);
         std::vector<std::future<void>> futs;
         for (long startj = 0; startj < numberOfCols; startj+= stepSize)
         {
@@ -742,6 +760,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
                         {
                             dest(i,j) += src(i,it.row()) * it.value();
                         }
+                        // AVXFMA(&dest(0,j),&src(0,it.row()),it.value(),numberOfRows);
                     }
                 }}));
         }
@@ -763,7 +782,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
         //Ready
         // T_{ik} H_{kj}
         threadpool& pool = threadpool::getInstance(NUM_CORES);
-        long stepSize = std::min(numberOfCols/NUM_CORES,1ul);
+        long stepSize = std::max(numberOfCols/NUM_CORES,1ul);
         std::vector<std::future<void>> futs;
         for (long startj = 0; startj < numberOfCols; startj+= stepSize)
         {
@@ -811,6 +830,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
                         {
                             dest(r,j) += src(r,i) * v;
                         }
+                        // AVXFMA(&dest(0,j),&src(0,i),v,numberOfRows);
                     }
                 }
             }));
@@ -844,7 +864,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         assert(dest.cols() == numberOfCols);
         dest.setZero();
         threadpool& pool = threadpool::getInstance(NUM_CORES);
-        long stepSize = std::min(numberOfCols/NUM_CORES,1ul);
+        long stepSize = std::max(numberOfCols/NUM_CORES,1ul);
         std::vector<std::future<void>> futs;
         for (long startj = 0; startj < numberOfCols; startj+= stepSize)
         {
@@ -879,7 +899,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         //Ready
         // T_{ik} H_{kj}
         threadpool& pool = threadpool::getInstance(NUM_CORES);
-        long stepSize = std::min(numberOfCols/NUM_CORES,1ul);
+        long stepSize = std::max(numberOfCols/NUM_CORES,1ul);
         std::vector<std::future<void>> futs;
         for (long startj = 0; startj < numberOfCols; startj+= stepSize)
         {

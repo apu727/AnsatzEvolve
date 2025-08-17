@@ -15,7 +15,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set(CMAKE_CXX_FLAGS "-Wall -Wextra -march=native")
   add_compile_definitions(APPLECLANG)
 else()
-    set(CMAKE_CXX_FLAGS "-Wall -Wextra -mno-fma -march=native -fopenmp -Wmaybe-uninitialized -fuse-ld=gold")
+    set(CMAKE_CXX_FLAGS "-Wall -Wextra -march=native -fopenmp -Wmaybe-uninitialized -fuse-ld=gold")
 endif()
 
 # set(CMAKE_VERBOSE_MAKEFILE on)
