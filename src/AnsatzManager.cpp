@@ -98,6 +98,7 @@ bool stateAnsatzManager::construct()
         }
         logger().log("SZSym:",m_SZSym);
         logger().log("particleNumSym:",m_particleSym);
+        setHamiltonian();
         if constexpr(useFused)
         {
             if (m_compressStateVectors)
@@ -159,6 +160,15 @@ void stateAnsatzManager::setAnglesFromRotationPath()
     {
         m_angles[i] = m_rotationPath[i].second;
     }
+}
+
+bool stateAnsatzManager::setHamiltonian()
+{
+    m_Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(m_coeffs,m_iIndexes,m_jIndexes,m_compressor);
+    m_coeffs.clear();
+    m_iIndexes.clear();
+    m_jIndexes.clear();
+    return m_Ham->ok();
 }
 
 stateAnsatzManager::stateAnsatzManager(): m_target({1},{1},{1},1)
@@ -298,7 +308,7 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
     return success;
 }
 
-bool stateAnsatzManager::storeHamiltonian(const std::vector<int> &iIndexes, const std::vector<int> &jIndexes, const std::vector<realNumType> &Coeffs)
+bool stateAnsatzManager::storeHamiltonian(std::vector<int> &&iIndexes, std::vector<int> &&jIndexes, std::vector<realNumType> &&Coeffs)
 {
     bool success = true;
     if (m_isConstructed)
@@ -316,8 +326,9 @@ bool stateAnsatzManager::storeHamiltonian(const std::vector<int> &iIndexes, cons
         success = false;
         logger().log("Hamiltonian Matrix indexes and coeffs are a different size");
     }
-    if (success)
-        m_Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(Coeffs,iIndexes,jIndexes);
+    m_iIndexes = std::move(iIndexes);
+    m_jIndexes = std::move(jIndexes);
+    m_coeffs = std::move(Coeffs);
     return success;
 }
 
@@ -481,7 +492,10 @@ bool stateAnsatzManager::getGradient(vector<realNumType> &gradient)
         return success;
     }
     if (useFused)
-        m_FA->evolveDerivative(m_current,gradient,m_angles);
+    {
+        logger().log("Fused ansatz can only provide compressed gradients");
+        __builtin_trap();
+    }
     else
         m_ansatz->getDerivativeVec(m_Ham,gradient);
 
@@ -491,14 +505,27 @@ bool stateAnsatzManager::getGradient(vector<realNumType> &gradient)
 bool stateAnsatzManager::getGradientComp(vector<realNumType> &gradient)
 {
     bool success = true;
-    success = getGradient(gradient);
-    if (success)
+    if constexpr (useFused)
     {
-        vector<realNumType>::EigenVector gradEm = gradient;
-        gradEm = m_TUPSQuantities->m_compressMatrix * gradEm;
-        //Damn move semantics
-        static_cast<Matrix<realNumType>&>(gradient) = vector<realNumType>(gradEm);
+        if (!validateToRun())
+        {
+            success = false;
+            return success;
+        }
+        m_FA->evolveDerivative(m_current,gradient,m_angles);
     }
+    else
+    {
+        success = getGradient(gradient);
+        if (success)
+        {
+            vector<realNumType>::EigenVector gradEm = gradient;
+            gradEm = m_TUPSQuantities->m_compressMatrix * gradEm;
+            //Damn move semantics
+            gradient.copyFromBuffer(gradEm.data(),gradEm.rows());
+        }
+    }
+
     return success;
 }
 

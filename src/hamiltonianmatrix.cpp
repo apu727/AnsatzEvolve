@@ -1,3 +1,8 @@
+/* Copyright (C) 2025 Bence Csakany
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
 #include "hamiltonianmatrix.h"
 #include "logger.h"
 #include "threadpool.h"
@@ -586,7 +591,7 @@ void HamiltonianMatrix<dataType, vectorType>::constructFromSecQuant()
                 m_compressor->compressIndex(j,j);
             if (j == (uint32_t)-1)
                 continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
-            tripletList.push_back(Eigen::Triplet<dataType>(k,j,(sign ? -1 : 1)* *valIt));
+            tripletList.push_back(Eigen::Triplet<dataType>(k,j, (sign ? -*valIt : *valIt)));
         }
     }
     m_fullyConstructedMatrix.resize(m_linearSize,m_linearSize);
@@ -621,15 +626,33 @@ void HamiltonianMatrix<dataType, vectorType>::postProcessOperators()
 }
 
 template<typename dataType, typename vectorType>
-HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::vector<dataType> &value, const std::vector<int> &iIndex, const std::vector<int> &jIndex)
+HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::vector<dataType> &value, const std::vector<int> &iIndex, const std::vector<int> &jIndex, std::shared_ptr<compressor> comp)
 {
+    m_isCompressed = !!comp;
+    m_compressor = comp;
     assert(value.size() == iIndex.size() && value.size() == jIndex.size());
     std::vector<Eigen::Triplet<dataType>> triplets;
     triplets.reserve(value.size());
-    for (size_t i = 0; i < value.size(); i++)
+    uint32_t maxI = 0;
+    uint32_t maxJ = 0;
+    for (size_t it = 0; it < value.size(); it++)
     {
-        triplets.push_back(Eigen::Triplet<dataType>(iIndex[i],jIndex[i],value[i]));
+        assert(iIndex[it] > 0 && jIndex[it] > 0);
+        uint32_t i = iIndex[it];
+        uint32_t j = jIndex[it];
+        if (comp)
+        {
+            comp->compressIndex(i,i);
+            comp->compressIndex(j,j);
+        }
+        if (i == (uint32_t)-1 || j == (uint32_t)-1)
+            continue;
+        triplets.push_back(Eigen::Triplet<dataType>(i,j,value[it]));
+        maxI = std::max(i,maxI);
+        maxJ = std::max(j,maxJ);
     }
+    assert(maxI == maxJ);
+    m_fullyConstructedMatrix.resize(maxI+1,maxJ+1);
     m_fullyConstructedMatrix.setFromTriplets(triplets.begin(),triplets.end());
     m_isFullyConstructed = true;
 
@@ -781,7 +804,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
                         //     HT_C(i,j) += T_C(i,k) * valIt;
                         // }
                         // dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt);
-                        dataType v = (sign ? -1 : 1)* *valIt;
+                        dataType v = (sign ? -*valIt : *valIt);
 #pragma GCC unroll 8
 #pragma GCC ivdep
                         for (long r = 0; r < numberOfRows; r++)
@@ -897,9 +920,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         //     HT_C(i,j) += T_C(i,k) * valIt;
                         // }
                         // dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt);
-                        dataType v = (sign ? -1 : 1)* *valIt;
-                        if (i == 10 && j == 10 && v == 0)
-                            logger().log("Now");
+                        dataType v = (sign ? -*valIt : *valIt);
 
                         dest(0,j) += src(0,i) * v;
 
@@ -927,8 +948,8 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                                                     const Eigen::SparseMatrix<realNumType, Eigen::RowMajor>* compress) const
 {
     //For speed need to convert the ordering, We accept RowMajor since that is most convenient for expected users. Converting is an implementation detail
-    Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> srcC;
-    Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> T_C;
+    Eigen::Matrix<vectorType,-1,-1,Eigen::ColMajor> srcC;
+    Eigen::Matrix<vectorType,-1,-1,Eigen::ColMajor> T_C;
     if (compress)
     {
         srcC = src;
@@ -938,7 +959,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
     else
         T_C = src;
 
-    Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> HT_C;
+    Eigen::Matrix<vectorType,-1,-1,Eigen::ColMajor> HT_C;
     apply(T_C,HT_C);
     dest = HT_C;
     return;
@@ -965,7 +986,7 @@ vector<vectorType> HamiltonianMatrix<dataType, vectorType>::apply(const vector<v
         std::shared_ptr<compressor> c;
         assert(src.getIsCompressed(c) == m_isCompressed && c == m_compressor);
     }
-    vector<numType> ret;
+    vector<vectorType> ret;
     ret.resize(src.size(),m_isCompressed,m_compressor);
     Eigen::Map<const Eigen::Matrix<vectorType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> srcMap(&src[0],1,src.size());
     Eigen::Map<Eigen::Matrix<vectorType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> retMap(&ret[0],1,ret.size());

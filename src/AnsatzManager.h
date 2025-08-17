@@ -55,7 +55,11 @@ private:
     int m_numberOfQubits = -1;
     std::vector<std::pair<int,realNumType>> m_parameterDependency;
 
+
     bool setHamiltonian();
+    std::vector<int> m_iIndexes;
+    std::vector<int> m_jIndexes;
+    std::vector<realNumType> m_coeffs;
 
     vector<numType> tempNumType; // used in various functions as a scratch space
     vector<realNumType> tempRealNumType; // used in various functions as a scratch space
@@ -74,7 +78,7 @@ public:
     //Setup functions, These just store and wait until the last one is completed before setting anything up
     bool storeOperators(const std::vector<stateRotate::exc>& excs);
     bool storeInitial(int numberOfQubits, const std::vector<int>& indexes,const std::vector<numType>& coeffs);
-    bool storeHamiltonian(const std::vector<int>& iIndexes, const std::vector<int>& jIndexes, const std::vector<realNumType>& Coeffs);
+    bool storeHamiltonian(std::vector<int>&& iIndexes, std::vector<int>&& jIndexes, std::vector<realNumType>&& Coeffs);
     bool storeNuclearEnergy(realNumType nuclearEnergy);
     //Expresses the mapping from free parameters to actual angles. parameterDependency[0].first gives the free parameter than angle 0 depends on.
     //The scale factor (parameterDependency[0].second) scales the free parameter to make the angle

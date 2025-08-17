@@ -1,3 +1,8 @@
+/* Copyright (C) 2025 Bence Csakany
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
 #ifndef HAMILTONIANMATRIX_H
 #define HAMILTONIANMATRIX_H
 
@@ -36,7 +41,7 @@ private:
     size_t m_linearSize;
     HamiltonianMatrix(const HamiltonianMatrix& other);
 public:
-    HamiltonianMatrix(const std::vector<dataType>& value, const std::vector<int>& iIndex, const std::vector<int>& jIndex);
+    HamiltonianMatrix(const std::vector<dataType>& value, const std::vector<int>& iIndex, const std::vector<int>& jIndex,std::shared_ptr<compressor> comp);
     HamiltonianMatrix(const std::string &filePath,size_t numberOfQubits,std::shared_ptr<compressor> comp);
     //Expects Row Vectors and makes row vectors. We choose to accept map types to be general. Optionally a compression can be applied first. E.g. for derivatives.
     //Compressor is necessary since the Eigen types have lost this information

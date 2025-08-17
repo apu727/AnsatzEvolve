@@ -1774,13 +1774,13 @@ case -N:\
 //The class
 void FusedEvolve::regenCache()
 {
-    logger().log("build cache");
+    if constexpr (logTimings) logger().log("build cache");
     //This is an O(n^2) algorithm in the worst case that keeps swapping operators as long as they commute.
     cleanup();
-    logger().log("Incoming excs are:");
+    if constexpr (logTimings)logger().log("Incoming excs are:");
     for (auto& e : m_excs)
     {
-        fprintf(stderr,"%3.1hhd, %3.1hhd, %3.1hhd, %3.1hhd\n",e[0],e[1],e[2],e[3]);
+        if constexpr (logTimings) fprintf(stderr,"%3.1hhd, %3.1hhd, %3.1hhd, %3.1hhd\n",e[0],e[1],e[2],e[3]);
         assert(e.isDiagonal() == e.hasDiagonal());//Somethign like a^\dagger_1 a^\dagger_2 a_2 a_3 is unhandled
     }
 
@@ -1873,14 +1873,14 @@ void FusedEvolve::regenCache()
     std::vector<stateRotate::exc> excs(m_excs.size());
     std::transform(m_excPerm.begin(),m_excPerm.end(),excs.begin(),[this](size_t i){return m_excs[i];});
 
-    logger().log("Permuted to:");
+    if constexpr (logTimings)logger().log("Permuted to:");
 
     for (size_t i = 0; i < excs.size(); i++)
     {
         const auto& e = excs[i];
-        fprintf(stderr,"%2.1zu: %3.1hhd, %3.1hhd, %3.1hhd, %3.1hhd\n",i,e[0],e[1],e[2],e[3]);
+        if constexpr (logTimings)fprintf(stderr,"%2.1zu: %3.1hhd, %3.1hhd, %3.1hhd, %3.1hhd\n",i,e[0],e[1],e[2],e[3]);
     }
-    logger().log("With boundaries",m_commuteBoundaries);
+    if constexpr (logTimings) logger().log("With boundaries",m_commuteBoundaries);
 
 
 
@@ -1904,7 +1904,7 @@ void FusedEvolve::regenCache()
         }
         if (m_excs[m_excPerm[m_commuteBoundaries[i]]].isDiagonal())
             fuseSize *= -1;
-        logger().log("Fused",fuseSize);
+        if constexpr (logTimings) logger().log("Fused",fuseSize);
         switch (fuseSize)
         {
             //Negative means diagonal
@@ -2135,7 +2135,7 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
     }
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
-    logger().log("FusedEvolve Time taken:",duration);
+    if constexpr (logTimings) logger().log("FusedEvolve Time taken:",duration);
 }
 #define EvolveDer(N,dataType)\
 case N:\
@@ -2233,7 +2233,7 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
     // logger().log("hpsi.dot start deriv", hPsi.dot(m_start)); // this should be E
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
-    logger().log("DerivTimeTaken (ms)", duration);
+    if constexpr (logTimings) logger().log("DerivTimeTaken (ms)", duration);
 
 }
 #define GenerateTangents(N, dataType)\
@@ -2658,11 +2658,14 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
     auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(time4-time3).count();
     auto duration4 = std::chrono::duration_cast<std::chrono::milliseconds>(time5-time4).count();
     auto duration5 = std::chrono::duration_cast<std::chrono::milliseconds>(time6-time5).count();
-    logger().log("FusedEvolve Hessian Time taken 1 (ms)",duration1);
-    logger().log("FusedEvolve Hessian Time taken 2 (ms)",duration2);
-    logger().log("FusedEvolve Hessian Time taken 3 (ms)",duration3);
-    logger().log("FusedEvolve Hessian Time taken 4 (ms)",duration4);
-    logger().log("FusedEvolve Hessian Time taken 5 (ms)",duration5);
+    if constexpr (logTimings)
+    {
+        logger().log("FusedEvolve Hessian Time taken 1 (ms)",duration1);
+        logger().log("FusedEvolve Hessian Time taken 2 (ms)",duration2);
+        logger().log("FusedEvolve Hessian Time taken 3 (ms)",duration3);
+        logger().log("FusedEvolve Hessian Time taken 4 (ms)",duration4);
+        logger().log("FusedEvolve Hessian Time taken 5 (ms)",duration5);
+    }
     // Eigen::MatrixXd M = Hessian - Hessian.transpose();
     // logger().log("Symmetric?:",(Hessian - Hessian.transpose()).norm());
 }
@@ -2678,6 +2681,6 @@ realNumType FusedEvolve::getEnergy(const vector<numType> &psi)
     realNumType E =  m_Ham->apply(psi,hPsi).dot(psi);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
-    logger().log("FusedEvolve Energy Time taken 1 (ms)",duration);
+    if constexpr (logTimings) logger().log("FusedEvolve Energy Time taken 1 (ms)",duration);
     return E;
 }

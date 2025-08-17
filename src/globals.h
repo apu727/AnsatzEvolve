@@ -38,7 +38,11 @@ typedef double realNumType;
 //end useComplex
 #endif
 static std::complex<realNumType> iu = std::complex<realNumType>(0,1);
-
+#if defined(LOGTIMINGS) || !defined(NDEBUG)
+inline constexpr bool logTimings = true;
+#else
+inline constexpr bool logTimings = false;
+#endif
 
 
 

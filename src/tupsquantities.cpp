@@ -331,7 +331,8 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
         {
             vector<realNumType> r = dest.real();
-            RealEnergies[rpIndex] = m_Ham->apply(r).dot(r);
+            vector<realNumType> hr = m_Ham->apply(dest).real();
+            RealEnergies[rpIndex] = hr.dot(r);
             RealEnergies[rpIndex] /= r.dot(r);
         }
         EnergiesAndNucEnergy[rpIndex] = Energies[rpIndex]+m_NuclearEnergy;
@@ -455,7 +456,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
             m_Ham->apply(start,next);
             // fprintf(stderr,"NExtNorm: %lg\n", next.norm());
             next.normalize();
-            fprintf(stderr,"error: %lg\n", abs(next.dot(start) + 1));
+            // fprintf(stderr,"error: %lg\n", abs(next.dot(start) + 1));
         }
         fprintf(stderr, "Largest E Value,%.16lg",(m_Ham->apply(next).dot(next)));
 

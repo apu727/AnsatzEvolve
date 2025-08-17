@@ -130,7 +130,7 @@ int setHamiltonian(int N, const int* iIndexes, const int* jIndexes, const double
     for (int& jIndex : jIndexesV)
         jIndex--;
     std::vector<realNumType> CoeffsV(coeffs,coeffs+N);
-    bool success = thisPtr->storeHamiltonian(iIndexesV,jIndexesV,CoeffsV);
+    bool success = thisPtr->storeHamiltonian(std::move(iIndexesV),std::move(jIndexesV),std::move(CoeffsV));
     if (!success)
         return 3;
     return 0;

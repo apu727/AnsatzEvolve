@@ -4,7 +4,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #include "threadpool.h"
-unsigned long NUM_CORES = 8;
+#include "logger.h"
+#include <omp.h>
+unsigned long NUM_CORES = 2;
 
 void workFunction(threadpool* pool)
 {
@@ -28,6 +30,27 @@ void workFunction(threadpool* pool)
 }
 threadpool::threadpool(int num)
 {
+    int myGuess = NUM_CORES;
+    const char* threads = std::getenv("OMP_NUM_THREADS");
+    if (threads && (myGuess = std::stoi(threads)) > 0 && num != 1)
+    {
+        logger().log("Changing thread count from OMP_NUM_THREADS env variable to",myGuess);
+    }
+    else
+    {
+#ifdef _OPENMP
+        myGuess = omp_get_num_procs();
+#else
+        myGuess = std::thread::hardware_concurrency();
+#endif
+    }
+    if (myGuess != num && num != 1/*1 is special and used for debugging*/)
+    {
+        logger().log("Overriding number of threads to make to", myGuess);
+        logger().log("If this is not what you indended, set the environment variable OMP_NUM_THREADS to what you want");
+        NUM_CORES = myGuess;
+        num = myGuess;
+    }
     if (num == 1)
         return;
     for (int i = 0; i < num; i++)
