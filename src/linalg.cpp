@@ -469,7 +469,7 @@ realNumType vector<dataType>::dot(const vector &other) const
         return ret;
     }
     else
-        static_assert(false,"Unknown type?");
+        static_assert(std::is_same_v<typename Eigen::NumTraits<dataType>::Real,dataType> || std::is_same_v<std::complex<typename Eigen::NumTraits<dataType>::Real>,dataType>,"Unknown type?");
 
 
 
