@@ -797,20 +797,47 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
                     auto opIt = m_operators.cbegin();
                     auto valIt = m_vals.cbegin();
                     const auto valItEnd = m_vals.cend();
+                    uint32_t badCreate = 0;
+                    uint32_t goodCreate = 0;
+                    uint32_t destroy;
+                    bool canDestroy;
+                    if (valIt != valItEnd)
+                    {
+                        goodCreate = opIt->create;
+                        destroy = jBasisState ^ opIt->create;
+                        canDestroy = (destroy & opIt->create) == 0;
+                        if (!canDestroy)
+                        {
+                            badCreate = opIt->create;
+                        }
+                    }
                     //The j loop
                     for (;valIt != valItEnd; ++valIt,++opIt)
                     {
+                        if (opIt->create == badCreate)
+                            continue;
+                        badCreate = 0;
+
                         uint32_t i;
                         bool sign;
 
-                        uint32_t destroy = jBasisState ^ opIt->destroy;
-                        bool canDestroy = (destroy & opIt->destroy) == 0;
-                        if (!canDestroy)
-                            continue;
-                        bool canCreate =  (destroy & opIt->create) == 0;
+
+                        if (opIt->create != goodCreate)
+                        {
+                            goodCreate = opIt->create;
+                            destroy = jBasisState ^ opIt->create;
+                            canDestroy = (destroy & opIt->create) == 0;
+                            if (!canDestroy)
+                            {
+                                badCreate = opIt->create;
+                                continue;
+                            }
+                        }
+
+                        bool canCreate =  (destroy & opIt->destroy) == 0;
                         if (!canCreate)
                             continue;
-                        i  = destroy | opIt->create;
+                        i  = destroy | opIt->destroy;
 
                         sign = __builtin_popcount(jBasisState & opIt->signBitMask) & 1;
                         if (m_isCompressed)
@@ -914,20 +941,48 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                     auto opIt = m_operators.cbegin();
                     auto valIt = m_vals.cbegin();
                     const auto valItEnd = m_vals.cend();
+                    uint32_t badCreate = 0;
+                    uint32_t goodCreate = 0;
+                    uint32_t destroy;
+                    bool canDestroy;
+                    if (valIt != valItEnd)
+                    {
+                        //Yes yes these are backwards to the way it was defined however for real hamiltonians it doesnt matter because theyre Hermitian. see comments on a,b,c,d
+                        goodCreate = opIt->create;
+                        destroy = jBasisState ^ opIt->create;
+                        canDestroy = (destroy & opIt->create) == 0;
+                        if (!canDestroy)
+                        {
+                            badCreate = opIt->create;
+                        }
+                    }
                     //The j loop
                     for (;valIt != valItEnd; ++valIt,++opIt)
                     {
+                        if (opIt->create == badCreate)
+                            continue;
+                        badCreate = 0;
+
                         uint32_t i;
                         bool sign;
 
-                        uint32_t destroy = jBasisState ^ opIt->destroy;
-                        bool canDestroy = (destroy & opIt->destroy) == 0;
-                        if (!canDestroy)
-                            continue;
-                        bool canCreate =  (destroy & opIt->create) == 0;
+
+                        if (opIt->create != goodCreate)
+                        {
+                            goodCreate = opIt->create;
+                            destroy = jBasisState ^ opIt->create;
+                            canDestroy = (destroy & opIt->create) == 0;
+                            if (!canDestroy)
+                            {
+                                badCreate = opIt->create;
+                                continue;
+                            }
+                        }
+
+                        bool canCreate =  (destroy & opIt->destroy) == 0;
                         if (!canCreate)
                             continue;
-                        i  = destroy | opIt->create;
+                        i  = destroy | opIt->destroy;
 
                         sign = __builtin_popcount(jBasisState & opIt->signBitMask) & 1;
                         if (m_isCompressed)
