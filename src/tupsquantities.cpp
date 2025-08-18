@@ -698,7 +698,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         vector<std::complex<realNumType>>::EigenVector testingUpdateAngles = - hessianEigVec * InvhessianEigVal.asDiagonal()*hessianEigVec.adjoint() * gradVector_mu + negativeEigenValueDirections;
         updateAngles = m_deCompressMatrix * testingUpdateAngles.real();
 
-        if (/*gradVector_mu.norm() > 1e-8 ||*/ !allPositiveEigenvalues)
+        if (/*gradVector_mu.norm() > 1e-8 ||*/ !allPositiveEigenvalues && false)
         {// from Numerical Optimization, 2nd Ed. Springer, 2006.
             constexpr size_t maxSteps = 10;
             size_t stepCount = 0;
@@ -830,55 +830,180 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         }
         else
         {
+            // E = E_0 + \partial_i x_i + 0.5 \partial_i \partial_j x_i x_j + 1/6 \partial_i \partial_j \partial_k x_i x_j x_k
+            // The newton raphson step is:
+            // \partial E(x) / \partial_i  = \partial_i + \partial_i \partial_j x_j => solve for x_j
+            // Given a direction x_j, we can do a third order correction to the step size
+            // let x'_j = t x_j for t > 0. Therefore taking a directional deriviative of E along this direction: \partial E / \partial t = \partial E(x)/\partial_i x_i
+            // 0 = x_i \partial_i + t x_i  \partial_i \partial_j x_j + 0.5 t^2 x_i \partial_i \partial_j \partial_k x_j x_k
+            // This is a quadratic
+            // 0 = at^2 + bt + c
+            // Where a = 0.5 x_i \partial_i \partial_j \partial_k x_j x_k
+            //       b = x_i  \partial_i \partial_j x_j
+            //       c = x_i \partial_i
+            // at t = 1. bt+c = 0 by virtue of this being the newton step.
+            // Therefore \partial E(x + (t=1))/\partial_i x_i = a
+            // There will in general be two solutions. But one will be nearest t=1. This is the most positive solution. Plot and check
+            // Therefore the new guess is t = (-b + sqrt(b^2-4ac))/2a. eq (1)
+            // If the hessian is positive definite then b >= 0. Likewise since x_i is a downhill step c <=0
+            // If there are negative eigenvalues then this analysis is not strictly correct since we do not solve the newton step.
+            // Therefore b+c =/= 0 for us.
+            // so \partial E(x + (t=1))/\partial_i x_i = a + b + c. Since b and c are known this is fine. b will likely still be positive. c negative
+            // If there are solutions, go for the positive t one. (move in the downhill direction). if not go for the stationary point (closest to zero).
+
+            // If the hessian is not positive definite then b+c =/= 0. But they are both still valid and indeed the energy can be expanded as
+            // E = E_0 + at^3/3 + bt^2/2 + ct
+            // The lowest point of this is sought which is either at the end point t = 1. or internal and given by eq (1)
+            // We allow it to extrapolate by limiting the valid range to: t \in (0,1.5)
+            // If A > 0 and c < 0 then the quadratic has solutions and we go with this, capping it to the acceptable range.
+            // If A < 0 then the cubic implies t = infinity is best.
+            // If eq (1) has solutions then we choose the smaller of E(t) or E(t_Max) otherwise t = t_max
+
+            constexpr size_t maxSearch = 5;
+            size_t searchCount = 0;
+            long double tMax = 1.5;
+            long double t = 1;
+            long double newT = 1;
+            std::vector<realNumType> anglesCopy = angles;
             for (size_t i = 0; i < angles.size();i++)
-                angles[i] += updateAngles[i];
+                angles[i] += t*updateAngles[i];
+
             vector<numType> trialCubic;
             vector<realNumType> trialGradCubic;
-            myAnsatz->evolve(trialCubic,angles);
-            myAnsatz->evolveDerivative(trialCubic,trialGradCubic,angles);
-            EnergyEvals++;
-            // realNumType b = testingUpdateAngles.real().transpose() * (hessianEigVec * (hessianEigVal.cwiseAbs().asDiagonal()*(hessianEigVec.adjoint() * testingUpdateAngles.real())));
-            long double b = testingUpdateAngles.real().transpose() * (Hmunu * testingUpdateAngles.real());
-            long double c = testingUpdateAngles.real().dot(gradVector_mu);
-            Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> trialGradMap(&trialGradCubic[0],trialGradCubic.size(),1);
+            realNumType energyTrial;
+            long double a;
+            long double b;
+            long double c;
 
-            long double foundDirectionalDeriv = trialGradMap.dot(testingUpdateAngles.real());
-            long double a = foundDirectionalDeriv - (b + c);
-            long double t = 1;
-            long double discriminant = b*b-4*a*c;
-            if (b > 0)
+            long double E1;
+            long double E2;
+            long double foundDirectionalDeriv;
+            long double initialDirectionalDeriv = gradVector_mu.dot(testingUpdateAngles.real());
+            long double c2 = 1e-3;
+            bool doingForwardsSteps = false;
+            long double lastGoodTFowardSteps = newT;
+            do
             {
-                if (discriminant >= 0)
-                    t = (-b + std::sqrt(discriminant))/(2*a);
+                searchCount++;
+                myAnsatz->evolve(trialCubic,angles);
+                myAnsatz->evolveDerivative(trialCubic,trialGradCubic,angles,&energyTrial);
+                EnergyEvals++;
+
+                b = testingUpdateAngles.real().transpose() * (Hmunu * testingUpdateAngles.real());
+                c = testingUpdateAngles.real().dot(gradVector_mu);
+                Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> trialGradMap(&trialGradCubic[0],trialGradCubic.size(),1);
+
+                foundDirectionalDeriv = trialGradMap.dot(testingUpdateAngles.real());
+                a = (foundDirectionalDeriv - (b + c))/(t*t);
+                b /= t;
+                // if (searchCount == 1 && energyTrial < Energy && gradVector_mu.norm() > 1e-8)
+                //     doingForwardsSteps = true;
+
+
+                long double discriminant = b*b-4*a*c;
+                if (c >= 0)
+                    logger().log("c >= 0", c);
+                if (a >= 0)
+                {
+                    newT = (-b + std::sqrt(discriminant))/(2*a);
+                    // energyTrial = Energy + a*t*t*t/3 + b*t*t/2 + c*t;
+                }
                 else
-                    t = -b/(2*a);
+                {
+                    if (discriminant >= 0)
+                    {
+                        long double t1 = (-b + std::sqrt(discriminant))/(2*a);
+                        E1 = a*t1*t1*t1/3 + b*t1*t1/2 + c*t1 + Energy;
+                        E2 = a*tMax*tMax*tMax/3 + b*tMax*tMax/2 + c*tMax + Energy;
+                        if (E2 < E1)
+                        {
+                            newT = tMax;
+                            // energyTrial = E2;
+                        }
+                        else
+                        {
+                            newT = t1;
+                            // energyTrial = E1;
+                        }
+                    }
+                    else //monotone decrease up to boundary
+                    {
+                        newT = tMax;
+                        // energyTrial = a*tMax*tMax*tMax/3 + b*tMax*tMax/2 + c*tMax + Energy;
+                    }
+                }
+                bool toBreak = false;
+
+                angles = anglesCopy;
+                for (size_t i = 0; i < angles.size();i++)
+                    angles[i] += newT*updateAngles[i];
+                if (toBreak)
+                    break;
+
+
+                if (energyTrial > Energy && gradVector_mu.norm() > 1e-8)
+                {
+                    if (doingForwardsSteps)
+                    {
+                        if (lastGoodTFowardSteps > tMax/2)
+                            lastGoodTFowardSteps = tMax/2;
+                        t = t/2;
+                        tMax = tMax/2;
+                        newT = lastGoodTFowardSteps;
+                        angles = anglesCopy;
+                        for (size_t i = 0; i < angles.size();i++)
+                            angles[i] += newT*updateAngles[i];
+                        logger().log("Recovering Forward");
+                        break;
+                    }
+                    doingForwardsSteps = false;
+                    t = t/2;
+                    tMax = tMax/2;
+                    angles = anglesCopy;
+                    for (size_t i = 0; i < angles.size();i++)
+                        angles[i] += t*updateAngles[i];
+                    if (searchCount > maxSearch)
+                        break;
+                }
+                else
+                {
+                    if (doingForwardsSteps)
+                    {
+                        t = 2*t;
+                        tMax = 2*tMax;
+                        angles = anglesCopy;
+                        for (size_t i = 0; i < angles.size();i++)
+                            angles[i] += t*updateAngles[i];
+                        lastGoodTFowardSteps = newT;
+                    }
+                    else
+                    {
+                        if (newT > tMax)
+                            newT = tMax;
+                        angles = anglesCopy;
+                        for (size_t i = 0; i < angles.size();i++)
+                            angles[i] += newT*updateAngles[i];
+                        break;
+                    }
+
+                }
             }
-            for (size_t i = 0; i < angles.size();i++)
-                angles[i] += (t-1)*updateAngles[i];
-            logger().log("Computed t",(double)t);
+            while(true);
+
+            logger().log("tMax",tMax);
+            logger().log("Computed t",t);
+            logger().log("new T",newT);
+            logger().log("Energy", Energy);
+            logger().log("Energy Trial", energyTrial);
+            logger().log("initialDirectionalDeriv",initialDirectionalDeriv);
+            logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
+            // if (!(abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
+            //     logger().log("Failed to meet wolfe condition",searchCount);
+
         }
 
 
-        // E = E_0 + \partial_i x_i + 0.5 \partial_i \partial_j x_i x_j + 1/6 \partial_i \partial_j \partial_k x_i x_j x_k
-        // The newton raphson step is:
-        // \partial E(x) / \partial_i  = \partial_i + \partial_i \partial_j x_j => solve for x_j
-        // Given a direction x_j, we can do a third order correction to the step size
-        // let x'_j = t x_j for t > 0. Therefore taking a directional deriviative of E along this direction: \partial E / \partial t = \partial E(x)/\partial_i x_i
-        // 0 = x_i \partial_i + t x_i  \partial_i \partial_j x_j + 0.5 t^2 x_i \partial_i \partial_j \partial_k x_j x_k
-        // This is a quadratic
-        // 0 = at^2 + bt + c
-        // Where a = 0.5 x_i \partial_i \partial_j \partial_k x_j x_k
-        //       b = x_i  \partial_i \partial_j x_j
-        //       c = x_i \partial_i
-        // at t = 1. bt+c = 0 by virtue of this being the newton step.
-        // Therefore \partial E(x + (t=1))/\partial_i x_i = a
-        // There will in general be two solutions. But one will be nearest t=1. This is the most positive solution. Plot and check
-        // Therefore the new guess is t = (-b + sqrt(b^2-4ac))/2a.
-        // If the hessian is positive definite then b >= 0. Likewise since x_i is a downhill step c <=0
-        // If there are negative eigenvalues then this analysis is not strictly correct since we do not solve the newton step.
-        // Therefore b+c =/= 0 for us.
-        // so \partial E(x + (t=1))/\partial_i x_i = a + b + c. Since b and c are known this is fine. b will likely still be positive. c negative
-        // If there are solutions, go for the positive t one. (move in the downhill direction). if not go for the stationary point (closest to zero).
+
 
 
 
