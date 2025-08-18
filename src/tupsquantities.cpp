@@ -757,21 +757,32 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                     logger().log("d1*d1-directionalDeriv0*directionalDeriv1",d1*d1-directionalDeriv0*directionalDeriv1);
                 }
                 if (newAlpha > std::max(alpha1,alpha0))
-                {
-                    newAlpha = std::max(alpha1,alpha0);
+                { //interpolation suggested a step that takes us above alpha1, alpha1 may not satisfy the decrease condition
+                    if (alpha1 > alpha0)
+                    {
+                        if (energy1 <= Energy + c1*alpha1*directionalDerivAt0)
+                            newAlpha = alpha1;
+                        else
+                            newAlpha = alpha0; //alpha 0 is either 0 or satisfies the decrease conditions
+                    }
+                    if (alpha0 > alpha1)
+                    {
+                        if (energy0 <= Energy + c1*alpha0*directionalDerivAt0)
+                            newAlpha = alpha0;
+                        else
+                            newAlpha = alpha1; //alpha 1 is either 0 or satisfies the decrease conditions
+                    }
                     tobreak = true;
                 }
                 if (newAlpha < std::min(alpha1,alpha0))
                 {
                     newAlpha = std::min(alpha1,alpha0);
-                    if (newAlpha == 0)
-                        newAlpha = 1e-3;
                     tobreak = true;
                 }
 
-                if (abs(newAlpha) < 1e-13)
+                if (abs(newAlpha) < 1e-3) // without doing complicated things this should be safe ish
                 {
-                    newAlpha = 1; // force progress
+                    newAlpha = 1e-3; // force progress
                     tobreak = true;
                 }
                 if (stepCount >= maxSteps)
@@ -825,6 +836,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             vector<realNumType> trialGradCubic;
             myAnsatz->evolve(trialCubic,angles);
             myAnsatz->evolveDerivative(trialCubic,trialGradCubic,angles);
+            EnergyEvals++;
             // realNumType b = testingUpdateAngles.real().transpose() * (hessianEigVec * (hessianEigVal.cwiseAbs().asDiagonal()*(hessianEigVec.adjoint() * testingUpdateAngles.real())));
             long double b = testingUpdateAngles.real().transpose() * (Hmunu * testingUpdateAngles.real());
             long double c = testingUpdateAngles.real().dot(gradVector_mu);
@@ -960,7 +972,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
 
 
         auto stop = std::chrono::high_resolution_clock::now();
-        fprintf(stderr,"Energy: " realNumTypeCode " GradNorm: " realNumTypeCode " Time (ms): %li, Energy Evals: %zu, Hess Evals: %zu\n",
+        fprintf(stderr,"Energy: %.10lg GradNorm: " realNumTypeCode " Time (ms): %li, Energy Evals: %zu, Hess Evals: %zu\n",
                 Energy,gradVector_mu.norm(),std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count(),EnergyEvals,HessianEvals);
         if (gradVector_mu.norm() < 1e-12)
             break;
