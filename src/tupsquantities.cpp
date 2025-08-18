@@ -714,7 +714,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             for (size_t i = 0; i < angles.size();i++)
                 angles[i] += alpha1*updateAngles[i];
 
-
+            realNumType tempEnergy;
             long double energy1;
             long double energy0 = Energy;
             long double energyTrial;
@@ -729,8 +729,9 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             long double directionalDerivTrial;
 
             myAnsatz->evolve(trial,angles);
-            myAnsatz->evolveDerivative(trial,deriv,angles);
-            energy1 = myAnsatz->getEnergy(trial);
+            myAnsatz->evolveDerivative(trial,deriv,angles,&tempEnergy);
+            energy1 = tempEnergy;
+            // energy1 = myAnsatz->getEnergy(trial);
             EnergyEvals++;
             directionalDeriv1 = direction.dot(deriv);
             bool doesntSatisfySufficientDecrease = energy1 > Energy + c1*alpha1*directionalDerivAt0;
@@ -785,8 +786,9 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
 
 
                 myAnsatz->evolve(trial,angles);
-                myAnsatz->evolveDerivative(trial,deriv,angles);
-                energyTrial = myAnsatz->getEnergy(trial);
+                myAnsatz->evolveDerivative(trial,deriv,angles,&tempEnergy);
+                energyTrial = tempEnergy;
+                // energyTrial = myAnsatz->getEnergy(trial);
                 EnergyEvals++;
                 directionalDerivTrial = direction.dot(deriv);
 
@@ -1610,12 +1612,12 @@ realNumType TUPSQuantities::OptimiseTups(FusedEvolve& FE, std::vector<baseAnsatz
 
         //gradVector_{\mu} = \braket{\psi | H | \frac{d}{d\theta_\mu}\psi} + \braket{\frac{d}{d\theta_\mu}\psi | H | \psi}
         vector<realNumType> gradVector;
-        FE.evolveDerivative(dest,gradVector,anglesV);
+        FE.evolveDerivative(dest,gradVector,anglesV,&Energy);
         vector<realNumType>::EigenVector gradVectorEm  = gradVector;
         // gradVectorEm = m_compressMatrix * gradVectorEm;
 
         normOfGradVector = gradVectorEm.norm();
-        Energy = m_Ham->apply(dest).dot(dest);
+        // Energy = m_Ham->apply(dest).dot(dest);
         fprintf(stderr, "Energy: " realNumTypeCode " GradNorm: " realNumTypeCode "\n", Energy, normOfGradVector);
 
         if (normOfGradVector < 1e-12)

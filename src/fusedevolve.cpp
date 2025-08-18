@@ -2154,7 +2154,7 @@ case -N:\
         RunFuseNDiagonal<dataType,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
         break;\
 }
-void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<realNumType>& deriv, const std::vector<realNumType> &angles)
+void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<realNumType>& deriv, const std::vector<realNumType> &angles, realNumType* Energy)
 {
     static_assert(std::is_same_v<realNumType,numType> || std::is_same_v<std::complex<realNumType>,numType>);//we do magic bithacking so need to assure this
     if (!m_excsCached)
@@ -2185,6 +2185,8 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
         // destMap.noalias() = currentMap*m_HamEm;
         m_Ham->apply(finalVector,hPsi);
     }
+    if (Energy)
+        *Energy = hPsi.dot(finalVector);
 
 
 
