@@ -990,13 +990,13 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             }
             while(true);
 
-            logger().log("tMax",tMax);
-            logger().log("Computed t",t);
-            logger().log("new T",newT);
-            logger().log("Energy", Energy);
-            logger().log("Energy Trial", energyTrial);
-            logger().log("initialDirectionalDeriv",initialDirectionalDeriv);
-            logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
+            // logger().log("tMax",tMax);
+            // logger().log("Computed t",t);
+            // logger().log("new T",newT);
+            // logger().log("Energy", Energy);
+            // logger().log("Energy Trial", energyTrial);
+            // logger().log("initialDirectionalDeriv",initialDirectionalDeriv);
+            // logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
             // if (!(abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
             //     logger().log("Failed to meet wolfe condition",searchCount);
 
