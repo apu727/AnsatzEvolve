@@ -569,7 +569,7 @@ void TUPSQuantities::asyncHij(const sparseMatrix<realNumType,numType> &Ham, cons
 void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumType> &angles,bool avoidNegativeHessianValues)
 {
     // realNumType maxStepSize = 0.1;
-    int maxStepCount = 250;
+    int maxStepCount = 500;
     realNumType zeroThreshold = 1e-10;
 
     int count = maxStepCount;
@@ -666,7 +666,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         vector<realNumType>::EigenVector negativeEigenValueDirections(hessianEigVal.rows());
         negativeEigenValueDirections.setZero();
 
-        auto curveDamp = [](realNumType v){if (v > 1000) return (v-1000)*0.1 +1000; else return v;};
+        auto curveDamp = [](realNumType v){/*if (v > 1e6) return 1e6; else */return v;};
 
         for (long int i = 0; i < hessianEigVal.rows(); i++)
         {
@@ -711,7 +711,12 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
 
         //Implements backtracking
         realNumType EnergyTrial =0;
+        realNumType lastEnergyTrial = Energy;
         int BacktrackCount = 0;
+        realNumType biggestAngle  = updateAngles[0];
+        for (auto a : updateAngles)
+             biggestAngle = std::max(biggestAngle,abs(a));
+        logger().log("Biggest Angle at start",biggestAngle);
         while(true)
         {
             vector<numType> trial;
@@ -720,22 +725,38 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             // EnergyTrial = (destEMTrial.adjoint() * HamEm * destEMTrial).real()(0,0);
             EnergyTrial = myAnsatz->getEnergy(trial);//m_Ham.braket(trial,trial,&temp);
             EnergyEvals++;
-            if (EnergyTrial > Energy && BacktrackCount < 30)
+            if (biggestAngle < 1e-13)
+                break;
+
+            if (EnergyTrial > lastEnergyTrial)
             {//Backtracking
                 // logger().log("Backtracking",BacktrackCount);
+                biggestAngle  = abs(updateAngles[0]/2);
                 for (size_t i = 0; i < angles.size();i++)
                 {
                     updateAngles[i] /=2;
                     angles[i] -= updateAngles[i];
+                    biggestAngle = std::max(biggestAngle,abs(updateAngles[i]));
                 }
                 BacktrackCount++;
             }
             else
-                break;
+            {
+                // logger().log("Forwardtracking",BacktrackCount);
+                lastEnergyTrial = EnergyTrial;
+                biggestAngle  = abs(updateAngles[0]/2);
+                for (size_t i = 0; i < angles.size();i++)
+                {
+                    updateAngles[i] /=2;
+                    angles[i] += updateAngles[i];
+                    biggestAngle = std::max(biggestAngle,abs(updateAngles[i]));
+                }
+                BacktrackCount++;
+            }
         }
         auto stop = std::chrono::high_resolution_clock::now();
         fprintf(stderr,"Energy: " realNumTypeCode " GradNorm: " realNumTypeCode " Time (ms): %li, Energy Evals: %zu, Hess Evals: %zu\n",
-                Energy,gradVector_mu.norm(),std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count(),EnergyEvals,HessianEvals);
+                EnergyTrial,gradVector_mu.norm(),std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count(),EnergyEvals,HessianEvals);
 
         if (gradVector_mu.norm() < 1e-12)
             break;
@@ -1028,8 +1049,11 @@ void TUPSQuantities::doSubspaceDiagonalisation(std::shared_ptr<stateAnsatz> myAn
     numberOfMinima = std::min(rotationPaths.size()-1,numberOfMinima);
     Matrix<numType>::EigenMatrix HMat(numberOfMinima,numberOfMinima);
     Matrix<numType>::EigenMatrix SMat(numberOfMinima,numberOfMinima);
-    myAnsatz->setCalculateFirstDerivatives(false);
-    myAnsatz->setCalculateSecondDerivatives(false);
+    if (!useFusedEvolve)
+    {
+        myAnsatz->setCalculateFirstDerivatives(false);
+        myAnsatz->setCalculateSecondDerivatives(false);
+    }
     std::vector<vector<numType>> states(numberOfMinima);
     std::vector<vector<numType>> hstates(numberOfMinima);
 

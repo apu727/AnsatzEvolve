@@ -196,24 +196,26 @@ int main(int argc, char *argv[])
     // return 0;
 
     //TODO command line switches
-    bool optimise = true;
+    bool optimise = false;
     bool subspaceDiag = false;
     bool writeProperties = true;
-    bool generatePathsForSubspace = false;
-    if (subspaceDiag)
+    bool generatePathsForSubspace = true;
+    if (subspaceDiag || generatePathsForSubspace)
     {
         size_t numberOfPaths = 9;
-
+        size_t numberOfSteps = 9;
         if (generatePathsForSubspace)
         {
             std::srand(100);
             std::vector<realNumType> Energies;
             rotationPaths.erase(rotationPaths.begin()+1,rotationPaths.end());
             size_t pathsFound = 0;
+            size_t stepsDone = 0;
             rotationPaths.push_back(rotationPaths[0]);
 
-            while (pathsFound < numberOfPaths)
+            while (pathsFound < numberOfPaths && stepsDone < numberOfSteps )
             {
+                stepsDone++;
                 vector<realNumType>::EigenVector angles(numberOfUniqueParameters);
                 for (int i = 0; i < numberOfUniqueParameters; i++)
                 {
@@ -243,7 +245,8 @@ int main(int argc, char *argv[])
             logger().log("Found following Energies",Energies);
 
         }
-        quantityCalc.doSubspaceDiagonalisation(myAnsatz,FE,numberOfPaths,rotationPaths);
+        if (subspaceDiag)
+            quantityCalc.doSubspaceDiagonalisation(myAnsatz,FE,numberOfPaths,rotationPaths);
     }
 
 
