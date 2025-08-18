@@ -667,7 +667,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         negativeEigenValueDirections.setZero();
 
         auto curveDamp = [](realNumType v){/*if (v > 1e6) return 1e6; else */return v;};
-
+        bool allPositiveEigenvalues = true;
         for (long int i = 0; i < hessianEigVal.rows(); i++)
         {
             if(abs(hessianEigVal[i]) >= zeroThreshold)
@@ -685,9 +685,13 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                 }
                 else
                     InvhessianEigVal[i] = curveDamp(1./(hessianEigVal[i]));
+                if (hessianEigVal[i] < 0)
+                    allPositiveEigenvalues = false;
             }
             else
+            {
                 InvhessianEigVal[i] = 0;
+            }
 
         }
         // Matrix<std::complex<realNumType>>::EigenMatrix testingEigenDecompose = (hessianEigVec * hessianEigVal.asDiagonal()*hessianEigVec.adjoint()) - Hmunu;
@@ -706,58 +710,121 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         // if (maxAngleStep > maxStepSize)
         //     updateAngles /= (maxAngleStep/maxStepSize);
 
+        // E = E_0 + \partial_i x_i + 0.5 \partial_i \partial_j x_i x_j + 1/6 \partial_i \partial_j \partial_k x_i x_j x_k
+        // The newton raphson step is:
+        // \partial E(x) / \partial_i  = \partial_i + \partial_i \partial_j x_j => solve for x_j
+        // Given a direction x_j, we can do a third order correction to the step size
+        // let x'_j = t x_j for t > 0. Therefore taking a directional deriviative of E along this direction: \partial E / \partial t = \partial E(x)/\partial_i x_i
+        // 0 = x_i \partial_i + t x_i  \partial_i \partial_j x_j + 0.5 t^2 x_i \partial_i \partial_j \partial_k x_j x_k
+        // This is a quadratic
+        // 0 = at^2 + bt + c
+        // Where a = 0.5 x_i \partial_i \partial_j \partial_k x_j x_k
+        //       b = x_i  \partial_i \partial_j x_j
+        //       c = x_i \partial_i
+        // at t = 1. bt+c = 0 by virtue of this being the newton step.
+        // Therefore \partial E(x + (t=1))/\partial_i x_i = a
+        // There will in general be two solutions. But one will be nearest t=1. This is the most positive solution. Plot and check
+        // Therefore the new guess is t = (-b + sqrt(b^2-4ac))/2a.
+        // If the hessian is positive definite then b >= 0. Likewise since x_i is a downhill step c <=0
+        // If there are negative eigenvalues then this analysis is not strictly correct since we do not solve the newton step.
+        // Therefore b+c =/= 0 for us.
+        // so \partial E(x + (t=1))/\partial_i x_i = a + b + c. Since b and c are known this is fine. b will likely still be positive. c negative
+        // If there are solutions, go for the positive t one. (move in the downhill direction). if not go for the stationary point (closest to zero).
+
+
+
+
         for (size_t i = 0; i < angles.size();i++)
             angles[i] += updateAngles[i];
-
-        //Implements backtracking
-        realNumType EnergyTrial =0;
-        realNumType lastEnergyTrial = Energy;
-        int BacktrackCount = 0;
-        realNumType biggestAngle  = updateAngles[0];
-        for (auto a : updateAngles)
-             biggestAngle = std::max(biggestAngle,abs(a));
-        logger().log("Biggest Angle at start",biggestAngle);
-        while(true)
+        if (/*gradVector_mu.norm() < 1e-3 &&*/ allPositiveEigenvalues)
         {
-            vector<numType> trial;
-            myAnsatz->evolve(trial,angles);
-            // vector<numType>::EigenVector destEMTrial = trial;
-            // EnergyTrial = (destEMTrial.adjoint() * HamEm * destEMTrial).real()(0,0);
-            EnergyTrial = myAnsatz->getEnergy(trial);//m_Ham.braket(trial,trial,&temp);
-            EnergyEvals++;
-            if (biggestAngle < 1e-13)
-                break;
+            vector<numType> trialCubic;
+            vector<realNumType> trialGradCubic;
+            myAnsatz->evolve(trialCubic,angles);
+            myAnsatz->evolveDerivative(trialCubic,trialGradCubic,angles);
+            // realNumType b = testingUpdateAngles.real().transpose() * (hessianEigVec * (hessianEigVal.cwiseAbs().asDiagonal()*(hessianEigVec.adjoint() * testingUpdateAngles.real())));
+            long double b = testingUpdateAngles.real().transpose() * (Hmunu * testingUpdateAngles.real());
+            long double c = testingUpdateAngles.real().dot(gradVector_mu);
+            Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> trialGradMap(&trialGradCubic[0],trialGradCubic.size(),1);
 
-            if (EnergyTrial > lastEnergyTrial)
-            {//Backtracking
-                // logger().log("Backtracking",BacktrackCount);
-                biggestAngle  = abs(updateAngles[0]/2);
-                for (size_t i = 0; i < angles.size();i++)
-                {
-                    updateAngles[i] /=2;
-                    angles[i] -= updateAngles[i];
-                    biggestAngle = std::max(biggestAngle,abs(updateAngles[i]));
-                }
-                BacktrackCount++;
-            }
-            else
+            long double foundDirectionalDeriv = trialGradMap.dot(testingUpdateAngles.real());
+            long double a = foundDirectionalDeriv - (b + c);
+            long double t = 1;
+            long double discriminant = b*b-4*a*c;
+            if (b > 0)
             {
-                // logger().log("Forwardtracking",BacktrackCount);
-                lastEnergyTrial = EnergyTrial;
-                biggestAngle  = abs(updateAngles[0]/2);
-                for (size_t i = 0; i < angles.size();i++)
-                {
-                    updateAngles[i] /=2;
-                    angles[i] += updateAngles[i];
-                    biggestAngle = std::max(biggestAngle,abs(updateAngles[i]));
-                }
-                BacktrackCount++;
+                if (discriminant >= 0)
+                    t = (-b + std::sqrt(discriminant))/(2*a);
+                else
+                    t = -b/(2*a);
             }
+            for (size_t i = 0; i < angles.size();i++)
+                angles[i] += (t-1)*updateAngles[i];
+            logger().log("Computed t",(double)t);
         }
+        else
+        {
+
+            //Implements backtracking
+            realNumType tBacktrack = 1;
+            realNumType tBackTrackStepSize = 1;
+            realNumType EnergyTrial =0;
+            realNumType lastEnergyTrial = Energy;
+            int BacktrackCount = 0;
+            vector<realNumType>::EigenVector updateAnglesCopy = updateAngles;
+            realNumType biggestAngle  = updateAnglesCopy[0];
+            for (auto a : updateAnglesCopy)
+                biggestAngle = std::max(biggestAngle,abs(a));
+            // logger().log("Biggest Angle at start",biggestAngle);
+            while(true)
+            {
+                vector<numType> trial;
+                myAnsatz->evolve(trial,angles);
+                // vector<numType>::EigenVector destEMTrial = trial;
+                // EnergyTrial = (destEMTrial.adjoint() * HamEm * destEMTrial).real()(0,0);
+                EnergyTrial = myAnsatz->getEnergy(trial);//m_Ham.braket(trial,trial,&temp);
+                EnergyEvals++;
+                if (biggestAngle < 1e-13 || BacktrackCount >= 3)
+                    break;
+
+                if (EnergyTrial > lastEnergyTrial)
+                {//Backtracking
+                    // logger().log("Backtracking",BacktrackCount);
+                    biggestAngle  = abs(updateAnglesCopy[0]/2);
+                    for (size_t i = 0; i < angles.size();i++)
+                    {
+                        updateAnglesCopy[i] /=2;
+                        angles[i] -= updateAnglesCopy[i];
+                        biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
+                    }
+                    tBackTrackStepSize /= 2;
+                    tBacktrack -= tBackTrackStepSize;
+                    BacktrackCount++;
+                }
+                else
+                {
+                    break;
+                    // logger().log("Forwardtracking",BacktrackCount);
+                    lastEnergyTrial = EnergyTrial;
+                    biggestAngle  = abs(updateAnglesCopy[0]/2);
+                    for (size_t i = 0; i < angles.size();i++)
+                    {
+                        updateAnglesCopy[i] /=2;
+                        angles[i] += updateAnglesCopy[i];
+                        biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
+                    }
+                    tBackTrackStepSize /= 2;
+                    tBacktrack += tBackTrackStepSize;
+                    BacktrackCount++;
+                }
+            }
+            logger().log("Backtracked t",tBacktrack);
+        }
+
+
         auto stop = std::chrono::high_resolution_clock::now();
         fprintf(stderr,"Energy: " realNumTypeCode " GradNorm: " realNumTypeCode " Time (ms): %li, Energy Evals: %zu, Hess Evals: %zu\n",
-                EnergyTrial,gradVector_mu.norm(),std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count(),EnergyEvals,HessianEvals);
-
+                Energy,gradVector_mu.norm(),std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count(),EnergyEvals,HessianEvals);
         if (gradVector_mu.norm() < 1e-12)
             break;
     }
