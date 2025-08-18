@@ -697,18 +697,153 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         // Matrix<std::complex<realNumType>>::EigenMatrix testingEigenDecompose = (hessianEigVec * hessianEigVal.asDiagonal()*hessianEigVec.adjoint()) - Hmunu;
         vector<std::complex<realNumType>>::EigenVector testingUpdateAngles = - hessianEigVec * InvhessianEigVal.asDiagonal()*hessianEigVec.adjoint() * gradVector_mu + negativeEigenValueDirections;
         updateAngles = m_deCompressMatrix * testingUpdateAngles.real();
-        // realNumType maxAngleStep = 0;
-        // for (realNumType a : updateAngles)
-        //     maxAngleStep = std::max(a,maxAngleStep);
-        // if (abs(maxAngleStep) < 1e-8)
-        // {
-        //     if (zeroThreshold == 1e-8)
-        //         break;
-        //     zeroThreshold = 1e-8;
-        // }
 
-        // if (maxAngleStep > maxStepSize)
-        //     updateAngles /= (maxAngleStep/maxStepSize);
+        if (/*gradVector_mu.norm() > 1e-8 ||*/ !allPositiveEigenvalues)
+        {// from Numerical Optimization, 2nd Ed. Springer, 2006.
+            constexpr size_t maxSteps = 10;
+            size_t stepCount = 0;
+            std::vector<realNumType> anglesCopy = angles;
+            vector<realNumType> direction;
+            {
+                Eigen::VectorXd dir = testingUpdateAngles.real();
+                direction.copyFromBuffer(dir.data(),dir.rows());
+            }
+            long double alpha1 = 1;
+            long double alpha0 = 0;
+            long double newAlpha = alpha1;
+            for (size_t i = 0; i < angles.size();i++)
+                angles[i] += alpha1*updateAngles[i];
+
+
+            long double energy1;
+            long double energy0 = Energy;
+            long double energyTrial;
+            vector<numType> trial;
+            vector<numType> deriv(testingUpdateAngles.rows());
+
+            long double directionalDeriv1;
+            long double directionalDeriv0 =  direction.dot(gradVectorCalc);
+            long double directionalDerivAt0 = direction.dot(gradVectorCalc);
+            long double c1 = 1e-4;
+            long double c2 = 1e-3;
+            long double directionalDerivTrial;
+
+            myAnsatz->evolve(trial,angles);
+            myAnsatz->evolveDerivative(trial,deriv,angles);
+            energy1 = myAnsatz->getEnergy(trial);
+            EnergyEvals++;
+            directionalDeriv1 = direction.dot(deriv);
+            bool doesntSatisfySufficientDecrease = energy1 > Energy + c1*alpha1*directionalDerivAt0;
+            while (doesntSatisfySufficientDecrease)
+            {
+                stepCount++;
+                long double d1 = directionalDeriv0 + directionalDeriv1 - 3*((energy0 - energy1)/(alpha0 - alpha1));
+                long double d2 = ((alpha1 - alpha0) > 0 ? 1 : -1)*std::sqrt(d1*d1-directionalDeriv0*directionalDeriv1);
+                newAlpha = alpha1 - (alpha1-alpha0)*((directionalDeriv1 + d2 - d1)/(directionalDeriv1 - directionalDeriv0 + 2*d2));
+
+                bool tobreak = false;
+                if (abs(alpha1-alpha0) < 1e-10)
+                    tobreak = true;
+
+                if (!std::isfinite(newAlpha))
+                {
+                    logger().log("alpha1",alpha1);
+                    logger().log("alpha0",alpha0);
+                    logger().log("1/(alpha1-alpha0)",1./(alpha0 - alpha1));
+                    logger().log("newAlpha",newAlpha);
+                    logger().log("d1",d1);
+                    logger().log("d2",d2);
+                    logger().log("d1*d1-directionalDeriv0*directionalDeriv1",d1*d1-directionalDeriv0*directionalDeriv1);
+                }
+                if (newAlpha > std::max(alpha1,alpha0))
+                {
+                    newAlpha = std::max(alpha1,alpha0);
+                    tobreak = true;
+                }
+                if (newAlpha < std::min(alpha1,alpha0))
+                {
+                    newAlpha = std::min(alpha1,alpha0);
+                    if (newAlpha == 0)
+                        newAlpha = 1e-3;
+                    tobreak = true;
+                }
+
+                if (abs(newAlpha) < 1e-13)
+                {
+                    newAlpha = 1; // force progress
+                    tobreak = true;
+                }
+                if (stepCount >= maxSteps)
+                    tobreak = true;
+
+                angles = anglesCopy;
+                for (size_t i = 0; i < angles.size();i++)
+                    angles[i] += newAlpha*updateAngles[i];
+                if (tobreak)
+                    break;
+
+
+
+                myAnsatz->evolve(trial,angles);
+                myAnsatz->evolveDerivative(trial,deriv,angles);
+                energyTrial = myAnsatz->getEnergy(trial);
+                EnergyEvals++;
+                directionalDerivTrial = direction.dot(deriv);
+
+                if (energyTrial > Energy + c1*newAlpha*directionalDerivAt0 || energyTrial >= energy0)
+                {
+                    alpha1 = newAlpha;
+                    directionalDeriv1 = directionalDerivTrial;
+                    energy1 = energyTrial;
+                }
+                else
+                {
+                    if (abs(directionalDerivTrial) <= -c2*directionalDerivAt0)
+                        break; // set angles to newAlpha
+                    if (directionalDerivTrial*(alpha1-alpha0) >= 0)
+                    {
+                        alpha1 = alpha0;
+                        directionalDeriv1 = directionalDeriv0;
+                        energy1 = energy0;
+                    }
+                    alpha0 = newAlpha;
+                    directionalDeriv0 = directionalDerivTrial;
+                    energy0 = energyTrial;
+
+                }
+            }
+            logger().log("newAlpha", (double)newAlpha);
+
+        }
+        else
+        {
+            for (size_t i = 0; i < angles.size();i++)
+                angles[i] += updateAngles[i];
+            vector<numType> trialCubic;
+            vector<realNumType> trialGradCubic;
+            myAnsatz->evolve(trialCubic,angles);
+            myAnsatz->evolveDerivative(trialCubic,trialGradCubic,angles);
+            // realNumType b = testingUpdateAngles.real().transpose() * (hessianEigVec * (hessianEigVal.cwiseAbs().asDiagonal()*(hessianEigVec.adjoint() * testingUpdateAngles.real())));
+            long double b = testingUpdateAngles.real().transpose() * (Hmunu * testingUpdateAngles.real());
+            long double c = testingUpdateAngles.real().dot(gradVector_mu);
+            Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> trialGradMap(&trialGradCubic[0],trialGradCubic.size(),1);
+
+            long double foundDirectionalDeriv = trialGradMap.dot(testingUpdateAngles.real());
+            long double a = foundDirectionalDeriv - (b + c);
+            long double t = 1;
+            long double discriminant = b*b-4*a*c;
+            if (b > 0)
+            {
+                if (discriminant >= 0)
+                    t = (-b + std::sqrt(discriminant))/(2*a);
+                else
+                    t = -b/(2*a);
+            }
+            for (size_t i = 0; i < angles.size();i++)
+                angles[i] += (t-1)*updateAngles[i];
+            logger().log("Computed t",(double)t);
+        }
+
 
         // E = E_0 + \partial_i x_i + 0.5 \partial_i \partial_j x_i x_j + 1/6 \partial_i \partial_j \partial_k x_i x_j x_k
         // The newton raphson step is:
@@ -734,92 +869,92 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
 
 
 
-        for (size_t i = 0; i < angles.size();i++)
-            angles[i] += updateAngles[i];
-        if (/*gradVector_mu.norm() < 1e-3 &&*/ allPositiveEigenvalues)
-        {
-            vector<numType> trialCubic;
-            vector<realNumType> trialGradCubic;
-            myAnsatz->evolve(trialCubic,angles);
-            myAnsatz->evolveDerivative(trialCubic,trialGradCubic,angles);
-            // realNumType b = testingUpdateAngles.real().transpose() * (hessianEigVec * (hessianEigVal.cwiseAbs().asDiagonal()*(hessianEigVec.adjoint() * testingUpdateAngles.real())));
-            long double b = testingUpdateAngles.real().transpose() * (Hmunu * testingUpdateAngles.real());
-            long double c = testingUpdateAngles.real().dot(gradVector_mu);
-            Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> trialGradMap(&trialGradCubic[0],trialGradCubic.size(),1);
+        // for (size_t i = 0; i < angles.size();i++)
+        //     angles[i] += updateAngles[i];
+        // if (/*gradVector_mu.norm() < 1e-3 &&*/ allPositiveEigenvalues)
+        // {
+        //     vector<numType> trialCubic;
+        //     vector<realNumType> trialGradCubic;
+        //     myAnsatz->evolve(trialCubic,angles);
+        //     myAnsatz->evolveDerivative(trialCubic,trialGradCubic,angles);
+        //     // realNumType b = testingUpdateAngles.real().transpose() * (hessianEigVec * (hessianEigVal.cwiseAbs().asDiagonal()*(hessianEigVec.adjoint() * testingUpdateAngles.real())));
+        //     long double b = testingUpdateAngles.real().transpose() * (Hmunu * testingUpdateAngles.real());
+        //     long double c = testingUpdateAngles.real().dot(gradVector_mu);
+        //     Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> trialGradMap(&trialGradCubic[0],trialGradCubic.size(),1);
 
-            long double foundDirectionalDeriv = trialGradMap.dot(testingUpdateAngles.real());
-            long double a = foundDirectionalDeriv - (b + c);
-            long double t = 1;
-            long double discriminant = b*b-4*a*c;
-            if (b > 0)
-            {
-                if (discriminant >= 0)
-                    t = (-b + std::sqrt(discriminant))/(2*a);
-                else
-                    t = -b/(2*a);
-            }
-            for (size_t i = 0; i < angles.size();i++)
-                angles[i] += (t-1)*updateAngles[i];
-            logger().log("Computed t",(double)t);
-        }
-        else
-        {
+        //     long double foundDirectionalDeriv = trialGradMap.dot(testingUpdateAngles.real());
+        //     long double a = foundDirectionalDeriv - (b + c);
+        //     long double t = 1;
+        //     long double discriminant = b*b-4*a*c;
+        //     if (b > 0)
+        //     {
+        //         if (discriminant >= 0)
+        //             t = (-b + std::sqrt(discriminant))/(2*a);
+        //         else
+        //             t = -b/(2*a);
+        //     }
+        //     for (size_t i = 0; i < angles.size();i++)
+        //         angles[i] += (t-1)*updateAngles[i];
+        //     logger().log("Computed t",(double)t);
+        // }
+        // else
+        // {
 
-            //Implements backtracking
-            realNumType tBacktrack = 1;
-            realNumType tBackTrackStepSize = 1;
-            realNumType EnergyTrial =0;
-            realNumType lastEnergyTrial = Energy;
-            int BacktrackCount = 0;
-            vector<realNumType>::EigenVector updateAnglesCopy = updateAngles;
-            realNumType biggestAngle  = updateAnglesCopy[0];
-            for (auto a : updateAnglesCopy)
-                biggestAngle = std::max(biggestAngle,abs(a));
-            // logger().log("Biggest Angle at start",biggestAngle);
-            while(true)
-            {
-                vector<numType> trial;
-                myAnsatz->evolve(trial,angles);
-                // vector<numType>::EigenVector destEMTrial = trial;
-                // EnergyTrial = (destEMTrial.adjoint() * HamEm * destEMTrial).real()(0,0);
-                EnergyTrial = myAnsatz->getEnergy(trial);//m_Ham.braket(trial,trial,&temp);
-                EnergyEvals++;
-                if (biggestAngle < 1e-13 || BacktrackCount >= 3)
-                    break;
+        //     //Implements backtracking
+        //     realNumType tBacktrack = 1;
+        //     realNumType tBackTrackStepSize = 1;
+        //     realNumType EnergyTrial =0;
+        //     realNumType lastEnergyTrial = Energy;
+        //     int BacktrackCount = 0;
+        //     vector<realNumType>::EigenVector updateAnglesCopy = updateAngles;
+        //     realNumType biggestAngle  = updateAnglesCopy[0];
+        //     for (auto a : updateAnglesCopy)
+        //         biggestAngle = std::max(biggestAngle,abs(a));
+        //     // logger().log("Biggest Angle at start",biggestAngle);
+        //     while(true)
+        //     {
+        //         vector<numType> trial;
+        //         myAnsatz->evolve(trial,angles);
+        //         // vector<numType>::EigenVector destEMTrial = trial;
+        //         // EnergyTrial = (destEMTrial.adjoint() * HamEm * destEMTrial).real()(0,0);
+        //         EnergyTrial = myAnsatz->getEnergy(trial);//m_Ham.braket(trial,trial,&temp);
+        //         EnergyEvals++;
+        //         if (biggestAngle < 1e-13 || BacktrackCount >= 3)
+        //             break;
 
-                if (EnergyTrial > lastEnergyTrial)
-                {//Backtracking
-                    // logger().log("Backtracking",BacktrackCount);
-                    biggestAngle  = abs(updateAnglesCopy[0]/2);
-                    for (size_t i = 0; i < angles.size();i++)
-                    {
-                        updateAnglesCopy[i] /=2;
-                        angles[i] -= updateAnglesCopy[i];
-                        biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
-                    }
-                    tBackTrackStepSize /= 2;
-                    tBacktrack -= tBackTrackStepSize;
-                    BacktrackCount++;
-                }
-                else
-                {
-                    break;
-                    // logger().log("Forwardtracking",BacktrackCount);
-                    lastEnergyTrial = EnergyTrial;
-                    biggestAngle  = abs(updateAnglesCopy[0]/2);
-                    for (size_t i = 0; i < angles.size();i++)
-                    {
-                        updateAnglesCopy[i] /=2;
-                        angles[i] += updateAnglesCopy[i];
-                        biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
-                    }
-                    tBackTrackStepSize /= 2;
-                    tBacktrack += tBackTrackStepSize;
-                    BacktrackCount++;
-                }
-            }
-            logger().log("Backtracked t",tBacktrack);
-        }
+        //         if (EnergyTrial > lastEnergyTrial)
+        //         {//Backtracking
+        //             // logger().log("Backtracking",BacktrackCount);
+        //             biggestAngle  = abs(updateAnglesCopy[0]/2);
+        //             for (size_t i = 0; i < angles.size();i++)
+        //             {
+        //                 updateAnglesCopy[i] /=2;
+        //                 angles[i] -= updateAnglesCopy[i];
+        //                 biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
+        //             }
+        //             tBackTrackStepSize /= 2;
+        //             tBacktrack -= tBackTrackStepSize;
+        //             BacktrackCount++;
+        //         }
+        //         else
+        //         {
+        //             break;
+        //             // logger().log("Forwardtracking",BacktrackCount);
+        //             lastEnergyTrial = EnergyTrial;
+        //             biggestAngle  = abs(updateAnglesCopy[0]/2);
+        //             for (size_t i = 0; i < angles.size();i++)
+        //             {
+        //                 updateAnglesCopy[i] /=2;
+        //                 angles[i] += updateAnglesCopy[i];
+        //                 biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
+        //             }
+        //             tBackTrackStepSize /= 2;
+        //             tBacktrack += tBackTrackStepSize;
+        //             BacktrackCount++;
+        //         }
+        //     }
+        //     logger().log("Backtracked t",tBacktrack);
+        // }
 
 
         auto stop = std::chrono::high_resolution_clock::now();

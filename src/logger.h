@@ -35,6 +35,7 @@ public:
     void log(std::string name, numType quantity){fprintf(m_file, "%s: " numTypeCode "\n", name.c_str(), PRINTABLENUMTYPE(quantity));}
 #endif
     void log(std::string name, realNumType quantity){fprintf(m_file, "%s: " realNumTypeCode "\n", name.c_str(), quantity);}
+    void log(std::string name, long double quantity){fprintf(m_file, "%s: %Lg\n", name.c_str(), quantity);}
 
     void log(std::string name, uint32_t quantity){fprintf(m_file, "%s: %u\n", name.c_str(), quantity);}
     void log(std::string name, int quantity){fprintf(m_file, "%s: %i\n", name.c_str(), quantity);}
