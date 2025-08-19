@@ -1,3 +1,5 @@
+# Any copyright is dedicated to the Public Domain.
+# https://creativecommons.org/publicdomain/zero/1.0/
 def diag1(p,q,numberSpatial, order):
     return f"{q} {q} 0 0\n"\
         f"{q+numberSpatial} {q+numberSpatial} 0 0\n"\
