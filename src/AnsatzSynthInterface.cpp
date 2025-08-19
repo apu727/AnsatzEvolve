@@ -10,11 +10,21 @@
 
 bool traceInterfaceCalls = false;
 
+//----------------------------------------------------------
+// Enables logging/debugging of interface function calls.
+// If val =/= 0, internal code logs arguments and usage.
+// Can generate large printouts — use with caution.
+//----------------------------------------------------------
 void setTraceInterfaceCalls(int val)
 {
     traceInterfaceCalls = val != 0;
 }
 
+//----------------------------------------------------------
+// Initializes a new Ansatz object.
+// Returns a C pointer to the created object.
+// the Returned pointer must be given to all functions taking a ctx argument. This is almost all functions
+//----------------------------------------------------------
 void *init()
 {
     stateAnsatzManager* ptr = new stateAnsatzManager;
@@ -23,6 +33,11 @@ void *init()
     return ptr;
 }
 
+//----------------------------------------------------------
+// Deletes the stateAnsatzManager object and frees memory.
+// If ctx is invalid or already cleaned up, returns error.
+// ctx is set to nullptr after use. Passing ctx = nullptr is safe
+//----------------------------------------------------------
 int cleanup(void *ctx)
 {
     if (traceInterfaceCalls)
@@ -44,6 +59,14 @@ int cleanup(void *ctx)
     return 0;
 }
 
+//----------------------------------------------------------
+// Sets excitation operators and parameter ordering.
+// Inputs:
+// - nparams: number of excitations
+// - operators: 4*nparams integers defining excitation operators:
+//   E.g. [3, 7, 4, 8] means excite from 8th and 4th qubit into 7th and 3rd respectively
+// - orderfile: array defining parameter ordering. E.g. 1,1,2,3 means there are 4 operators and the first two have the same parameter
+//----------------------------------------------------------
 int setExcitation(int nparams, const int *operators, const int *orderfile, void *ctx)
 {
     if (ctx == nullptr)
@@ -100,6 +123,13 @@ int setExcitation(int nparams, const int *operators, const int *orderfile, void 
     return 0;
 }
 
+//----------------------------------------------------------
+// Sets the Hamiltonian matrix (sparse form) in the backend.
+// Inputs:
+// - N: number of non-zero entries
+// - iIndexes, jIndexes: row/column indices (1-based Fortran)
+// - coeffs: matrix element values
+//----------------------------------------------------------
 int setHamiltonian(int N, const int* iIndexes, const int* jIndexes, const double* coeffs, void* ctx)
 {
     if (ctx == nullptr)
@@ -136,6 +166,14 @@ int setHamiltonian(int N, const int* iIndexes, const int* jIndexes, const double
     return 0;
 }
 
+//----------------------------------------------------------
+// Sets the initial quantum state vector (sparse form).
+// Inputs:
+// - numQubits: total number of qubits
+// - N: number of non-zero components
+// - iIndexes: basis indices. the |XXX> qubit corresponds to the number 0bXXX + 1. E.g |100> => 9
+// - coeffs: corresponding amplitudes
+//----------------------------------------------------------
 int setInitialState(int numQubits, int N, const int* iIndexes, const double* coeffs, void* ctx)
 {
     if (ctx == nullptr)
@@ -174,7 +212,14 @@ int setInitialState(int numQubits, int N, const int* iIndexes, const double* coe
     return 0;
 }
 
-
+//----------------------------------------------------------
+// Sets the initial quantum state vector (sparse form).
+// Inputs:
+// - numQubits: total number of qubits
+// - N: number of non-zero components
+// - iIndexes: basis indices. the |XXX> qubit corresponds to the number 0bXXX + 1. E.g |100> => 9
+// - coeffs: corresponding complex amplitudes
+//----------------------------------------------------------
 #ifdef useComplex
 int setInitialStateComplex (int numQubits, int N, const int *iIndexes, const __GFORTRAN_DOUBLE_COMPLEX *coeffs, void *ctx)
 {
@@ -221,6 +266,14 @@ int setInitialStateComplex (int, int, const int *, const __GFORTRAN_DOUBLE_COMPL
 #endif
 }
 
+//----------------------------------------------------------
+// Computes the energy <psi|H|psi> for a given angle parameterization.
+// Inputs:
+// - NAngles: number of parameters
+// - angles: array of real values
+// Output:
+// - energy: result of the expectation value
+//----------------------------------------------------------
 int getEnergy(int NAngles, const double* angles, double* energy, void* ctx)
 {
     if (ctx == nullptr)
@@ -254,7 +307,16 @@ int getEnergy(int NAngles, const double* angles, double* energy, void* ctx)
         return 3;
     return 0;
 }
-
+//----------------------------------------------------------
+// Returns the full final quantum state vector after applying
+// parameterised ansatz gates.
+// Inputs:
+// - NAngles: number of parameters
+// - angles: gate parameters
+// - NBasisVectors: expected output size
+// Output:
+// - finalState: output state vector in as a NBasisVectors = 2^numQubits array of double. Can be indexed by: |XXX> qubit corresponds to the number 0bXXX + 1. E.g |100> => 9
+//----------------------------------------------------------
 int getFinalState (int NAngles, const double* angles, int NBasisVectors, double* finalState, void* ctx)
 {
     if (ctx == nullptr)
@@ -378,6 +440,15 @@ int getFinalStateComplex (int, const double *, int , __GFORTRAN_DOUBLE_COMPLEX *
 #endif
 }
 
+
+//----------------------------------------------------------
+// Computes gradient of the energy with respect to parameters.
+// Inputs:
+// - NAngles: number of parameters
+// - angles: gate parameters
+// Output:
+// - gradient: dE/d theta_i. Length NAngles.
+//----------------------------------------------------------
 int getGradient_COMP (int NAngles, const double* angles, double* gradient, void* ctx)
 {
     if (ctx == nullptr)
@@ -424,6 +495,15 @@ int getGradient_COMP (int NAngles, const double* angles, double* gradient, void*
     return 0;
 }
 
+//----------------------------------------------------------
+// Computes Hessian (second derivatives of energy).
+// Inputs:
+// - NAngles: number of parameters
+// - angles: gate parameters
+// Output:
+// - hessian: Hessian matrix as double array of size NAngles x NAngles.
+//   Element hessian(i,j) corresponds to dE/(dtheta_i dtheta_j)
+//----------------------------------------------------------
 int getHessian_COMP (int NAngles, const double* angles, double* hessian, void* ctx)
 {
     if (ctx == nullptr)

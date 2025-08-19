@@ -421,7 +421,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
     //numType HFEnergy = Ham.braket(start,start,&temp);
 
-    writeMatrix(m_runPath + "_FrechetDistance",FrechetDistance);
+    // writeMatrix(m_runPath + "_FrechetDistance",FrechetDistance);
 
     printOutputHeaders(rotationPaths.size()-1);
 
