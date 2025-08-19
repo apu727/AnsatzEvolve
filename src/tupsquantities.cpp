@@ -719,7 +719,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             long double energy0 = Energy;
             long double energyTrial;
             vector<numType> trial;
-            vector<numType> deriv(testingUpdateAngles.rows());
+            vector<realNumType> deriv(testingUpdateAngles.rows());
 
             long double directionalDeriv1;
             long double directionalDeriv0 =  direction.dot(gradVectorCalc);
@@ -1107,7 +1107,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
 void TUPSQuantities::runNewtonMethodProjected(FusedEvolve *myAnsatz,std::vector<realNumType> &angles, const vector<numType>& psiH, const vector<numType>& prevDest)
 { // Projected energy
     bool avoidNegativeHessianValues = true;
-    int maxStepCount = 50;
+    int maxStepCount = 500;
     realNumType zeroThreshold = 1e-10;
 
     int count = maxStepCount;
@@ -1327,8 +1327,8 @@ void TUPSQuantities::runNewtonMethodProjected(FusedEvolve *myAnsatz,std::vector<
         auto stop = std::chrono::high_resolution_clock::now();
 
         realNumType overlap = psiH.dot(dest)*InvnormOfPsiH;
-        fprintf(stderr,"EnergyProj: %.10lg GradNorm: " realNumTypeCode " OverlapWithPsiH: %.10lg Time (ms): %li Energy Evals: %zu Hessian Evals %zu\n",
-                Energy,gradVector_mu.norm(),overlap,std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count(),EnergyEvals,HessianEvals);
+        fprintf(stderr,"Energy: %.10lg  EnergyProj: %.10lg GradNorm: " realNumTypeCode " OverlapWithPsiH: %.10lg Time (ms): %li Energy Evals: %zu Hessian Evals %zu\n",
+                Energy,Energy/prevDest.dot(dest),gradVector_mu.norm(),overlap,std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count(),EnergyEvals,HessianEvals);
         if (gradVector_mu.norm() < 1e-10)
             break;
     }
@@ -1957,8 +1957,9 @@ realNumType TUPSQuantities::iterativeTups(FusedEvolve& FE, std::vector<baseAnsat
         FE.evolveDerivativeProj(dest,gradVector,anglesV,psiH,&Energy);
         vector<realNumType>::EigenVector gradVectorEm  = gradVector;
         normOfGradVector = gradVectorEm.norm();
+        realNumType EnergyProj = Energy/prevDest.dot(dest);
 
-        fprintf(stderr, "Energy: " realNumTypeCode " GradNorm: " realNumTypeCode "\n", Energy, normOfGradVector);
+        fprintf(stderr, "Energy: %.10lg EnergyProj: %.10lg GradNorm: " realNumTypeCode "\n", Energy, EnergyProj, normOfGradVector);
 
         if (normOfGradVector < 1e-5)
             break;

@@ -33,6 +33,26 @@
 #else
 #define mysincos sincos
 #endif
+#if defined __has_builtin
+#  if __has_builtin (__builtin_popcount)
+#    define popcount(i) __builtin_popcount(i)
+#  endif
+#endif
+#ifndef popcount
+#    define popcount(i) explicitPopcount(i)
+//popcount for machines without it
+constexpr char explicitPopcount(uint32_t i)
+{
+#warning NOT USING BUILTIN POPCOUNT
+    //Magic code that compiles to popcnt https://stackoverflow.com/questions/109023/count-the-number-of-set-bits-in-a-32-bit-integer
+    i = i - ((i >> 1) & 0x55555555);        // add pairs of bits
+    i = (i & 0x33333333) + ((i >> 2) & 0x33333333);  // quads
+    i = (i + (i >> 4)) & 0x0F0F0F0F;        // groups of 8
+    i *= 0x01010101;                        // horizontal sum of bytes
+    return  i >> 24;               // return just that top byte (after truncating to 32-bit even when int is wider than uint32_t)
+}
+#endif
+
 
 
 class compressor;

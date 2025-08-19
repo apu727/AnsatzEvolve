@@ -229,11 +229,11 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint32_t stateVecto
 
 bool SZAndnumberOperatorCompressor::opDoesSomething(excOp &e)
 {
-    int spinUpCreate = __builtin_popcount(e.create & m_spinUpBitMask);
-    int spinDownCreate = __builtin_popcount(e.create & m_spinDownBitMask);
+    int spinUpCreate = popcount(e.create & m_spinUpBitMask);
+    int spinDownCreate = popcount(e.create & m_spinDownBitMask);
 
-    int spinUpDestroy = __builtin_popcount(e.destroy & m_spinUpBitMask);
-    int spinDownDestroy = __builtin_popcount(e.destroy & m_spinDownBitMask);
+    int spinUpDestroy = popcount(e.destroy & m_spinUpBitMask);
+    int spinDownDestroy = popcount(e.destroy & m_spinDownBitMask);
     return (spinUpCreate == spinUpDestroy) && (spinDownCreate == spinDownDestroy);
 
 }

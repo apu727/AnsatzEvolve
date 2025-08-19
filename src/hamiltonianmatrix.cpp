@@ -586,7 +586,7 @@ void HamiltonianMatrix<dataType, vectorType>::constructFromSecQuant()
                 continue;
             j  = destroy | opIt->create;
 
-            sign = __builtin_popcount(iBasisState & opIt->signBitMask) & 1;
+            sign = popcount(iBasisState & opIt->signBitMask) & 1;
             if (m_isCompressed)
                 m_compressor->compressIndex(j,j);
             if (j == (uint32_t)-1)
@@ -839,7 +839,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
                             continue;
                         i  = destroy | opIt->destroy;
 
-                        sign = __builtin_popcount(jBasisState & opIt->signBitMask) & 1;
+                        sign = popcount(jBasisState & opIt->signBitMask) & 1;
                         if (m_isCompressed)
                             m_compressor->compressIndex(i,i);
                         if (i == (uint32_t)-1)
@@ -984,7 +984,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                             continue;
                         i  = destroy | opIt->destroy;
 
-                        sign = __builtin_popcount(jBasisState & opIt->signBitMask) & 1;
+                        sign = popcount(jBasisState & opIt->signBitMask) & 1;
                         if (m_isCompressed)
                             m_compressor->compressIndex(i,i);
                         if (i == (uint32_t)-1)

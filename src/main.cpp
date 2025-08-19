@@ -14,52 +14,110 @@
 
 #include <vector>
 
+struct options
+{
+    bool optimise = false;
+    bool iterativeOptimise = false;
+    bool makeLie = false;
+    bool subspaceDiag = false;
+    bool writeProperties = false;
+    bool generatePathsForSubspace = false;
+    std::string filePath = "";
+    bool ok = true;
+    bool benchmark = false;
+
+    static options parse(int argc, char* argv[])
+    {
+        options o;
+        for (int count = 1; count < argc; count++)
+        {
+            // logger().log("Reading argv", std::string(argv[count]));
+            char* arg = argv[count];
+            if (!strcmp(arg,"optimise"))
+            {
+                o.makeLie = true;
+            }
+            else if (!strcmp(arg,"iterativeoptimise"))
+            {
+                o.iterativeOptimise = true;
+            }
+            else if (!strcmp(arg,"makelie"))
+            {
+                o.makeLie = true;
+            }
+            else if (!strcmp(arg,"subspacediag"))
+            {
+                o.subspaceDiag = true;
+            }
+            else if (!strcmp(arg,"writeproperties"))
+            {
+                o.writeProperties = true;
+            }
+            else if (!strcmp(arg,"generatepathsForsubspace"))
+            {
+                o.generatePathsForSubspace = true;
+            }
+            else if (!strcmp(arg,"filepath"))
+            {
+                if (count+1 < argc)
+                {
+                    o.filePath = std::string(argv[count+1]);
+                    count++;
+                }
+                else
+                {
+                    logger().log("`filepath' specified but not provided");
+                    o.ok = false;
+                }
+            }
+            else if (!strcmp(arg,"benchmark"))
+            {
+                o.benchmark = true;
+            }
+            else if (!strcmp(arg,"help"))
+            {
+                logger().log("Help:");
+                logger().log("'optimise' ----------------- Do newton raphson steps starting at the first path in the parameter file");
+                logger().log("'iterativeoptimise' -------- Do iterative newton raphson steps starting at the first path in the parameter file - in development");
+                logger().log("'makelie' ------------------ Use the old ansatz to perform computations. Not recommended for new codes.");
+                logger().log("'subspacediag' ------------- Load parameters from the parameter file and diagonalise in the subspace spanned by the resultant wavefunctions");
+                logger().log("'writeproperties' ---------- Print various properties about the solutions found in the parameter file to stdout ");
+                logger().log("'generatepathsForsubspace' - Generate random angles and optimise using newton raphson. Pseudo basin hopping");
+                logger().log("'filepath XX/YY' ----------- Set the file path to search for resources. filepath should be the complete prefix. E.g. for Hams/H10_Paramaters.dat supply 'filepath Hams/H10'");
+                logger().log("'benchmark' ---------------- Benchmarks various operations. Used for development and subject to change");
+                logger().log("'help' --------------------- Print this");
+                std::exit(0);
+
+            }
+            else
+            {
+                logger().log("Unrecognised command line option",std::string(arg));
+            }
+        }
+        return o;
+    }
+};
 
 int main(int argc, char *argv[])
 {
     //std::vector<uint32_t> statevectorBasis;
     std::vector<numType> statevectorCoeffs;
-
-    std::string filePath = "";
-    enum typeofFile
+    options opt = options::parse(argc,argv);
+    const std::string& filePath = opt.filePath;
+    if (!opt.ok)
+        return 1;
+    if (opt.filePath.size() == 0)
     {
-        NoFile=0,
-        PauliHamiltonian=1,
-        Statevector=2
-    };
-
-    typeofFile fileType = NoFile;
-
-    if (argc >=2)
-    {
-        if (argv[1][0] != '_')
-        {//escape character to do internal H2 Ham instead
-            fileType = Statevector;
-            filePath = std::string(argv[1]); // dangerous but oops
-        }
-
-    }
-    if (argc >=3)
-    {
-        sscanf(argv[2],"%lu",&NUM_CORES);
-        fprintf(stderr,"specified num cores changed to:%lu\n",NUM_CORES);
-    }
-
-
-    threadpool::getInstance(NUM_CORES); // create the threadpool
-    if (fileType != NoFile)
-    {
-        if (!readCsvState(statevectorCoeffs,filePath + "_Initial.dat"))
-        {
-            fprintf(stderr,"Failed to read CSV");
-            return 1;
-        }
-    }
-    else
-    {
-        fprintf(stderr,"No built in statevector");
+        logger().log("No file given");
         return 1;
     }
+    threadpool::getInstance(NUM_CORES); // create the threadpool
+    if (!readCsvState(statevectorCoeffs,filePath + "_Initial.dat"))
+    {
+        logger().log("Failed to read statevectorCoeffs from",filePath + "_Initial.dat" );
+        return 1;
+    }
+
     uint32_t ones = -1;
     char numberOfParticles = -1;
     bool allSameParticleNumber = true;
@@ -135,9 +193,8 @@ int main(int argc, char *argv[])
     if (allSameParticleNumber && !SZSym)
         comp = std::make_shared<numberOperatorCompressor>(statevectorCoeffs.size(),numberOfParticles);
 
-    bool makeLie = false;
     std::vector<stateRotate::exc> excs;
-    if (makeLie)
+    if (opt.makeLie)
     {
         lie = std::make_shared<stateRotate>(numberOfQubits,comp);
         lie->loadOperators(filePath + "_Operators.dat");
@@ -152,7 +209,7 @@ int main(int argc, char *argv[])
 
     std::shared_ptr<stateAnsatz> myAnsatz = nullptr;
     sparseMatrix<numType,numType> target({1},{1},{1},1);
-    if (makeLie)
+    if (opt.makeLie)
         myAnsatz = std::make_shared<stateAnsatz>(&target,start,lie.get());
     else if (comp)
     {
@@ -187,24 +244,23 @@ int main(int argc, char *argv[])
     LoadNuclearEnergy(NuclearEnergy, filePath);
 
     TUPSQuantities quantityCalc(Ham,order,numberOfUniqueParameters, NuclearEnergy,filePath); // Can also optimise
-    if (!makeLie)
+    if (!opt.makeLie)
     {
         FE = std::make_shared<FusedEvolve>(start,Ham,quantityCalc.m_compressMatrix,quantityCalc.m_deCompressMatrix);
         FE->updateExc(excs);
     }
-    // benchmark(myAnsatz.get(),rotationPaths[1], Ham,quantityCalc.m_compressMatrix, quantityCalc.m_deCompressMatrix);
-    // return 0;
+    if (opt.benchmark)
+    {
+        benchmark(myAnsatz.get(),rotationPaths[1], Ham,quantityCalc.m_compressMatrix, quantityCalc.m_deCompressMatrix);
+        return 0;
+    }
 
     //TODO command line switches
-    bool optimise = false;
-    bool subspaceDiag = false;
-    bool writeProperties = true;
-    bool generatePathsForSubspace = true;
-    if (subspaceDiag || generatePathsForSubspace)
+    if (opt.subspaceDiag || opt.generatePathsForSubspace)
     {
         size_t numberOfPaths = 9;
         size_t numberOfSteps = 9;
-        if (generatePathsForSubspace)
+        if (opt.generatePathsForSubspace)
         {
             std::srand(100);
             std::vector<realNumType> Energies;
@@ -227,7 +283,7 @@ int main(int argc, char *argv[])
                     rotationPaths.back()[i].second = angles(i);
                 }
                 realNumType Energy;
-                if (makeLie)
+                if (opt.makeLie)
                     Energy = quantityCalc.OptimiseTups(*myAnsatz,rotationPaths.back(),true);
                 else
                     Energy = quantityCalc.OptimiseTups(*FE,rotationPaths.back(),true);
@@ -245,17 +301,17 @@ int main(int argc, char *argv[])
             logger().log("Found following Energies",Energies);
 
         }
-        if (subspaceDiag)
+        if (opt.subspaceDiag)
             quantityCalc.doSubspaceDiagonalisation(myAnsatz,FE,numberOfPaths,rotationPaths);
     }
 
 
 
-    if (optimise)
+    if (opt.optimise)
     {
         logger().log("Start Optimise");
         rotationPaths.push_back(rotationPaths[1]);
-        if (makeLie)
+        if (opt.makeLie)
         {
             quantityCalc.OptimiseTups(*myAnsatz,rotationPaths.back(),true);
         }
@@ -263,8 +319,10 @@ int main(int argc, char *argv[])
         {
             quantityCalc.OptimiseTups(*FE,rotationPaths.back(),true);
         }
-
-        if (makeLie)
+    }
+    if (opt.iterativeOptimise)
+    {
+        if (opt.makeLie)
         {
             rotationPaths.push_back(rotationPaths[1]);
             quantityCalc.iterativeTups(*myAnsatz,rotationPaths.back(),true);
@@ -281,7 +339,7 @@ int main(int argc, char *argv[])
     //showContinuousSymmetry(rotationPaths,myAnsatz,Ham);
 
 
-    if (writeProperties)
+    if (opt.writeProperties)
         quantityCalc.writeProperties(myAnsatz,FE,rotationPaths);
     return 0;
 }
