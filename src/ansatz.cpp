@@ -197,7 +197,7 @@ void baseAnsatz::updateAngles(const std::vector<realNumType> &angles)
         rotateState(*m_lie->getLieAlgebraMatrix(rp.first),rp.second,i);
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    auto __attribute__ ((unused)) duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     // logger().log("update Angles Time taken (ms)",duration);
 }
 
@@ -538,8 +538,8 @@ void baseAnsatz::getDerivativeVecProj(const vector<numType> &projVec, vector<rea
         f.wait();
 
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(start-superstart).count();
-    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    auto __attribute__ ((unused))duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(start-superstart).count();
+    auto __attribute__ ((unused))duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     // logger().log("hpsi Time taken (ms)",duration1);
     // logger().log("DerivEvolve Time taken (ms)",duration2);
 }
@@ -556,7 +556,7 @@ void baseAnsatz::getHessianAndDerivativeProj(const vector<numType> &projVec, Mat
     auto start = std::chrono::high_resolution_clock::now();
     getDerivativeVecProj(projVec,deriv);
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    auto __attribute__ ((unused))duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     // logger().log("getDerivativeVec Time taken (ms)",duration);
     // m_hPsiEvolvedList is now setup
     Hessian.resize(m_rotationPath.size(), m_rotationPath.size());

@@ -878,8 +878,8 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             long double E1;
             long double E2;
             long double foundDirectionalDeriv;
-            long double initialDirectionalDeriv = gradVector_mu.dot(testingUpdateAngles.real());
-            long double c2 = 1e-3;
+            long double __attribute__ ((unused))initialDirectionalDeriv = gradVector_mu.dot(testingUpdateAngles.real());
+            long double __attribute__ ((unused))c2 = 1e-3;
             bool doingForwardsSteps = false;
             long double lastGoodTFowardSteps = newT;
             do
@@ -1206,8 +1206,8 @@ void TUPSQuantities::runNewtonMethodProjected(FusedEvolve *myAnsatz,std::vector<
             long double E1;
             long double E2;
             long double foundDirectionalDeriv;
-            long double initialDirectionalDeriv = gradVector_mu.dot(testingUpdateAngles.real());
-            long double c2 = 1e-3;
+            long double __attribute__ ((unused))initialDirectionalDeriv = gradVector_mu.dot(testingUpdateAngles.real());
+            long double __attribute__ ((unused))c2 = 1e-3;
             bool doingForwardsSteps = false;
             long double lastGoodTFowardSteps = newT;
             do
@@ -1338,7 +1338,7 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(FusedEvolve *myAnsatz
 {
     realNumType stepSize = 0.01;
 
-    int numberOfUniqueParameters = m_compressMatrix.rows();
+    int __attribute__ ((unused))numberOfUniqueParameters = m_compressMatrix.rows();
 
     bool foundOne = false;
     bool solvedSomething = false;
@@ -1389,7 +1389,7 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(FusedEvolve *myAnsatz
 
 
 
-        realNumType zeroThreshold = 1e-10;
+        realNumType __attribute__ ((unused))zeroThreshold = 1e-10;
         vector<realNumType>::EigenVector updateAngles(angles.size());
         updateAngles.setZero(angles.size());
         foundOne = false;
@@ -1637,145 +1637,148 @@ void TUPSQuantities::doSubspaceDiagonalisation(std::shared_ptr<stateAnsatz> myAn
 
 
 }
-
-realNumType TUPSQuantities::computeFrechetDistanceBetweenPaths(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE,
-                                                       const std::vector<baseAnsatz::rotationElement> &rotationPath, const std::vector<baseAnsatz::rotationElement> &rotationPath2)
+realNumType TUPSQuantities::computeFrechetDistanceBetweenPaths(std::shared_ptr<stateAnsatz>, std::shared_ptr<FusedEvolve>,
+                                                       const std::vector<baseAnsatz::rotationElement> &, const std::vector<baseAnsatz::rotationElement> &)
 {
     return 0;
-    //TODO make this able to use FE
-    // Matrix<realNumType>::EigenMatrix distanceMatrix;
-    std::vector<vector<numType>::EigenVector> firstVectors;
-    std::vector<vector<numType>::EigenVector> secondVectors;
-    firstVectors.reserve(rotationPath.size());
-    secondVectors.reserve(rotationPath.size());
-
-    if (rotationPath.size() != rotationPath2.size())
-    {
-        fprintf(stderr,"Rotation paths not the same size?\n");
-    }
-    myAnsatz->resetPath();
-    myAnsatz->setCalculateSecondDerivatives(false);
-    for (auto rpe : rotationPath)
-    {
-        myAnsatz->addRotation(rpe.first,rpe.second);
-        firstVectors.push_back(myAnsatz->getVec());
-    }
-    myAnsatz->resetPath();
-    myAnsatz->setCalculateSecondDerivatives(false);
-    for (auto rpe : rotationPath2)
-    {
-        myAnsatz->addRotation(rpe.first,rpe.second);
-        secondVectors.push_back(myAnsatz->getVec());
-    }
-    // distanceMatrix.resize(rotationPath.size(),rotationPath2.size());
-    // for (long i = 0; i < distanceMatrix.rows(); i++)
-    // {
-    //     for (long j = 0; j < distanceMatrix.cols(); j++)
-    //     {
-    //         distanceMatrix(i,j) = (firstVectors[i] - secondVectors[j]).norm();
-    //     }
-    // }
-    auto getDistance = [&](long i,long j){return (firstVectors[i] - secondVectors[j]).norm();};
-
-    //Do dijkstra to find the shortest route through the matrix while making sure the row and column is increasing
-    struct pathObject
-    {
-        long i;
-        long j;
-        realNumType distance;
-        realNumType maxDistance;
-        bool operator == (const pathObject& rhs)const{return (i==rhs.i && j == rhs.j);}
-        bool operator <= (const pathObject& rhs)const{return (i==rhs.i && j == rhs.j && maxDistance <= rhs.maxDistance);}
-    };
-    std::list<pathObject> searchStack;
-    Matrix<realNumType>::EigenMatrix visitedLocations(rotationPath.size(),rotationPath2.size());
-    visitedLocations.setConstant(-1);
-
-    searchStack.push_back({0,0,getDistance(0,0),getDistance(0,0)});
-    visitedLocations(0,0) = getDistance(0,0);
-
-    while (true)
-    {
-        pathObject currPathObj = searchStack.front();
-
-
-        searchStack.pop_front();
-        if (currPathObj.i == (long)rotationPath.size()-1 && currPathObj.j == (long)rotationPath2.size()-1)
-        {
-            return currPathObj.maxDistance;
-        }
-        if (searchStack.size() > rotationPath.size()*rotationPath2.size())
-            fprintf(stderr, "heh?\n");
-
-        if (currPathObj.i < (long)rotationPath.size()-1)
-        {
-            pathObject newObject = currPathObj;
-            newObject.i +=1;
-            newObject.distance = getDistance(newObject.i,newObject.j);
-            newObject.maxDistance = std::max(newObject.distance,newObject.maxDistance);
-
-            if (visitedLocations(newObject.i,newObject.j) == -1 || visitedLocations(newObject.i,newObject.j) > newObject.maxDistance) // no shorter path here
-            {
-                visitedLocations(newObject.i,newObject.j) = newObject.maxDistance; // new shortest path
-                searchStack.remove(newObject); // remove the longer path from the search stack (if it exists)
-
-                for (auto it = searchStack.begin();; ++it)
-                {
-                    if (it->maxDistance >= newObject.maxDistance || it == searchStack.end())
-                    {
-                        searchStack.insert(it,newObject);
-                        break;
-                    }
-                }
-            }
-        }
-        if (currPathObj.i < (long)rotationPath.size()-1 && currPathObj.j < (long)rotationPath2.size()-1)
-        {
-            pathObject newObject = currPathObj;
-            newObject.i +=1;
-            newObject.j +=1;
-            newObject.distance = getDistance(newObject.i,newObject.j);
-            newObject.maxDistance = std::max(newObject.distance,newObject.maxDistance);
-
-            if (visitedLocations(newObject.i,newObject.j) == -1 || visitedLocations(newObject.i,newObject.j) > newObject.maxDistance) // no shorter path here
-            {
-                visitedLocations(newObject.i,newObject.j) = newObject.maxDistance; // new shortest path
-                searchStack.remove(newObject); // remove the longer path from the search stack (if it exists)
-
-                for (auto it = searchStack.begin();; ++it)
-                {
-                    if (it->maxDistance >= newObject.maxDistance || it == searchStack.end())
-                    {
-                        searchStack.insert(it,newObject);
-                        break;
-                    }
-                }
-            }
-        }
-        if (currPathObj.j < (long)rotationPath2.size()-1)
-        {
-            pathObject newObject = currPathObj;
-            newObject.j +=1;
-            newObject.distance = getDistance(newObject.i,newObject.j);
-            newObject.maxDistance = std::max(newObject.distance,newObject.maxDistance);
-
-            if (visitedLocations(newObject.i,newObject.j) == -1 || visitedLocations(newObject.i,newObject.j) > newObject.maxDistance) // no shorter path here
-            {
-                visitedLocations(newObject.i,newObject.j) = newObject.maxDistance; // new shortest path
-                searchStack.remove(newObject); // remove the longer path from the search stack (if it exists)
-
-                for (auto it = searchStack.begin();; ++it)
-                {
-                    if (it->maxDistance >= newObject.maxDistance || it == searchStack.end())
-                    {
-                        searchStack.insert(it,newObject);
-                        break;
-                    }
-                }
-            }
-        }
-    }
 }
+// realNumType TUPSQuantities::computeFrechetDistanceBetweenPaths(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE,
+//                                                        const std::vector<baseAnsatz::rotationElement> &rotationPath, const std::vector<baseAnsatz::rotationElement> &rotationPath2)
+// {
+//     //TODO make this able to use FE
+//     // Matrix<realNumType>::EigenMatrix distanceMatrix;
+//     std::vector<vector<numType>::EigenVector> firstVectors;
+//     std::vector<vector<numType>::EigenVector> secondVectors;
+//     firstVectors.reserve(rotationPath.size());
+//     secondVectors.reserve(rotationPath.size());
+
+//     if (rotationPath.size() != rotationPath2.size())
+//     {
+//         fprintf(stderr,"Rotation paths not the same size?\n");
+//     }
+//     myAnsatz->resetPath();
+//     myAnsatz->setCalculateSecondDerivatives(false);
+//     for (auto rpe : rotationPath)
+//     {
+//         myAnsatz->addRotation(rpe.first,rpe.second);
+//         firstVectors.push_back(myAnsatz->getVec());
+//     }
+//     myAnsatz->resetPath();
+//     myAnsatz->setCalculateSecondDerivatives(false);
+//     for (auto rpe : rotationPath2)
+//     {
+//         myAnsatz->addRotation(rpe.first,rpe.second);
+//         secondVectors.push_back(myAnsatz->getVec());
+//     }
+//     // distanceMatrix.resize(rotationPath.size(),rotationPath2.size());
+//     // for (long i = 0; i < distanceMatrix.rows(); i++)
+//     // {
+//     //     for (long j = 0; j < distanceMatrix.cols(); j++)
+//     //     {
+//     //         distanceMatrix(i,j) = (firstVectors[i] - secondVectors[j]).norm();
+//     //     }
+//     // }
+//     auto getDistance = [&](long i,long j){return (firstVectors[i] - secondVectors[j]).norm();};
+
+//     //Do dijkstra to find the shortest route through the matrix while making sure the row and column is increasing
+//     struct pathObject
+//     {
+//         long i;
+//         long j;
+//         realNumType distance;
+//         realNumType maxDistance;
+//         bool operator == (const pathObject& rhs)const{return (i==rhs.i && j == rhs.j);}
+//         bool operator <= (const pathObject& rhs)const{return (i==rhs.i && j == rhs.j && maxDistance <= rhs.maxDistance);}
+//     };
+//     std::list<pathObject> searchStack;
+//     Matrix<realNumType>::EigenMatrix visitedLocations(rotationPath.size(),rotationPath2.size());
+//     visitedLocations.setConstant(-1);
+
+//     searchStack.push_back({0,0,getDistance(0,0),getDistance(0,0)});
+//     visitedLocations(0,0) = getDistance(0,0);
+
+//     while (true)
+//     {
+//         pathObject currPathObj = searchStack.front();
+
+
+//         searchStack.pop_front();
+//         if (currPathObj.i == (long)rotationPath.size()-1 && currPathObj.j == (long)rotationPath2.size()-1)
+//         {
+//             return currPathObj.maxDistance;
+//         }
+//         if (searchStack.size() > rotationPath.size()*rotationPath2.size())
+//             fprintf(stderr, "heh?\n");
+
+//         if (currPathObj.i < (long)rotationPath.size()-1)
+//         {
+//             pathObject newObject = currPathObj;
+//             newObject.i +=1;
+//             newObject.distance = getDistance(newObject.i,newObject.j);
+//             newObject.maxDistance = std::max(newObject.distance,newObject.maxDistance);
+
+//             if (visitedLocations(newObject.i,newObject.j) == -1 || visitedLocations(newObject.i,newObject.j) > newObject.maxDistance) // no shorter path here
+//             {
+//                 visitedLocations(newObject.i,newObject.j) = newObject.maxDistance; // new shortest path
+//                 searchStack.remove(newObject); // remove the longer path from the search stack (if it exists)
+
+//                 for (auto it = searchStack.begin();; ++it)
+//                 {
+//                     if (it->maxDistance >= newObject.maxDistance || it == searchStack.end())
+//                     {
+//                         searchStack.insert(it,newObject);
+//                         break;
+//                     }
+//                 }
+//             }
+//         }
+//         if (currPathObj.i < (long)rotationPath.size()-1 && currPathObj.j < (long)rotationPath2.size()-1)
+//         {
+//             pathObject newObject = currPathObj;
+//             newObject.i +=1;
+//             newObject.j +=1;
+//             newObject.distance = getDistance(newObject.i,newObject.j);
+//             newObject.maxDistance = std::max(newObject.distance,newObject.maxDistance);
+
+//             if (visitedLocations(newObject.i,newObject.j) == -1 || visitedLocations(newObject.i,newObject.j) > newObject.maxDistance) // no shorter path here
+//             {
+//                 visitedLocations(newObject.i,newObject.j) = newObject.maxDistance; // new shortest path
+//                 searchStack.remove(newObject); // remove the longer path from the search stack (if it exists)
+
+//                 for (auto it = searchStack.begin();; ++it)
+//                 {
+//                     if (it->maxDistance >= newObject.maxDistance || it == searchStack.end())
+//                     {
+//                         searchStack.insert(it,newObject);
+//                         break;
+//                     }
+//                 }
+//             }
+//         }
+//         if (currPathObj.j < (long)rotationPath2.size()-1)
+//         {
+//             pathObject newObject = currPathObj;
+//             newObject.j +=1;
+//             newObject.distance = getDistance(newObject.i,newObject.j);
+//             newObject.maxDistance = std::max(newObject.distance,newObject.maxDistance);
+
+//             if (visitedLocations(newObject.i,newObject.j) == -1 || visitedLocations(newObject.i,newObject.j) > newObject.maxDistance) // no shorter path here
+//             {
+//                 visitedLocations(newObject.i,newObject.j) = newObject.maxDistance; // new shortest path
+//                 searchStack.remove(newObject); // remove the longer path from the search stack (if it exists)
+
+//                 for (auto it = searchStack.begin();; ++it)
+//                 {
+//                     if (it->maxDistance >= newObject.maxDistance || it == searchStack.end())
+//                     {
+//                         searchStack.insert(it,newObject);
+//                         break;
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// }
 
 
 realNumType TUPSQuantities::OptimiseTups(stateAnsatz &myAnsatz, std::vector<baseAnsatz::rotationElement> &rp, bool avoidNegativeHessianValues)
@@ -1908,7 +1911,7 @@ realNumType TUPSQuantities::iterativeTups(stateAnsatz &myAnsatz, std::vector<bas
     return Energy;
 }
 
-realNumType TUPSQuantities::iterativeTups(FusedEvolve& FE, std::vector<baseAnsatz::rotationElement> &rp, bool avoidNegativeHessianValues)
+realNumType TUPSQuantities::iterativeTups(FusedEvolve& FE, std::vector<baseAnsatz::rotationElement> &rp, bool)
 {
     bool doDIIS = false;
 

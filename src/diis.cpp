@@ -10,7 +10,7 @@
 
 bool simpleNewtonRaphson(const std::function<Eigen::MatrixXd (Eigen::VectorXd)> &HessianFunc,
                                     const std::function<Eigen::VectorXd (Eigen::VectorXd)> &GradFunc,
-                                    const std::function<realNumType (Eigen::VectorXd)> &ErrorFunc,
+                                    const std::function<realNumType (Eigen::VectorXd)> &/*ErrorFunc*/,
                                     Eigen::VectorXd& point)
 {
     int numberOfStepsLeft = 200;

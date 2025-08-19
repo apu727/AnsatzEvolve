@@ -99,7 +99,7 @@ static size_t CalculateFileSize(FILE *fp)
 }
 
 template<typename dataType>
-bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen::ColMajor> CheckWith, std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp)
+bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen::ColMajor> __attribute__ ((unused))CheckWith, std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp)
 {
     FILE *fponeEInts;
 
@@ -139,7 +139,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
     Eigen::Matrix<double,-1,-1,Eigen::RowMajor> oneEInts((numberOfQubits/2),(numberOfQubits/2));
     double* twoEInts = new double[(numberOfQubits/2)*(numberOfQubits/2)*(numberOfQubits/2)*(numberOfQubits/2)];
 
-    unsigned long RetValue = ReadFile(fponeEInts, (unsigned char*)oneEInts.data(), oneEIntsBufferSize);
+    unsigned long __attribute__ ((unused))RetValue = ReadFile(fponeEInts, (unsigned char*)oneEInts.data(), oneEIntsBufferSize);
     assert(RetValue == oneEIntsBufferSize);
     RetValue = ReadFile(fptwoEInts, (unsigned char*)twoEInts, twoEIntsBufferSize);
     assert(RetValue == twoEIntsBufferSize);
@@ -330,7 +330,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
                                 continue;
                         }
 
-                        realNumType Energy = getElement(iBasisState,jBasisState);
+                        realNumType __attribute__ ((unused))Energy = getElement(iBasisState,jBasisState);
                         uint32_t compi = iBasisState;
                         uint32_t compj = jBasisState;
                         if (comp)
@@ -370,7 +370,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
                         continue;
                 }
 
-                realNumType Energy = getElement(iBasisState,jBasisState);
+                realNumType __attribute__ ((unused))Energy = getElement(iBasisState,jBasisState);
                 uint32_t compi = iBasisState;
                 uint32_t compj = jBasisState;
                 if (comp)
@@ -385,7 +385,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
 
         }
 
-        realNumType Energy = getElement(jBasisState,jBasisState);
+        realNumType __attribute__ ((unused))Energy = getElement(jBasisState,jBasisState);
         uint32_t compj = jBasisState;
         if (comp)
             comp->compressIndex(compj,compj);
@@ -440,7 +440,7 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
     Eigen::Matrix<double,-1,-1,Eigen::RowMajor> oneEInts((numberOfQubits/2),(numberOfQubits/2));
     double* twoEInts = new double[(numberOfQubits/2)*(numberOfQubits/2)*(numberOfQubits/2)*(numberOfQubits/2)];
 
-    unsigned long RetValue = ReadFile(fponeEInts, (unsigned char*)oneEInts.data(), oneEIntsBufferSize);
+    unsigned long __attribute__ ((unused))RetValue = ReadFile(fponeEInts, (unsigned char*)oneEInts.data(), oneEIntsBufferSize);
     assert(RetValue == oneEIntsBufferSize);
     RetValue = ReadFile(fptwoEInts, (unsigned char*)twoEInts, twoEIntsBufferSize);
     assert(RetValue == twoEIntsBufferSize);

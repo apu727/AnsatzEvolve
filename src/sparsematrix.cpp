@@ -187,7 +187,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
     Eigen::Matrix<double,-1,-1,Eigen::RowMajor> oneEInts((numberOfQubits/2),(numberOfQubits/2));
     double* twoEInts = new double[(numberOfQubits/2)*(numberOfQubits/2)*(numberOfQubits/2)*(numberOfQubits/2)];
 
-    unsigned long RetValue = ReadFile(fponeEInts, (unsigned char*)oneEInts.data(), oneEIntsBufferSize);
+    unsigned long __attribute__ ((unused)) RetValue = ReadFile(fponeEInts, (unsigned char*)oneEInts.data(), oneEIntsBufferSize);
     assert(RetValue == oneEIntsBufferSize);
     RetValue = ReadFile(fptwoEInts, (unsigned char*)twoEInts, twoEIntsBufferSize);
     assert(RetValue == twoEIntsBufferSize);

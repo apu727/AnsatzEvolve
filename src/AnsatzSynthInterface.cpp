@@ -174,9 +174,10 @@ int setInitialState(int numQubits, int N, const int* iIndexes, const double* coe
     return 0;
 }
 
+
+#ifdef useComplex
 int setInitialStateComplex (int numQubits, int N, const int *iIndexes, const __GFORTRAN_DOUBLE_COMPLEX *coeffs, void *ctx)
 {
-#ifdef useComplex
     if (ctx == nullptr)
     {
         logger().log("nullptr ctx passed");
@@ -211,7 +212,10 @@ int setInitialStateComplex (int numQubits, int N, const int *iIndexes, const __G
     if (!success)
         return 3;
     return 0;
+}
 #else
+int setInitialStateComplex (int, int, const int *, const __GFORTRAN_DOUBLE_COMPLEX *, void *)
+{
     logger().log("Cannot set a complex initial state without building in complex mode");
     return 4;
 #endif
@@ -312,9 +316,10 @@ int getFinalState (int NAngles, const double* angles, int NBasisVectors, double*
     return 0;
 }
 
+
+#ifdef useComplex
 int getFinalStateComplex (int NAngles, const double *angles, int NBasisVectors, __GFORTRAN_DOUBLE_COMPLEX *finalState, void *ctx)
 {
-#ifdef useComplex
     if (ctx == nullptr)
     {
         logger().log("nullptr ctx passed");
@@ -359,12 +364,15 @@ int getFinalStateComplex (int NAngles, const double *angles, int NBasisVectors, 
 
     if (state.size() != (size_t)NBasisVectors)
     {
-        logger().log("Final state does not have the write number allocated, NBasisVectors should be", state.size());
+        logger().log("Final state does not have the right number allocated, NBasisVectors should be", state.size());
         return 7;
     }
     memcpy(finalState,state.begin(),state.size()*sizeof(state[0]));
     return 0;
+}
 #else
+int getFinalStateComplex (int, const double *, int , __GFORTRAN_DOUBLE_COMPLEX *, void *)
+{
     logger().log("Cannot get a complex final state without building in complex mode");
     return 4;
 #endif

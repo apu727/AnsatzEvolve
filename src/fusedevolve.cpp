@@ -563,7 +563,6 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
             std::array<std::pair<uint32_t,bool>,numberToFuse> initialLinks;
             indexType activeRotIdx = 0;
             indexType numberOfActiveRots = 0;
-            uint32_t TheOtherThing = 0;
             for (uint8_t idx = 0; idx < numberToFuse; idx++)
             {
                 initialLinks[idx] = applyExcToBasisState_(currentBasisState,rots[idx]);
@@ -592,7 +591,7 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
                 {
                     for (uint32_t idx = 0; idx < currentLocalVectors[activeRotIdx].size(); idx++)
                     {
-                        bool complexOffset = currentLocalVectors[activeRotIdx][idx] & 1;
+                        bool __attribute__ ((unused))complexOffset = currentLocalVectors[activeRotIdx][idx] & 1;
                         assert(complexOffset == false);
                         comp->compressIndex(currentLocalVectors[activeRotIdx][idx]>>1,currentLocalVectors[activeRotIdx][idx]);
                         currentLocalVectors[activeRotIdx][idx] = currentLocalVectors[activeRotIdx][idx] << 1;
@@ -847,8 +846,8 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             // for (indexType t = 0; t < (1<<numberOfActiveRots); t++)
             //     if (*(currentMap.begin() + currentMapFilledSize + t) == (uint32_t)-1)
             //         __builtin_trap();
-            for (size_t l = 0; l < 1<<numberOfActiveRots; l++)
-                for (size_t m = l+1; m < 1<<numberOfActiveRots; m++)
+            for (size_t l = 0; l < 1ul<<numberOfActiveRots; l++)
+                for (size_t m = l+1; m < 1ul<<numberOfActiveRots; m++)
                     assert(currentMap[currentMapFilledSize + l] != currentMap[currentMapFilledSize + m]);
             currentMapFilledSize += 1<<numberOfActiveRots;
         }
@@ -1742,7 +1741,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
     }
     //Start now contains the full evolution
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    auto __attribute__ ((unused))duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     // logger().log("FusedRotate" + std::to_string(numberToFuse) +" Time taken:",duration);
     if constexpr (!BraketWithTangentOfResult)
     {
@@ -2158,7 +2157,7 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
 {
     static_assert(std::is_same_v<realNumType,numType> || std::is_same_v<std::complex<realNumType>,numType>);//we do magic bithacking so need to assure this
     if (!m_excsCached)
-        logger().log("Warning Excs changed between evolve and calculation of derivative. This may be wrong");
+        regenCache();
         // regenCache();
     auto startTime = std::chrono::high_resolution_clock::now();
     deriv.resize(angles.size(),false,nullptr); // need memset version
@@ -2330,7 +2329,8 @@ case -N:\
 
 void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& derivCompressed,const std::vector<realNumType> &angles, Eigen::Matrix<numType,-1,-1>* TsCopy, realNumType* Energy)
 {
-    constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
+    //TODO
+    // constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
     if (!m_excsCached)
         regenCache();
     //There are two types of quantities we need
@@ -2691,7 +2691,7 @@ void FusedEvolve::evolveDerivativeProj(const vector<numType> &finalVector, vecto
 {
     static_assert(std::is_same_v<realNumType,numType> || std::is_same_v<std::complex<realNumType>,numType>);//we do magic bithacking so need to assure this
     if (!m_excsCached)
-        logger().log("Warning Excs changed between evolve and calculation of derivative. This may be wrong");
+        regenCache();
     // regenCache();
     auto startTime = std::chrono::high_resolution_clock::now();
     deriv.resize(angles.size(),false,nullptr); // need memset version
@@ -2768,7 +2768,8 @@ void FusedEvolve::evolveDerivativeProj(const vector<numType> &finalVector, vecto
 void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType> &derivCompressed, const std::vector<realNumType> &angles, const vector<numType> &projVector,
                                     Eigen::Matrix<numType, -1, -1> *TsCopy, realNumType *Energy)
 {
-    constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
+    //TODO
+    // constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
     if (!m_excsCached)
         regenCache();
     //There are two types of quantities we need

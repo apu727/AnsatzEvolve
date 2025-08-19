@@ -2321,9 +2321,9 @@ void benchmarkMemAccess4(stateAnsatz* ansatz, std::vector<ansatz::rotationElemen
     startVec.copy(ansatz->getStart());
     vector<numType> destVec;
 
-    const ansatz::rotationElement& rp = rotationPath[0];
-    const matrixType &rotationGenerator = *ansatz->getLie()->getLieAlgebraMatrix(rp.first);
-    const sparseMatrix<numType,numType>& lhs = rotationGenerator;
+    // const ansatz::rotationElement& rp = rotationPath[0];
+    // const matrixType &rotationGenerator = *ansatz->getLie()->getLieAlgebraMatrix(rp.first);
+    // const sparseMatrix<numType,numType>& lhs = rotationGenerator;
     auto start = std::chrono::high_resolution_clock::now();
     int numIt = 50*rotationPath.size()*2;
     for (int i = 0; i < numIt; i++)
@@ -2448,7 +2448,7 @@ void benchmarkApplyHamEigenDirect2(const vector<numType>& dest,const  Eigen::Spa
     logger().log("Apply Hamiltonian2 With Eigen no copy time taken:",duration);
 }
 
-void benchmarkApplyHam(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, sparseMatrix<realNumType,numType>& Ham, int loopcount = 100)
+void benchmarkApplyHam(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> __attribute__ ((unused))rp, sparseMatrix<realNumType,numType>& Ham, int loopcount = 100)
 {
     vector<numType> dest;
     vector<numType> temp;
@@ -2534,7 +2534,7 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, std
     // logger().log("Naive rot count:", naiveRotCount);
     // // benchmarkRotate5(ansatz,rp,dest2,40);
     // // benchmarkRotate4(ansatz,rp,dest2,1);
-    auto runParallel = [&](void (*func)(stateAnsatz*, const std::vector<ansatz::rotationElement>&, vector<numType>&, int,
+    auto __attribute__ ((unused))runParallel = [&](void (*func)(stateAnsatz*, const std::vector<ansatz::rotationElement>&, vector<numType>&, int,
                                         const vector<numType>*, realNumType**), int jobs, int repeat)
     {
         realNumType** resultPtrsl = new realNumType*[rp.size()];
@@ -2572,7 +2572,7 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, std
 
     //Compute expected Result
 
-    auto computeExpectedBraket = [](stateAnsatz* ansatz, const std::vector<ansatz::rotationElement>& rp, vector<numType>&, int repeats,
+    auto __attribute__ ((unused))computeExpectedBraket = [](stateAnsatz* ansatz, const std::vector<ansatz::rotationElement>& rp, vector<numType>&, int repeats,
                                      const vector<numType>* vecPtr, realNumType** resultStore)
     {
         const vector<numType>* vecPtrBKP = vecPtr;
