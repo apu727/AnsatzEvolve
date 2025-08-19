@@ -37,10 +37,22 @@ slaterDeterminantPositions = [posA,posB]
 # H 4.00000000000 0.00000000000 0.00000000000;
 # H 2.00000000000 3.46410161514 0.00000000000;"""
 
+
+# outputName = f"H2_Linear"
+# atomString = f"H 0 0 0 ; H 0 0 2  ;"
+outputName = f"H4_Linear"
+atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ;"
+# outputName = f"H6_Linear"
+# atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ;"
+# outputName = f"H8_Linear"
+# atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ; H 0 0 12 ; H 0 0 14 ;"
+# outputName = f"H10_Linear"
+# atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ; H 0 0 12 ; H 0 0 14 ; H 0 0 16 ; H 0 0 18 ;"
+# outputName = f"H12_Linear"
+# atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ; H 0 0 12 ; H 0 0 14 ; H 0 0 16 ; H 0 0 18 ; H 0 0 20 ; H 0 0 22 ;"
 # outputName = f"H14_Linear"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ; H 0 0 12 ; H 0 0 14 ; H 0 0 16 ; H 0 0 18 ; H 0 0 20 ; H 0 0 22 ; H 0 0 24 ; H 0 0 26 ;"
-outputName = f"H10_Linear"
-atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ; H 0 0 12 ; H 0 0 14 ; H 0 0 16 ; H 0 0 18 ;"
+
 
 frozenOrbitals = set()
 activeOrbitals = None
@@ -52,7 +64,7 @@ activeOrbitals = None
 
 subtractNuclearEnergy = True
 perfectPairing = True
-localise = True
+localise = False
 
 
 # atomString = f"Li 0 0 0 ; H 0 0 {bondlen}"

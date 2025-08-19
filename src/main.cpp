@@ -35,7 +35,7 @@ struct options
             char* arg = argv[count];
             if (!strcmp(arg,"optimise"))
             {
-                o.makeLie = true;
+                o.optimise = true;
             }
             else if (!strcmp(arg,"iterativeoptimise"))
             {

@@ -31,8 +31,8 @@ def makeEpq1FirstLayer(p,q,numberSpatial,order):
     return f"{p} {q} 0 0\n{p+numberSpatial} {q+numberSpatial} 0 0\n", f"{order},-1\n{order},-1\n"
 
 
-Name = "H10"
-numberOfSpatialOrbitals = 10
+Name = "H14"
+numberOfSpatialOrbitals = 14
 Layers = 5
 U3 = False
 if (U3):

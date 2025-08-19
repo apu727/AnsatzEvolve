@@ -443,7 +443,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    if (m_Ham->rows() < 100000 && false)
+    if (m_Ham->rows() < 100000)
     {
         fprintf(stderr,"Finding lowest EigenValue\n");
         vector<numType> start;
