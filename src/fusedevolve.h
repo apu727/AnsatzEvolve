@@ -67,6 +67,9 @@ public:
     void evolveDerivative(const vector<numType>& finalVector,vector<realNumType>& deriv,const std::vector<realNumType>& angles, realNumType* Energy = nullptr);
     void evolveHessian(Eigen::MatrixXd& Hessian,vector<realNumType>& derivCompressed,const std::vector<realNumType>& angles, Eigen::Matrix<numType,-1,-1>* Ts = nullptr, realNumType* Energy = nullptr);
     realNumType getEnergy(const vector<numType> &psi);
+
+    void evolveDerivativeProj(const vector<numType>& finalVector,vector<realNumType>& deriv,const std::vector<realNumType>& angles, const vector<numType>& projVector, realNumType* Energy = nullptr);
+    void evolveHessianProj(Eigen::MatrixXd& Hessian,vector<realNumType>& derivCompressed,const std::vector<realNumType>& angles, const vector<numType>& projVector, Eigen::Matrix<numType,-1,-1>* Ts = nullptr, realNumType* Energy = nullptr);
 };
 
 #endif // FUSEDEVOLVE_H

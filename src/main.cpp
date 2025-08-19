@@ -264,17 +264,18 @@ int main(int argc, char *argv[])
             quantityCalc.OptimiseTups(*FE,rotationPaths.back(),true);
         }
 
-        // quantityCalc.iterativeTups(Ham,rotationPaths[0],*myAnsatz,true);
-        // rotationPaths.push_back(myAnsatz->getRotationPath());
-        // quantityCalc.OptimiseTups(Ham,rotationPaths.back(),*myAnsatz,true);
-        // rotationPaths.push_back(myAnsatz->getRotationPath());
-
-
-
-        // quantityCalc.OptimiseTupsLBFGS(Ham,rotationPaths[1],*myAnsatz,false);
-
-
-
+        if (makeLie)
+        {
+            rotationPaths.push_back(rotationPaths[1]);
+            quantityCalc.iterativeTups(*myAnsatz,rotationPaths.back(),true);
+            quantityCalc.OptimiseTups(*myAnsatz,rotationPaths.back(),true);
+        }
+        else
+        {
+            rotationPaths.push_back(rotationPaths[1]);
+            quantityCalc.iterativeTups(*FE,rotationPaths.back(),true);
+            quantityCalc.OptimiseTups(*FE,rotationPaths.back(),true);
+        }
     }
 
     //showContinuousSymmetry(rotationPaths,myAnsatz,Ham);

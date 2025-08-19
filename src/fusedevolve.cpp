@@ -2686,3 +2686,373 @@ realNumType FusedEvolve::getEnergy(const vector<numType> &psi)
     if constexpr (logTimings) logger().log("FusedEvolve Energy Time taken 1 (ms)",duration);
     return E;
 }
+
+void FusedEvolve::evolveDerivativeProj(const vector<numType> &finalVector, vector<realNumType> &deriv, const std::vector<realNumType> &angles, const vector<numType> &projVector, realNumType *Energy)
+{
+    static_assert(std::is_same_v<realNumType,numType> || std::is_same_v<std::complex<realNumType>,numType>);//we do magic bithacking so need to assure this
+    if (!m_excsCached)
+        logger().log("Warning Excs changed between evolve and calculation of derivative. This may be wrong");
+    // regenCache();
+    auto startTime = std::chrono::high_resolution_clock::now();
+    deriv.resize(angles.size(),false,nullptr); // need memset version
+
+
+    std::vector<realNumType> permAngles(angles.size());
+    std::vector<realNumType*> derivLocs(angles.size());
+    //Negative of the angles because we evolve backwards
+    std::transform(m_excPerm.begin(),m_excPerm.end(),permAngles.begin(),[&angles](size_t i){return -angles[i];});
+    std::transform(m_excPerm.begin(),m_excPerm.end(),derivLocs.begin(),[&deriv](size_t i){return &deriv[i];});
+
+    //finalVector = |Psi>. we aim to calculate <Psi|H | d/dtheta_i Psi>.
+    //Both <Psi|H and Psi> are evolved backwards and the dot product calculated on the fly
+    //Note that we go backwards in the fusedAnsatzes. but each fusion is still evolved forwards. This is fine because its commutes.
+    vector<numType> dest;
+    dest.copy(finalVector);
+    // logger().log("dest.dot start Before deriv", dest.dot(m_start)); // this should not be 1
+
+    vector<numType> hPsi;
+    hPsi.copy(projVector);
+    if (Energy)
+        *Energy = hPsi.dot(finalVector);
+
+
+
+    for (size_t i = m_fusedAnsatzes.size(); i > 0; i--)
+    {
+        size_t diff = m_commuteBoundaries[i] -m_commuteBoundaries[i-1];
+        switch (m_fusedSizes[i-1])
+        {
+            EvolveDerDiag(1,uint8_t);
+            EvolveDerDiag(2,uint8_t);
+            EvolveDerDiag(3,uint8_t);
+            EvolveDerDiag(4,uint8_t);
+            EvolveDerDiag(5,uint8_t);
+            EvolveDerDiag(6,uint8_t);
+            EvolveDerDiag(7,uint8_t);
+            EvolveDerDiag(8,uint16_t);
+            EvolveDerDiag(9,uint16_t);
+            EvolveDerDiag(10,uint16_t);
+            EvolveDerDiag(11,uint16_t);
+            EvolveDerDiag(12,uint16_t);
+        case 0:
+            logger().log("Unhandled case 0");
+            __builtin_trap();
+            break;
+            EvolveDer(1,uint8_t);
+            EvolveDer(2,uint8_t);
+            EvolveDer(3,uint8_t);
+            EvolveDer(4,uint8_t);
+            EvolveDer(5,uint8_t);
+            EvolveDer(6,uint8_t);
+            EvolveDer(7,uint8_t);
+            EvolveDer(8,uint16_t);
+            EvolveDer(9,uint16_t);
+            EvolveDer(10,uint16_t);
+            EvolveDer(11,uint16_t);
+            EvolveDer(12,uint16_t);
+        default:
+            __builtin_trap();
+        }
+    }
+
+    Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> gradVector_mu(&deriv[0],deriv.size(),1);
+    Eigen::VectorXd derivCompressed = m_compressMatrix * gradVector_mu;
+    deriv.copyFromBuffer(derivCompressed.data(),derivCompressed.rows());
+    // logger().log("dest.dot start deriv", dest.dot(m_start)); // this should be 1
+    // logger().log("hpsi.dot start deriv", hPsi.dot(m_start)); // this should be E
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    if constexpr (logTimings) logger().log("DerivProjTimeTaken (ms)", duration);
+}
+
+void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType> &derivCompressed, const std::vector<realNumType> &angles, const vector<numType> &projVector,
+                                    Eigen::Matrix<numType, -1, -1> *TsCopy, realNumType *Energy)
+{
+    constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
+    if (!m_excsCached)
+        regenCache();
+    //There are two types of quantities we need
+    // T means a tangent
+    // <T|H|T> and <Psi|H|TT>
+    //THT is calculated via back evolution of <T|H| and |Psi>
+    // <Psi|H|TT> is calculated via back evolution of <Psi|H| and |T>
+    //But this means |T> and therefore <T|H| are known at the end. So we can calculate <T|H|T> for `free'
+
+    //A not memory efficient version.
+    const vector<numType>& hPsi = projVector;
+    // vector<numType> psi;
+    Matrix<numType> Ts;
+    // Matrix<numType> HTs;
+    Ts.resize(angles.size()+1,m_start.size(),m_lieIsCompressed,m_compressor);
+    //The last one is psi
+    vectorView<Matrix<numType>,Eigen::RowMajor> psi = Ts.getJVectorView(angles.size());
+    // HTs.resize(angles.size(),m_start.size(),m_lieIsCompressed,m_compressor);
+    psi.copy(m_start);
+    // Eigen::MatrixXd THT; // Proj does not have a THT term
+    Hessian.resize(angles.size(),angles.size());
+    Hessian.setZero();
+
+    //Get the |T>s
+    //We could save one evolution by getting psi aswell here
+
+    std::vector<realNumType> permAngles(angles.size());
+    std::vector<numType*> TPtrs(angles.size());
+    std::transform(m_excPerm.begin(),m_excPerm.end(),permAngles.begin(),[&angles](size_t i){return angles[i];});
+    std::transform(m_excPerm.begin(),m_excPerm.end(),TPtrs.begin(),[&Ts](size_t i){return &Ts.at(i,0);});
+
+    //Do an evolution and gather all the Ts
+    //The T ptrs are still at their respective evolutions. They need to be evolved to the end aswell
+
+
+    auto time1 = std::chrono::high_resolution_clock::now();
+
+    for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+    {
+        size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
+        switch (m_fusedSizes[i])
+        {
+            GenerateTangentsDiag(1,uint8_t)
+        GenerateTangentsDiag(2,uint8_t)
+            GenerateTangentsDiag(3,uint8_t)
+            GenerateTangentsDiag(4,uint8_t)
+            GenerateTangentsDiag(5,uint8_t)
+            GenerateTangentsDiag(6,uint8_t)
+            GenerateTangentsDiag(7,uint8_t)
+            GenerateTangentsDiag(8,uint16_t)
+            GenerateTangentsDiag(9,uint16_t)
+            GenerateTangentsDiag(10,uint16_t)
+            GenerateTangentsDiag(11,uint16_t)
+            GenerateTangentsDiag(12,uint16_t)
+            case 0:
+            logger().log("Unhandled case 0");
+            __builtin_trap();
+            break;
+
+            GenerateTangents(1,uint8_t)
+                GenerateTangents(2,uint8_t)
+                GenerateTangents(3,uint8_t)
+                GenerateTangents(4,uint8_t)
+                GenerateTangents(5,uint8_t)
+                GenerateTangents(6,uint8_t)
+                GenerateTangents(7,uint8_t)
+                GenerateTangents(8,uint16_t)
+                GenerateTangents(9,uint16_t)
+                GenerateTangents(10,uint16_t)
+                GenerateTangents(11,uint16_t)
+                GenerateTangents(12,uint16_t)
+                default:
+                          __builtin_trap();
+        }
+
+    }
+    std::vector<std::future<void>> futs;
+    threadpool& pool = threadpool::getInstance(NUM_CORES);
+    for (size_t ang = 0; ang < angles.size(); ang++)
+    {
+        futs.push_back(pool.queueWork([ang,this,&TPtrs,&permAngles]()
+                                      {
+                                          for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+                                          {
+                                              size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
+                                              if (ang >= m_commuteBoundaries[i+1])
+                                                  continue;
+                                              switch (m_fusedSizes[i])
+                                              {
+                                              // EvolveTangentsDiag(1,uint8_t)
+                                              case -1:
+                                              {
+                                                  constexpr uint8_t num = 1;
+                                                  fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);
+                                                  if (ang < m_commuteBoundaries[i])
+                                                  {
+                                                      RunFuseNDiagonal<uint8_t,num,false,false>(FA->data(),(realNumType*)TPtrs[ang],permAngles.data() + m_commuteBoundaries[i],diff);
+                                                  }
+                                                  else
+                                                  {
+                                                      for (size_t currDiff = 0; currDiff < diff; currDiff += num)
+                                                      {
+                                                          numType** startTPtr = TPtrs.data() + m_commuteBoundaries[i] + currDiff;
+                                                          for (numType** TPtr = startTPtr; TPtr < startTPtr + num; TPtr++)
+                                                          {
+                                                              if (*TPtr == TPtrs[ang])
+                                                              {
+                                                                  RunFuseNDiagonal<uint8_t,num,false,false>(FA->data() + currDiff/num,(realNumType*)*TPtr,permAngles.data() + m_commuteBoundaries[i] + currDiff,diff-currDiff);
+                                                                  break;
+                                                              }
+                                                          }
+                                                      }
+                                                  }
+                                                  break;
+                                              }
+                                              EvolveTangentsDiag(2,uint8_t)
+                                                  EvolveTangentsDiag(3,uint8_t)
+                                                  EvolveTangentsDiag(4,uint8_t)
+                                                  EvolveTangentsDiag(5,uint8_t)
+                                                  EvolveTangentsDiag(6,uint8_t)
+                                                  EvolveTangentsDiag(7,uint8_t)
+                                                  EvolveTangentsDiag(8,uint16_t)
+                                                  EvolveTangentsDiag(9,uint16_t)
+                                                  EvolveTangentsDiag(10,uint16_t)
+                                                  EvolveTangentsDiag(11,uint16_t)
+                                                  EvolveTangentsDiag(12,uint16_t)
+                                                  case 0:
+                                                  logger().log("Unhandled case 0");
+                                                  __builtin_trap();
+                                                  break;
+                                                  EvolveTangents(1,uint8_t)
+                                                      EvolveTangents(2,uint8_t)
+                                                      EvolveTangents(3,uint8_t)
+                                                      EvolveTangents(4,uint8_t)
+                                                      EvolveTangents(5,uint8_t)
+                                                      EvolveTangents(6,uint8_t)
+                                                      EvolveTangents(7,uint8_t)
+                                                      EvolveTangents(8,uint16_t)
+                                                      EvolveTangents(9,uint16_t)
+                                                      EvolveTangents(10,uint16_t)
+                                                      EvolveTangents(11,uint16_t)
+                                                      EvolveTangents(12,uint16_t)
+                                                      default:
+                                                                __builtin_trap();
+                                              }
+
+                                          }
+                                      }
+                                      ));
+    }
+    for (auto& f : futs)
+        f.wait();
+    futs.clear();
+    auto time2 = std::chrono::high_resolution_clock::now();
+    {
+        Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> TMap(&Ts.at(0,0),Ts.m_iSize,Ts.m_jSize);
+        Eigen::Map<const Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> hPsiMap(&hPsi[0],1,hPsi.size());
+        //For speed need to convert the ordering
+        Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> TMapC = TMap;
+        Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> T_C;
+        T_C.noalias() = m_compressMatrixPsi * TMapC;
+
+        //TODO bithacks
+        //Need to lie to eigen since .topRows is slow so instead we compute the extra overlap. This generates <psi|hpsi>, along with <psi|T> i.e. energy and derivative
+        Eigen::MatrixXd temp; // 1xN `matrix'
+        temp.noalias() = (hPsiMap * T_C.adjoint()).real();
+
+        derivCompressed.resize(temp.cols()-1,false,nullptr);
+
+        for (long i = 0; i < temp.cols()-1; i++)
+        {
+            derivCompressed[i] = temp(0,i);
+        }
+        if (Energy)
+            *Energy = temp(0,temp.cols()-1);
+    }
+    if (TsCopy)
+    {
+        Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> TMapOnly(&Ts.at(0,0),angles.size(),Ts.m_jSize);
+        *TsCopy = TMapOnly.transpose();
+    }
+    auto time5 = std::chrono::high_resolution_clock::now();
+    //Remains to do the backwards evolution of |H|Psi> and |T>
+    //This is basically the same as evolveDerivative
+
+    std::transform(m_excPerm.begin(),m_excPerm.end(),permAngles.begin(),[&angles](size_t i){return -angles[i];});
+    size_t stepSize = 1;//std::max(angles.size()/NUM_CORES,1ul);
+    for (size_t angleIdxStart = 0; angleIdxStart < angles.size(); angleIdxStart+=stepSize)
+    {
+        size_t angleIdxEnd = std::min(angleIdxStart+stepSize,angles.size());
+        futs.push_back(pool.queueWork([angleIdxStart,angleIdxEnd,&Hessian,&permAngles,&hPsi,this,&Ts]()
+                                      {
+                                          for (size_t angleIdx = angleIdxStart; angleIdx < angleIdxEnd; angleIdx++)
+                                          {
+                                              std::vector<realNumType> scratchPad;
+                                              vector<numType> localHpsi;
+                                              std::vector<realNumType*> derivLocs(permAngles.size());
+
+                                              //Negative of the angles because we evolve backwards
+
+                                              scratchPad.assign(permAngles.size(),0);
+
+                                              localHpsi.copy(hPsi);
+
+
+                                              std::transform(m_excPerm.begin(),m_excPerm.end(),derivLocs.begin(),[&scratchPad](size_t i){return &scratchPad[i];});
+
+                                              //We only need to evaluate if m_excPerm(angleIdx) < m_commuteBoundaries[i];
+                                              //To see this note that we could construct the hessian in permuted indexes
+                                              //Then we only want to construct if permAngleIDX <= m_commuteBoundaries[i]
+                                              //This will evaluate each element only once. problem is that diff may go over the boundary. So that needs to be fixed up afterwards.
+                                              //Further knowing the symmetrical version is annoying so we symmetrise here
+                                              size_t permAngleIdx = m_excInversePerm[angleIdx];
+                                              for (size_t i = m_fusedAnsatzes.size(); i > 0; i--)
+                                              {
+                                                  //            start                     end
+                                                  size_t diff = m_commuteBoundaries[i] -m_commuteBoundaries[i-1];
+                                                  if (!(permAngleIdx <= m_commuteBoundaries[i]))
+                                                      break;
+                                                  switch (m_fusedSizes[i-1])
+                                                  {
+                                                      GenerateHPsiTDiagonal(1,uint8_t)
+                                                  GenerateHPsiTDiagonal(2,uint8_t)
+                                                      GenerateHPsiTDiagonal(3,uint8_t)
+                                                      GenerateHPsiTDiagonal(4,uint8_t)
+                                                      GenerateHPsiTDiagonal(5,uint8_t)
+                                                      GenerateHPsiTDiagonal(6,uint8_t)
+                                                      GenerateHPsiTDiagonal(7,uint8_t)
+                                                      GenerateHPsiTDiagonal(8,uint16_t)
+                                                      GenerateHPsiTDiagonal(9,uint16_t)
+                                                      GenerateHPsiTDiagonal(10,uint16_t)
+                                                      GenerateHPsiTDiagonal(11,uint16_t)
+                                                      GenerateHPsiTDiagonal(12,uint16_t)
+                                                      case 0:
+                                                  {
+                                                      logger().log("Unhandled case 0");
+                                                      __builtin_trap();
+                                                      break;
+                                                  }
+                                                      GenerateHPsiT(1,uint8_t)
+                                                          GenerateHPsiT(2,uint8_t)
+                                                          GenerateHPsiT(3,uint8_t)
+                                                          GenerateHPsiT(4,uint8_t)
+                                                          GenerateHPsiT(5,uint8_t)
+                                                          GenerateHPsiT(6,uint8_t)
+                                                          GenerateHPsiT(7,uint8_t)
+                                                          GenerateHPsiT(8,uint16_t)
+                                                          GenerateHPsiT(9,uint16_t)
+                                                          GenerateHPsiT(10,uint16_t)
+                                                          GenerateHPsiT(11,uint16_t)
+                                                          GenerateHPsiT(12,uint16_t)
+
+
+                                                          default:
+                                                                    __builtin_trap();
+                                                  }
+                                                  //Store hessian
+                                                  for (size_t n = 0; n < diff; n++)
+                                                  {
+                                                      if (permAngleIdx <= m_commuteBoundaries[i-1] + n)
+                                                      {
+                                                          Hessian(angleIdx,m_excPerm[m_commuteBoundaries[i-1] + n]) += *derivLocs[m_commuteBoundaries[i-1] + n];
+                                                          if (permAngleIdx != m_commuteBoundaries[i-1] + n)
+                                                              Hessian(m_excPerm[m_commuteBoundaries[i-1] + n],angleIdx) += *derivLocs[m_commuteBoundaries[i-1] + n];
+                                                      }
+
+                                                  }
+                                              }
+                                          }
+                                      }
+                                      ));
+    }
+    for (auto& f : futs)
+        f.wait();
+
+    Hessian = m_compressMatrix * Hessian * m_compressMatrix.transpose();
+    auto time6 = std::chrono::high_resolution_clock::now();
+    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+    auto duration4 = std::chrono::duration_cast<std::chrono::milliseconds>(time5-time2).count();
+    auto duration5 = std::chrono::duration_cast<std::chrono::milliseconds>(time6-time5).count();
+    if constexpr (logTimings)
+    {
+        logger().log("FusedEvolve HessianProj Time taken 1 (ms)",duration1);
+        logger().log("FusedEvolve HessianProj Time taken 4 (ms)",duration4);
+        logger().log("FusedEvolve HessianProj Time taken 5 (ms)",duration5);
+    }
+}

@@ -443,7 +443,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    if (m_Ham->rows() < 100000)
+    if (m_Ham->rows() < 100000 && false)
     {
         fprintf(stderr,"Finding lowest EigenValue\n");
         vector<numType> start;
@@ -859,7 +859,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             // If A < 0 then the cubic implies t = infinity is best.
             // If eq (1) has solutions then we choose the smaller of E(t) or E(t_Max) otherwise t = t_max
 
-            constexpr size_t maxSearch = 5;
+            constexpr size_t maxSearch = 20;
             size_t searchCount = 0;
             long double tMax = 1.5;
             long double t = 1;
@@ -1104,67 +1104,58 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
     }
 }
 
-void TUPSQuantities::runNewtonMethodProjected(stateAnsatz *myAnsatz,bool avoidNegativeHessianValues)
+void TUPSQuantities::runNewtonMethodProjected(FusedEvolve *myAnsatz,std::vector<realNumType> &angles, const vector<numType>& psiH, const vector<numType>& prevDest)
 { // Projected energy
-    avoidNegativeHessianValues = true;
-    myAnsatz->setCalculateFirstDerivatives(false);
-    myAnsatz->setCalculateSecondDerivatives(false);
-    int maxStepCount = 250;
+    bool avoidNegativeHessianValues = true;
+    int maxStepCount = 50;
     realNumType zeroThreshold = 1e-10;
-
-    // myAnsatz->setCalculateSecondDerivatives(true);
-    const std::vector<ansatz::rotationElement> &rp = myAnsatz->getRotationPath();
-
-    std::vector<realNumType> angles;
-    for (auto rpe : rp)
-    {
-        angles.push_back(rpe.second);
-    }
 
     int count = maxStepCount;
     vector<numType> temp;
-    vector<numType> psiH;
-    vector<numType> previousDestCopy;
-    previousDestCopy.copy(myAnsatz->getVec());
-    m_Ham->apply(previousDestCopy,psiH);
     realNumType InvnormOfPsiH =1./std::sqrt(psiH.dot(psiH));
-    bool amStuck = false;
+    size_t EnergyEvals = 0;
+    size_t HessianEvals = 0;
+
     while(count-- > 0)
     {
         auto start = std::chrono::high_resolution_clock::now();
-        myAnsatz->updateAngles(angles);
 
-        const vector<numType>& dest = myAnsatz->getVec();
+        vector<numType> dest;
+        myAnsatz->evolve(dest,angles);
 
-        vector<realNumType> gradVectorCalc;
-        Matrix<realNumType>::EigenMatrix Hij; //uninitialized by default
+        vector<realNumType> EgradVectorCalc;
+        Matrix<realNumType>::EigenMatrix HEmunu;
 
-        myAnsatz->getHessianAndDerivativeProj(psiH,Hij,gradVectorCalc);
-        vector<realNumType>::EigenVector gradVectorCalcEm = gradVectorCalc;
+        realNumType Energy;// = dest.dot(psiH);
+        myAnsatz->evolveHessianProj(HEmunu,EgradVectorCalc,angles,psiH,nullptr,&Energy);
+        HessianEvals++;
+        EnergyEvals++;
+        //Suppose Eproj = <\psi_0|H\psi>/<\psi_0|\psi>
+        // dE/di = <\psi_0|H\d_i psi>/<\psi_0|\psi> - <\psi_0|H\psi><\psi_0|d_i \psi>/<\psi_0|\psi>^2
+        //       = G_i/S - E G^s i/S^2
+        //       = G_i/S - EProj G^s/S
+        // d^2E/didj = <\psi_0|H\d_i d_j psi>/<\psi_0|\psi> -  2<\psi_0|H\d_i psi><\psi_0|d_j \psi>/<\psi_0|\psi>^2 - <\psi_0|H\psi><\psi_0|d_i d_j\psi>/<\psi_0|\psi>^2 - 2<\psi_0|H\psi><\psi_0|d_i \psi><\psi_0|d_j \psi>/<\psi_0|\psi>^3
+        //           = H_{ij}/S - 2G_iG^s_j/S^2 - E H^s_{ij}/S^2 - 2 E G^s_i G^s_j /S^3
+        //           = H_{ij}/S - (G_iG^s_j + G_jG^s_i) /S^2 - EProj H^s_{ij}/S^2 - 2 EProj G^s_i G^s_j /S^2
+        // Matrix<realNumType>::EigenMatrix Smunu; // <\psi_0|d_i d_j\psi>
+        // vector<realNumType> SgradVectorCalc; // <\psi_0|d_j \psi>
+        // realNumType S;
+        // myAnsatz->evolveHessianProj(Smunu,SgradVectorCalc,angles,prevDest,nullptr,&S);
+        // HessianEvals++;
+        // EnergyEvals++;
 
-        vector<realNumType>::EigenVector gradVector_mu = m_compressMatrix * gradVectorCalcEm;
-        realNumType Energy = dest.dot(psiH);
-
-        /* some notation:
-                * quantities in `compressed' notation after taking into account which angles are equivalent are denoted by the greek subscripts \mu \nu
-                * in uncompressed notation with every exponential having a free angle: latin subscripts i,j
-                * coefficients of a ket in a basis e.g. \ket{\Psi} in the statevector basis have the subscripts a,b
-                *
-                * So \frac{d}{d \theta_\mu} is a derivative with respect to restricted angles.
-                * H_{ij} is the Hessian with each angle acting independently.
-                * v_a = \ket{\Psi} is also valid
-                */
+        //Eigen quantaties
+        // Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> EgradEm(&EgradVectorCalc[0],EgradVectorCalc.size(),1);
+        // Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> SgradEm(&SgradVectorCalc[0],SgradVectorCalc.size(),1);
+        // realNumType EProj = Energy/S;
+        // Eigen::VectorXd gradVector_mu = EgradEm/S - EProj*SgradEm/S;
+        // Eigen::MatrixXd Hmunu = HEmunu/S - (EgradEm * SgradEm.transpose() + SgradEm * EgradEm.transpose())/(S*S) - EProj * Smunu/(S*S) - (2*EProj/(S*S))*SgradEm*SgradEm.transpose();
 
 
-        // H_{\mu\nu}: = \frac{dx_j}{d\theta_nu} \frac{dx_i}{d\theta_mu} H_{ij} (for real vectors)
-        // H_{ij}      = \braket{\psi | H | \frac{d^2}{dx_i d x_j} \psi } + \braket{\frac{d^2}{dx_i d x_j} \psi | H | \psi} +
-        //             + \braket{\frac{d}{d x_i}\psi | H | \frac{d}{d x_j}\psi} + \braket{\frac{d}{d x_j}\psi | H | \frac{d}{d x_i}\psi}
+        Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> gradVector_mu(&EgradVectorCalc[0],EgradVectorCalc.size(),1);
+        const Eigen::MatrixXd& Hmunu = HEmunu;
 
-        // secondDerivTensor_{ija} = \frac{d}{d x_i}\frac{d}{d x_j}\ket{\Psi} {Note j <= i the rest is via symmetry}
-        // Hessian_{ij}
-        //Hessian_{\mu\nu}
-        Matrix<realNumType>::EigenMatrix Hmunu(m_numberOfUniqueParameters,m_numberOfUniqueParameters); //uninitialized by default
-        Hmunu = m_compressMatrix * Hij * m_compressMatrix.transpose();
+
 
         Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> es(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
         vector<std::complex<realNumType>>::EigenVector hessianEigVal = es.eigenvalues();
@@ -1174,11 +1165,7 @@ void TUPSQuantities::runNewtonMethodProjected(stateAnsatz *myAnsatz,bool avoidNe
 
 
 
-        vector<realNumType>::EigenVector updateAngles(rp.size());
-        updateAngles.setZero(rp.size());
-
-        vector<realNumType>::EigenVector negativeEigenValueDirections(hessianEigVal.rows());
-        negativeEigenValueDirections.setZero();
+        vector<realNumType>::EigenVector updateAngles;
 
         for (long int i = 0; i < hessianEigVal.rows(); i++)
         {
@@ -1196,51 +1183,152 @@ void TUPSQuantities::runNewtonMethodProjected(stateAnsatz *myAnsatz,bool avoidNe
 
         }
         // Matrix<std::complex<realNumType>>::EigenMatrix testingEigenDecompose = (hessianEigVec * hessianEigVal.asDiagonal()*hessianEigVec.adjoint()) - Hmunu;
-        vector<std::complex<realNumType>>::EigenVector testingUpdateAngles = - hessianEigVec * InvhessianEigVal.asDiagonal()*hessianEigVec.adjoint() * gradVector_mu + negativeEigenValueDirections;
+        vector<std::complex<realNumType>>::EigenVector testingUpdateAngles = - hessianEigVec * InvhessianEigVal.asDiagonal()*hessianEigVec.adjoint() * gradVector_mu;
         updateAngles = m_deCompressMatrix * testingUpdateAngles.real();
-
-        for (size_t i = 0; i < rp.size();i++)
-            angles[i] += updateAngles[i];
-
-        //Implements backtracking
-
-        int BacktrackCount = 0;
-
-        realNumType EnergyTrial =0;
-        while(true)
+        //Backtrack and cubic interpolate
         {
-            vector<numType> trial;
-            myAnsatz->updateAnglesNoDeriv(angles,trial);
-            EnergyTrial = psiH.dot(trial);
-            if (EnergyTrial > Energy && BacktrackCount < 30)
-            {//Backtracking
-                // logger().log("Backtracking",BacktrackCount);
-                for (size_t i = 0; i < rp.size();i++)
+            constexpr size_t maxSearch = 5;
+            size_t searchCount = 0;
+            long double tMax = 1.5;
+            long double t = 1;
+            long double newT = 1;
+            std::vector<realNumType> anglesCopy = angles;
+            for (size_t i = 0; i < angles.size();i++)
+                angles[i] += t*updateAngles[i];
+
+            vector<numType> trialCubic;
+            vector<realNumType> trialGradCubic;
+            realNumType energyTrial;
+            long double a;
+            long double b;
+            long double c;
+
+            long double E1;
+            long double E2;
+            long double foundDirectionalDeriv;
+            long double initialDirectionalDeriv = gradVector_mu.dot(testingUpdateAngles.real());
+            long double c2 = 1e-3;
+            bool doingForwardsSteps = false;
+            long double lastGoodTFowardSteps = newT;
+            do
+            {
+                searchCount++;
+                myAnsatz->evolve(trialCubic,angles);
+                myAnsatz->evolveDerivativeProj(trialCubic,trialGradCubic,angles,psiH,&energyTrial);
+                EnergyEvals++;
+
+                b = testingUpdateAngles.real().transpose() * (Hmunu * testingUpdateAngles.real());
+                c = testingUpdateAngles.real().dot(gradVector_mu);
+                Eigen::Map<Eigen::Matrix<realNumType,-1,1>,Eigen::Aligned32> trialGradMap(&trialGradCubic[0],trialGradCubic.size(),1);
+
+                foundDirectionalDeriv = trialGradMap.dot(testingUpdateAngles.real());
+                a = (foundDirectionalDeriv - (b + c))/(t*t);
+                b /= t;
+                if (energyTrial < Energy && gradVector_mu.norm() > 1e-5)
+                    doingForwardsSteps = true;
+
+                long double discriminant = b*b-4*a*c;
+                if (c >= 0)
+                    logger().log("c >= 0", c);
+                if (a >= 0)
                 {
-                    updateAngles[i] /=2;
-                    angles[i] -= updateAngles[i];
+                    newT = (-b + std::sqrt(discriminant))/(2*a);
                 }
-                BacktrackCount++;
+                else
+                {
+                    if (discriminant >= 0)
+                    {
+                        long double t1 = (-b + std::sqrt(discriminant))/(2*a);
+                        E1 = a*t1*t1*t1/3 + b*t1*t1/2 + c*t1 + Energy;
+                        E2 = a*tMax*tMax*tMax/3 + b*tMax*tMax/2 + c*tMax + Energy;
+                        if (E2 < E1)
+                        {
+                            newT = tMax;
+                        }
+                        else
+                        {
+                            newT = t1;
+                        }
+                    }
+                    else //monotone decrease up to boundary
+                    {
+                        newT = tMax;
+                    }
+                }
+                if (newT > tMax)
+                    newT = tMax;
+                angles = anglesCopy;
+                for (size_t i = 0; i < angles.size();i++)
+                    angles[i] += newT*updateAngles[i];
+                if (searchCount > maxSearch)
+                    break;
+
+
+                if (energyTrial > Energy && gradVector_mu.norm() > 1e-5)
+                {
+                    if (doingForwardsSteps)
+                    {
+                        if (lastGoodTFowardSteps > tMax/2)
+                            lastGoodTFowardSteps = tMax/2;
+                        t = t/2;
+                        tMax = tMax/2;
+                        newT = lastGoodTFowardSteps;
+                        angles = anglesCopy;
+                        for (size_t i = 0; i < angles.size();i++)
+                            angles[i] += newT*updateAngles[i];
+                        // logger().log("Recovering Forward");
+                        break;
+                    }
+                    doingForwardsSteps = false;
+                    t = t/2;
+                    tMax = tMax/2;
+                    angles = anglesCopy;
+                    for (size_t i = 0; i < angles.size();i++)
+                        angles[i] += t*updateAngles[i];
+
+                }
+                else
+                {
+                    if (doingForwardsSteps)
+                    {
+                        t = 2*t;
+                        tMax = 2*tMax;
+                        angles = anglesCopy;
+                        for (size_t i = 0; i < angles.size();i++)
+                            angles[i] += t*updateAngles[i];
+                        lastGoodTFowardSteps = newT;
+                    }
+                    else
+                    {
+                        if (newT > tMax)
+                            newT = tMax;
+                        angles = anglesCopy;
+                        for (size_t i = 0; i < angles.size();i++)
+                            angles[i] += newT*updateAngles[i];
+                        break;
+                    }
+
+                }
             }
-            else
-                break;
+            while(true);
+
+            // logger().log("tMax",tMax);
+            // logger().log("Computed t",t);
+            // logger().log("new T",newT);
+            // logger().log("Energy", Energy);
+            // logger().log("Energy Trial", energyTrial);
+            // logger().log("initialDirectionalDeriv",initialDirectionalDeriv);
+            // logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
+            // if (!(abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
+            //     logger().log("Failed to meet wolfe condition",searchCount);
+
         }
-
-
 
         auto stop = std::chrono::high_resolution_clock::now();
 
         realNumType overlap = psiH.dot(dest)*InvnormOfPsiH;
-        // fprintf(stderr,"Energy: " realNumTypeCode " GradNorm: " realNumTypeCode " Overlap: " realNumTypeCode " Time (ms): %li\n", Energy,gradVector_mu.norm(),overlap,std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count());
-        if (BacktrackCount >= 30 && amStuck)
-        {
-            logger().log("Break on Stuck");
-            break;
-        }
-        else if (BacktrackCount >= 30)
-            amStuck = true;
-        else
-            amStuck = false;
+        fprintf(stderr,"EnergyProj: %.10lg GradNorm: " realNumTypeCode " OverlapWithPsiH: %.10lg Time (ms): %li Energy Evals: %zu Hessian Evals %zu\n",
+                Energy,gradVector_mu.norm(),overlap,std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count(),EnergyEvals,HessianEvals);
         if (gradVector_mu.norm() < 1e-10)
             break;
     }
@@ -1794,12 +1882,37 @@ realNumType innerProduct(const vector<numType>::EigenVector& a, const vector<num
     return std::real(a.dot(b));
 };
 
-void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const std::vector<baseAnsatz::rotationElement> &rp, stateAnsatz &myAnsatz, bool avoidNegativeHessianValues)
+realNumType TUPSQuantities::iterativeTups(stateAnsatz &myAnsatz, std::vector<baseAnsatz::rotationElement> &rp, bool avoidNegativeHessianValues)
 {
-    bool doDIIS = true;
-    myAnsatz.setCalculateFirstDerivatives(false);
-    myAnsatz.setCalculateSecondDerivatives(false);
-    myAnsatz.resetPath();
+    std::vector<stateRotate::exc> excs;
+    std::vector<realNumType> anglesV(m_deCompressMatrix.rows());
+    {
+        vector<realNumType>::EigenVector angles(rp.size());
+        for (size_t i = 0; i <rp.size(); i++ )
+        {
+            excs.emplace_back();
+            dynamic_cast<stateRotate*>(myAnsatz.getLie())->convertIdxToExc(rp[i].first,excs.back());
+            angles[i] = rp[i].second;// + std::rand()/(10.*RAND_MAX);
+            anglesV[i] = angles[i];
+        }
+        angles = m_deCompressMatrix * m_normCompressMatrix * angles;
+        for (long i = 0; i < angles.rows(); i++)
+        {
+            anglesV[i] = angles[i];
+        }
+    }
+    FusedEvolve FE(myAnsatz.getStart(),m_Ham,m_compressMatrix,m_deCompressMatrix);
+    FE.updateExc(excs);
+    realNumType Energy = iterativeTups(FE,rp,avoidNegativeHessianValues);
+
+    return Energy;
+}
+
+realNumType TUPSQuantities::iterativeTups(FusedEvolve& FE, std::vector<baseAnsatz::rotationElement> &rp, bool avoidNegativeHessianValues)
+{
+    bool doDIIS = false;
+
+    std::vector<realNumType> anglesV;
     {
         vector<realNumType>::EigenVector angles(rp.size());
         for (size_t i = 0; i <rp.size(); i++ )
@@ -1809,56 +1922,42 @@ void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const
         angles = m_deCompressMatrix * m_normCompressMatrix * angles;
         for (size_t i = 0; i <rp.size(); i++ )
         {
-            myAnsatz.addRotation(rp[i].first,angles[i]);
+            anglesV.push_back(angles[i]);
         }
     }
     realNumType normOfGradVector = 1;
     realNumType Energy = 0;
+    vector<numType> psiH;
+
+    vector<numType>::EigenVector prevDestEm;
+    vector<numType> dest;
+    vector<numType> prevDest;
+    FE.evolve(prevDest,anglesV);
+    prevDestEm = prevDest;
+    m_Ham->apply(prevDest,psiH);
 
     EDIIS<vector<numType>::EigenVector,vector<realNumType>::EigenVector,innerProduct> myDIIS(15);
     int count = 0;
     while (count++ < 3000)
     {
-        vector<numType> prevDest;
-        prevDest.copy(myAnsatz.getVec());
-        vector<numType>::EigenVector prevDestEm;
-        prevDestEm = prevDest;
+
+
         // vector<numType> psiH;
         // mul(m_Ham,prevDest,psiH);
 
 
 
-        runNewtonMethodProjected(&myAnsatz,true);
-
-        const vector<numType>& dest = myAnsatz.getVec();
+        runNewtonMethodProjected(&FE,anglesV,psiH,prevDest);
 
 
-        /* g_{\mu\nu} = \braket{\eta_\mu | \eta_\nu}
-         * Where \ket{\eta_\mu} = \frac{d}{d \theta_\mu} \ket{\Psi}
-         *
-         * Some \theta_mu are fixed with respect to each other. we have f(x_1,x_2,x_3...etc)
-         * and derivTangentSpaceEM_{ij} =  \frac{d}{d\x_j} f_i(x_1,x_2,x_3...etc)
-         * Therefore \frac{d}{d\theta_1}f(x_1,x_2,x_3...etc) = \frac{d}{d\x_1}f(x_1,x_2...etc) + \frac{d}{d\x_2}f(x_1,x_2...etc).
-         * We have used \frac{dx_1}{d\theta_1} = 1
-         * i.e. chain rule.
-        */
-
-        //derivTangentSpaceEMCondensed_{a\mu} = compressMatrix_{\mu,i} derivTangentSpaceEM_{a,i}
-
-
-        //gradVector_{\mu} = \braket{\psi | H | \frac{d}{d\theta_\mu}\psi} + \braket{\frac{d}{d\theta_\mu}\psi | H | \psi}
+        FE.evolve(dest,anglesV);
+        m_Ham->apply(dest,psiH);
         vector<realNumType> gradVector;
 
-        myAnsatz.getDerivativeVec(m_Ham,gradVector); // True Derivative
-        // myAnsatz.getDerivativeVecProj(psiH,gradVector); // True Derivative
+        FE.evolveDerivativeProj(dest,gradVector,anglesV,psiH,&Energy);
         vector<realNumType>::EigenVector gradVectorEm  = gradVector;
-        gradVectorEm = m_compressMatrix * gradVectorEm;
-
-
-
-
         normOfGradVector = gradVectorEm.norm();
-        Energy = Ham.braket(dest,dest);
+
         fprintf(stderr, "Energy: " realNumTypeCode " GradNorm: " realNumTypeCode "\n", Energy, normOfGradVector);
 
         if (normOfGradVector < 1e-5)
@@ -1867,12 +1966,9 @@ void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const
         //Prepare for next
         if (doDIIS)
         {
-            auto rotationPath = myAnsatz.getRotationPath();
-            vector<realNumType>::EigenVector currAngles(rotationPath.size());
-            for (size_t i = 0; i <rotationPath.size(); i++ )
-            {
-                currAngles[i] = rotationPath[i].second;
-            }
+            vector<realNumType>::EigenVector currAngles(anglesV.size());
+            for (size_t i = 0; i <anglesV.size(); i++ )
+                currAngles[i] = anglesV[i];
 
             currAngles = m_normCompressMatrix*currAngles;
             vector<numType>::EigenVector newDestEM = dest;
@@ -1882,20 +1978,27 @@ void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const
             myDIIS.getNext(currAngles,extrapolatedError);
             currAngles = m_deCompressMatrix*currAngles;
 
-            std::vector<realNumType> nextAngles(rotationPath.size());
-            for (size_t i = 0; i <rotationPath.size(); i++ )
+            for (size_t i = 0; i <anglesV.size(); i++ )
             {
-                nextAngles[i] = currAngles[i];
+                anglesV[i] = currAngles[i];
             }
-            myAnsatz.updateAngles(nextAngles);
+            prevDestEm = std::move(newDestEM);
+            static_cast<Matrix<numType>&>(prevDest) = std::move(dest);
         }
+        else
+        {
+            prevDestEm = dest;
+            static_cast<Matrix<numType>&>(prevDest) = std::move(dest);
+        }
+
+
     }
     fprintf(stderr,"Optimised Angles: \n");
-    const std::vector<baseAnsatz::rotationElement> &rp2 = myAnsatz.getRotationPath();
-    vector<realNumType>::EigenVector angles(rp2.size());
+    vector<realNumType>::EigenVector angles(anglesV.size());
     for(long i =0; i < angles.rows(); i++)
     {
-        angles[i] = rp2[i].second;
+        angles[i] = anglesV[i];
+        rp[i].second = anglesV[i];
         fprintf(stderr,"%.15lg\n",(double)angles[i]);
     }
     fprintf(stderr,"Condensed Angles: \n");
@@ -1904,9 +2007,7 @@ void TUPSQuantities::iterativeTups(sparseMatrix<realNumType,numType> &Ham, const
     {
         fprintf(stderr,"%.15lg\n",(double)angles2[i]);
     }
-
-
-
+    return Energy;
 }
 #define columnSize "26"
 #define textColumnSize "40"
