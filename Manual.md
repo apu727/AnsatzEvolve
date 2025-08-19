@@ -1,56 +1,7 @@
 # AnsatzEvolve
 Fast classical statevector computation of Quantum Ansatze such as TUPS and LUCJ
-## Building
-Building all libraries and tests
-```
-cd src
-mkdir build
-cd build
-cmake -S ../ -B .
-cmake --build . --target all
-```
-This builds the libraries:
-```
-libAnsatzSynthInterface.a
-libcppAnsatzSynthLib.a
-```
-Along with the executables
-```
-FortranBindingsTest
-cppAnsatzSynth
-```
-```FortranBindingsTest``` can be run to check the build has been successful
-## Interfacing with fortran
-In order to interface the library with an external fortran project the file ```src/AnsatzSynthInterface.f90``` needs to be added to the external source tree. This file contains the fortran declarations for the functions implemented in the library. 
-The two libraries 
-```
-libAnsatzSynthInterface.a
-libcppAnsatzSynthLib.a
-```
-must then be added to the link line of the final executable. An example of how to do this with Cmake can be seen in ```src/CMakeLists.txt``` where the ```FortranBindingsTest``` executable is compiled. 
-## Compiler compatibility
-It has currently been tested with:
-```
-GCC 13.3.0
-gfortran 13.3.0
-Apple Clang++ 17
-```
-Other compilers may or may not work. A C++17 compatible compiler is necessary.
-## Future development
-* Condense the number of libraries down while maintaining logical separation of interface and backend and avoiding multiple compilations of the same file
-* Documentation for everything
-* Documentation for how to use the standalone executable ```cppAnsatzSynth```
-* Python Interface
-* Exposing more functionality through the fortran interface
 
-* Computation on GPUs
-* Auto generation of the TUPS and LUCJ ansatz
-* Bibtex file for citations
-* Test compatibility with compilers
-* Unit tests
-* Benchmark comparisons with the state of the art such as Qiskit-AER
-## Authors and Citation
-AnsatzEvolve is the work of Bence Csakany, if you use it please cite this GitHub reposititory
+See also ```README.md```
 
 ## How to Use
 ### Fortran binding
@@ -85,6 +36,7 @@ The possible command line options can be listed with ```./cppAnsatzSynth help```
 * ```optimise```
 
   Do Newton-Raphson steps starting at the first path in the parameter file.
+  The optimised parameters are printed to ```stderr``` both as condensed (accounting for dependence between angles) and not condensed angles.
  
 * ```iterativeoptimise```
 
@@ -105,6 +57,7 @@ The possible command line options can be listed with ```./cppAnsatzSynth help```
 * ```generatepathsForsubspace```
 
   Generate random angles and optimise using newton raphson. Pseudo basin hopping
+  If this option is used the parameters loaded from the parameter file are discarded. 
   
 * ```filepath XX/YY```
 
@@ -112,6 +65,163 @@ The possible command line options can be listed with ```./cppAnsatzSynth help```
 * ```help```
   
   Prints the help
+  
+Any of the options can be combined with any other one.
+
+The following files are required to be present for successful operation:
+* ```XX/YY_Initial.dat```
+* ```XX/YY_Operators.dat```
+* ```XX/YY_Order.dat```
+* ```XX/YY_Parameters.dat```
+
+Either:
+* ```XX/YY_Ham_Coeff.dat```
+* ```XX/YY_Ham_Index.dat```
+
+Or
+* ```XX/YY_oneEInts.bin```
+* ```XX/YY_twoEInts.bin```
+
+are necessary. If present ```XX/YY_Ham_Coeff.dat``` and ```XX/YY_Ham_Index.dat``` are prioritised.
+
+The following are optional and taken as zero if not present.
+* ```XX/YY_Nuclear_Energy.dat```
+
+The required files can be generated using ```HamGen.py``` and ```makeOperators.py```
+Both of these are intended to be run as scripts. i.e ```python HamGen.py``` etc. The only requirement is pySCF. A working version is given in ```requirements.txt``` although any version should be fine.
+
+To modify the system generated in ```HamGen.py``` modify the variables: 
+* ```outputName```            -- The name of the output file. ```_Ham_Index.dat``` etc. is automatically appended
+* ```atomString```            -- The pySCF atom string for the system
+* ```subtractNuclearEnergy``` -- Does not include the nuclear energy in the diagonal of the fully constructed Hamiltonian. (```_Ham_Index.dat``` and ```_Ham_Coeff.dat```)
+* ```perfectPairing```        -- A misnomer. Rearranges the orbitals such that the HOMO is adjacent to LUMO. If there are 4 MOs then ```1,2,3,4-> 1,4,2,3```.   ```1,2,3,4``` are in order of lowest MO energy to highest. 
+* ```localise```              -- Localise the orbitals using 
+
+Other variables that can in principle be modified but are untested:
+* ```basis```                 -- The basis to use. Default STO-3G
+* ```charge```                -- The pySCF charge variable
+* ```spin```                  -- The pySCF spin variable
+* ```activeOrbitals```        -- The active orbitals. Only does anything if the full Hamiltonian is constructed by python 
+* ```frozenOrbitals```        -- The frozen orbitals. Only does anything if the full Hamiltonian is constructed by python 
+
+To modify the TUPS ansatz generated by ```makeOperators.py``` modify the variables:
+* ```Name```                    -- The output name
+* ```numberOfSpatialOrbitals``` -- The number of spatial orbitals. E.g. for H10 in STO-3G: 10.
+* ```Layers```                  -- The number of layers to do.
+
+By default the outputname includes the layer number. E.g. ```H10_L1_Order.dat```
+
+## Detailed description of data files
+```XX/YY_Initial.dat```
+
+The initial state. This must have the correct length as the number of qubits is determined from this. A linear superposition can be created by specifying multiple basis states on different lines.
+
+An example for H10 working with real statevectors using the `perfect pairing' initial state:
+
+```01010101010101010101,1``` 
+
+An example for H10 working with complex statevectors using the Hartree--Fock initial state:
+
+```00000111110000011111,0,1``` 
+
+The numbers ```0``` and ```1``` are the real and imaginary parts respectively.
+
+```XX/YY_Operators.dat```
+
+Contains the list of operators to apply to the statevector. 
+As an example:
+
+```1 2 0 0```
+
+means 'Create' in the first qubit and `Annihilate' in the second qubit. Note that the anti-hermitian pair is automatically generated. 
+Likewise:
+
+```1 11 2 12```
+
+means 'Create' in the first and eleventh qubit and 'Annihilate' in the second and twelfth qubit.
+Note how the operators are one indexed. In a bitstring the qubit on the right is the `first' qubit. 
+
+```XX/YY_Order.dat```
+
+Specify the interdependencies of the angles of each operator. 
+For example:
+```
+1
+1
+2
+1,-1
+1,-1
+```
+
+Means there are 5 operators. The first two have angle 1. The third one has angle two. The last two have the negative of angle one. Any real number can be specified as a ratio.
+Angles are one indexed with respect to the Parameter file. i.e. Angle 1 is the first angle in the parameter file
+
+```XX/YY_Parameters.dat```
+
+The parameter file. The order is quite strict and not particularly robust to misconfiguration. If you seem to be getting the Hartree--Fock energy for all paths check the parameter file.
+An example file:
+```
+9
+Energy of minimum      1=  -2.844887240192929 first found at step        5 after                  245 function calls
+0.182710385127496
+1.657072388288146
+0.110549543159596
+0.878483796766535
+0.225437898626115
+1.095597930656243
+-0.000000000027978
+0.797060942289907
+-1.570796326773916
+```
+
+The first number gives the number of angles present. 
+The text on the next line is parsed to extract the expected energy. For those familiar with C:
+
+```fscanf(fp,"%*[^=]= %lg %*[^\n]",&Energy);```
+
+Is the command that parses this line. Note that Energy is currently unused. see ```loadParameters``` in ```TUPSLoadingUtils.h```
+
+The subsequent angles are extracted and stored. 
+This is repeated until the end of the file is reached. There can be no new line between parameter declarations. Feel free to improve this parser.
+
+
+```XX/YY_Ham_Coeff.dat```  and  ```XX/YY_Ham_Index.dat```
+
+These give the coefficients and index of the Hamiltonian matrix in a sparse representation respectively.
+An example coefficient file is:
+```
+-2.722167100361861
+-6.705474e-10
+-5.470889e-10
+0.0250723607658918
+0.1455910528783998
+-0.1039510623023243
+-6.705474e-10
+0.1277814823823004
+```
+etc.
+
+An example index file is:
+```
+52 52
+52 55
+52 58
+52 61
+52 86
+52 91
+52 100
+52 103
+```
+etc.
+
+There does not need to be any ordering of the indexes except for that they must match their respective coefficients.
+Indexes are one based and therefore index ```1``` corresponds to basis state ```0000```. Index 2 ```0001``` etc. 
+It is recommended not to use this file and instead provide the one and two electron integrals directly. 
+
+```XX/YY_oneEInts.bin``` and   ```XX/YY_twoEInts.bin```
+
+The one and two electron integral tensors as provided by pySCF. see ```HamGen.py``` for the code to generate them. It is assumed that these binary files are in the correct format. 
+
 
 
 
