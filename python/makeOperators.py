@@ -32,8 +32,8 @@ def makeEpq1FirstLayer(p,q,numberSpatial,order):
 Name = "H10"
 numberOfSpatialOrbitals = 10
 Layers = 5
-SU3 = False
-if (SU3):
+U3 = False
+if (U3):
     with open(f"{Name}_L{Layers}_Order.dat","w") as forder:
         with open(f"{Name}_L{Layers}_Operators.dat","w") as fop:
             opCounter = 1

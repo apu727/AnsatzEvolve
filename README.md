@@ -36,6 +36,31 @@ gfortran 13.3.0
 Apple Clang++ 17
 ```
 Other compilers may or may not work. A C++17 compatible compiler is necessary.
+## Compile options
+By default complex mode is disabled. In order to use a complex ansatz the program must be compiled in complex mode. You will get errors if you try to run a complex ansatz without compiling in complex mode. To do this specify:
+```
+-DCOMPLEX_MODE:BOOL=ON
+i.e. cmake -DCOMPLEX_MODE:BOOL=ON -S ../ -B .
+```
+During the initial CMake phase.
+It can sometimes be necessary to specify the Cmake build type also.
+
+```
+-DCOMPLEX_MODE:BOOL=ON
+i.e. cmake -DCMAKE_BUILD_TYPE=Release -S ../ -B .
+```
+
+Specific targets can be selected via the ```--target XX``` cmake option. Possible targets are:
+```
+cppAnsatzSynthLib
+cppAnsatzSynth
+AnsatzSynthInterface
+FortranBindingsTest
+all
+```
+
+
+
 ## Future development
 * Condense the number of libraries down while maintaining logical separation of interface and backend and avoiding multiple compilations of the same file
 * Documentation for everything
