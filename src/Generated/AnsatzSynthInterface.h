@@ -19,6 +19,7 @@ int getGradient_COMP (int nangles, const double *angles, double *gradient, void 
 int getHessian_COMP (int nangles, const double *angles, double *hessian, void *ctx);
 void *init ();
 int setExcitation (int nparams, const int *operators, const int *orderfile, void *ctx);
+int setExcitationScale (int nparams, const int *operators, const int *orderfile, const double *scalefactor, void *ctx);
 int setHamiltonian (int n, const int *iindexes, const int *jindexes, const double *coeffs, void *ctx);
 int setInitialState (int numqubits, int n, const int *iindexes, const double *coeffs, void *ctx);
 int setInitialStateComplex (int numqubits, int n, const int *iindexes, const __GFORTRAN_DOUBLE_COMPLEX *coeffs, void *ctx);

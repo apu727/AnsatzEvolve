@@ -69,6 +69,11 @@ int cleanup(void *ctx)
 //----------------------------------------------------------
 int setExcitation(int nparams, const int *operators, const int *orderfile, void *ctx)
 {
+    return setExcitationScale(nparams,operators,orderfile,nullptr,ctx);
+}
+
+int setExcitationScale(int nparams, const int *operators, const int *orderfile, const double *scale, void *ctx)
+{
     if (ctx == nullptr)
     {
         logger().log("nullptr ctx passed");
@@ -81,10 +86,12 @@ int setExcitation(int nparams, const int *operators, const int *orderfile, void 
     }
     if (traceInterfaceCalls)
     {
-        logger().log("setExcitation called with:");
+        logger().log("setExcitationScale called with:");
         logger().log("nParams", nparams);
         logger().log("operators", std::vector<int>(operators,operators+nparams*4));
         logger().log("orderfile", std::vector<int>(orderfile,orderfile+nparams));
+        if (scale)
+            logger().log("scale", std::vector<int>(scale,scale+nparams));
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
@@ -115,7 +122,10 @@ int setExcitation(int nparams, const int *operators, const int *orderfile, void 
             logger().log("orderfile out of bounds",orderfile[i]);
             return 5;
         }
-        parameterDependency.push_back({orderfile[i]-1,1});
+        if (scale)
+            parameterDependency.push_back({orderfile[i]-1,scale[i]});
+        else
+            parameterDependency.push_back({orderfile[i]-1,1});
     }
     succ = thisPtr->storeParameterDependencies(parameterDependency);
     if (!succ)
