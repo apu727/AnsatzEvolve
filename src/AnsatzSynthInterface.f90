@@ -53,6 +53,17 @@
             integer(c_int) :: status
         end function setExcitation
 
+        function setExcitationScale(nparams, operators, orderfile, scaleFactor, ctx) result(status)&
+        bind(C, name="setExcitationScale")
+            use iso_c_binding, only: c_int, c_ptr, c_double
+            integer(c_int), value :: nparams
+            integer(c_int), intent(in) :: operators(*)
+            integer(c_int), intent(in) :: orderfile(*)
+            real(c_double), intent(in) :: scaleFactor(*)
+            type(c_ptr), value :: ctx
+            integer(c_int) :: status
+        end function setExcitationScale
+
         !----------------------------------------------------------
         ! Sets the Hamiltonian matrix (sparse form) in the backend.
         ! Inputs:

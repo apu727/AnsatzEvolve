@@ -69,6 +69,11 @@ int cleanup(void *ctx)
 //----------------------------------------------------------
 int setExcitation(int nparams, const int *operators, const int *orderfile, void *ctx)
 {
+    return setExcitationScale(nparams,operators,orderfile,nullptr,ctx);
+}
+
+int setExcitationScale(int nparams, const int *operators, const int *orderfile, const double *scale, void *ctx)
+{
     if (ctx == nullptr)
     {
         logger().log("nullptr ctx passed");
@@ -81,14 +86,16 @@ int setExcitation(int nparams, const int *operators, const int *orderfile, void 
     }
     if (traceInterfaceCalls)
     {
-        logger().log("setExcitation called with:");
+        logger().log("setExcitationScale called with:");
         logger().log("nParams", nparams);
         logger().log("operators", std::vector<int>(operators,operators+nparams*4));
         logger().log("orderfile", std::vector<int>(orderfile,orderfile+nparams));
+        if (scale)
+            logger().log("scale", std::vector<int>(scale,scale+nparams));
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
-    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
 
     std::vector<stateRotate::exc> excs(nparams);
     for (int i = 0; i < nparams; i++)
@@ -115,7 +122,10 @@ int setExcitation(int nparams, const int *operators, const int *orderfile, void 
             logger().log("orderfile out of bounds",orderfile[i]);
             return 5;
         }
-        parameterDependency.push_back({orderfile[i]-1,1});
+        if (scale)
+            parameterDependency.push_back({orderfile[i]-1,scale[i]});
+        else
+            parameterDependency.push_back({orderfile[i]-1,1});
     }
     succ = thisPtr->storeParameterDependencies(parameterDependency);
     if (!succ)
@@ -147,7 +157,7 @@ int setHamiltonian(int N, const int* iIndexes, const int* jIndexes, const double
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
-    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
     if (N < 1)
     {
         logger().log("N < 1");
@@ -191,7 +201,7 @@ int setInitialState(int numQubits, int N, const int* iIndexes, const double* coe
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
-    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
     if (N < 1)
     {
         logger().log("N < 1");
@@ -238,7 +248,7 @@ int setInitialStateComplex (int numQubits, int N, const int *iIndexes, const __G
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
-    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
     if (N < 1)
     {
         logger().log("N < 1");
@@ -263,8 +273,8 @@ int setInitialStateComplex (int, int, const int *, const __GFORTRAN_DOUBLE_COMPL
 {
     logger().log("Cannot set a complex initial state without building in complex mode");
     return 4;
-#endif
 }
+#endif
 
 //----------------------------------------------------------
 // Computes the energy <psi|H|psi> for a given angle parameterization.
@@ -301,7 +311,7 @@ int getEnergy(int NAngles, const double* angles, double* energy, void* ctx)
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
-    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
     bool success = thisPtr->getExpectationValue(std::vector<double>(angles,angles+NAngles),*energy);
     if (!success)
         return 3;
@@ -354,7 +364,7 @@ int getFinalState (int NAngles, const double* angles, int NBasisVectors, double*
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
-    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
     vector<double> state;
 
 #ifdef useComplex
@@ -417,7 +427,7 @@ int getFinalStateComplex (int NAngles, const double *angles, int NBasisVectors, 
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
-    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
     vector<std::complex<double>> state;
     bool success = thisPtr->getFinalState(std::vector<double>(angles,angles+NAngles),state);
 
@@ -437,8 +447,8 @@ int getFinalStateComplex (int, const double *, int , __GFORTRAN_DOUBLE_COMPLEX *
 {
     logger().log("Cannot get a complex final state without building in complex mode");
     return 4;
-#endif
 }
+#endif
 
 
 //----------------------------------------------------------
@@ -481,7 +491,7 @@ int getGradient_COMP (int NAngles, const double* angles, double* gradient, void*
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
-    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
     vector<double> gradientV;
     if (!thisPtr->getGradientComp(std::vector<double>(angles,angles+NAngles),gradientV))
         return 5;
@@ -536,7 +546,7 @@ int getHessian_COMP (int NAngles, const double* angles, double* hessian, void* c
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
-    std::lock_guard<std::mutex>(thisPtr->m_interfaceLock);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
     Matrix<realNumType>::EigenMatrix hessianComp;
     if (!thisPtr->getHessianComp(std::vector<double>(angles,angles+NAngles),hessianComp))
         return 5;
