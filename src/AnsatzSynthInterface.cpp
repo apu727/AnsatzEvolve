@@ -263,8 +263,8 @@ int setInitialStateComplex (int, int, const int *, const __GFORTRAN_DOUBLE_COMPL
 {
     logger().log("Cannot set a complex initial state without building in complex mode");
     return 4;
-#endif
 }
+#endif
 
 //----------------------------------------------------------
 // Computes the energy <psi|H|psi> for a given angle parameterization.
@@ -437,8 +437,8 @@ int getFinalStateComplex (int, const double *, int , __GFORTRAN_DOUBLE_COMPLEX *
 {
     logger().log("Cannot get a complex final state without building in complex mode");
     return 4;
-#endif
 }
+#endif
 
 
 //----------------------------------------------------------
