@@ -51,9 +51,9 @@ The same benchmarks were also repeated on a cluster with 2x Intel(R) Xeon(R) Gol
 |H10 L1| 80ms |96  |266|45  |-9.116158337914195|-9.850065633544068|
 |H10 L5| 600ms | 365 |1626|225 |-9.307068450398951|-9.850065633544068|
 |H12 L1| 4s | 94 |261|55|-11.47368113870397 | |
-|H12 L5| 26s | | |275| | |
-|H14 L1|  | |    |65| | |
-|H14 L5|  | |    |325| | |
+|H12 L5| 26s |441|1781|275|-12.07083152763985 | |
+|H14 L1| 125s |118 |316|65| -13.92332526864589| |
+|H14 L5| 700s| |    |325| | |
 
 And 
 
@@ -69,7 +69,7 @@ And
 |H10 L5| 10ms | 24ms |
 |H12 L1| 34ms | 650ms |
 |H12 L5| 150ms | 950ms |
-|H14 L1|  |  |
-|H14 L5|  |  |
+|H14 L1| 640ms | 22s |
+|H14 L5| 3200ms | 28s |
 
 The significant jump in time from H10 to H12 when calculating the derivative is partially due to the Hamiltonian being computed on the fly vs pre-stored.
