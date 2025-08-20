@@ -74,6 +74,6 @@ target_link_libraries(AnsatzSynthInterface PRIVATE cppAnsatzSynthLib)
 set(fortran_files test.F90 AnsatzSynthInterface.f90)
 add_executable(FortranBindingsTest ${fortran_files})
 target_link_libraries(FortranBindingsTest AnsatzSynthInterface)
-set_source_files_properties(test.f90 PROPERTIES COMPILE_FLAGS -ffree-line-length-none)
+set_source_files_properties(test.F90 PROPERTIES COMPILE_FLAGS -ffree-line-length-none)
 
 
