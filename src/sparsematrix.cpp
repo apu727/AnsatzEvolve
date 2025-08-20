@@ -465,7 +465,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
     for (auto&f : futs)
         f.wait();
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("Ham Time taken (ms)",duration);
     logger().log("Actual size:", me->m_iIndexes.size());
     me->m_iIndexes.shrink_to_fit();

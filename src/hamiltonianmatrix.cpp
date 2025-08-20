@@ -542,7 +542,7 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
         }
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("Ham Time taken (ms)",duration);
     operators.shrink_to_fit();
     vals.shrink_to_fit();

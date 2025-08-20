@@ -286,8 +286,8 @@ void baseAnsatz::getDerivativeVec(std::shared_ptr<HamiltonianMatrix<realNumType,
     for (auto& f : futs)
         f.wait();
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(start-superstart).count();
-    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(start-superstart).count();
+    long duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("hpsi Time taken (ms)",duration1);
     logger().log("DerivEvolve Time taken (ms)",duration2);
 }
@@ -305,7 +305,7 @@ void baseAnsatz::getHessianAndDerivative(std::shared_ptr<HamiltonianMatrix<realN
     auto start = std::chrono::high_resolution_clock::now();
     getDerivativeVec(ExpMat,deriv);
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("getDerivativeVec Time taken (ms)",duration);
     // m_hPsiEvolvedList is now setup
     Hessian.resize(m_rotationPath.size(), m_rotationPath.size());
@@ -497,9 +497,9 @@ void baseAnsatz::getHessianAndDerivative(std::shared_ptr<HamiltonianMatrix<realN
         Hessian = *compressMatrix * Hessian * compressMatrix->transpose();
     Hessian += THT;
 
-    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(start2-start1).count();
-    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(start3-start2).count();
-    auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(start4-start3).count();
+    long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(start2-start1).count();
+    long duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(start3-start2).count();
+    long duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(start4-start3).count();
     logger().log("Hessian Duration1:",duration1);
     logger().log("Hessian Duration2:",duration2);
     logger().log("Hessian Duration3:",duration3);

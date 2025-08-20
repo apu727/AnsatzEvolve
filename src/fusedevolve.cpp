@@ -664,7 +664,7 @@ void RunFuseNDiagonal(fusedDiagonalAnsatz* const myFusedAnsatz, realNumType* sta
             }
             realNumType S;
             realNumType C;
-            sincos(totalAngle,&S,&C); // Its unclear whether this is faster or by expanding (cos + sin)(cos + sin). Unlikely to be bottleneck?
+            mysincos(totalAngle,&S,&C); // Its unclear whether this is faster or by expanding (cos + sin)(cos + sin). Unlikely to be bottleneck?
 
 
 
@@ -938,7 +938,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
         std::array<realNumType,numberToFuse> cosines;
         for (indexType idx = 0; idx < numberToFuse; idx++)
         {
-            sincos(angles[i+idx],&sines[idx],&cosines[idx]);
+            mysincos(angles[i+idx],&sines[idx],&cosines[idx]);
         }
 
 
@@ -2133,7 +2133,7 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
         }
     }
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     if constexpr (logTimings) logger().log("FusedEvolve Time taken:",duration);
 }
 #define EvolveDer(N,dataType)\
@@ -2233,7 +2233,7 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
     // logger().log("dest.dot start deriv", dest.dot(m_start)); // this should be 1
     // logger().log("hpsi.dot start deriv", hPsi.dot(m_start)); // this should be E
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     if constexpr (logTimings) logger().log("DerivTimeTaken (ms)", duration);
 
 }
@@ -2655,11 +2655,11 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
     Hessian = m_compressMatrix * Hessian * m_compressMatrix.transpose();
     Hessian += THT;
     auto time6 = std::chrono::high_resolution_clock::now();
-    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
-    auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(time3-time2).count();
-    auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(time4-time3).count();
-    auto duration4 = std::chrono::duration_cast<std::chrono::milliseconds>(time5-time4).count();
-    auto duration5 = std::chrono::duration_cast<std::chrono::milliseconds>(time6-time5).count();
+    long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+    long duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(time3-time2).count();
+    long duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(time4-time3).count();
+    long duration4 = std::chrono::duration_cast<std::chrono::milliseconds>(time5-time4).count();
+    long duration5 = std::chrono::duration_cast<std::chrono::milliseconds>(time6-time5).count();
     if constexpr (logTimings)
     {
         logger().log("FusedEvolve Hessian Time taken 1 (ms)",duration1);
@@ -2682,7 +2682,7 @@ realNumType FusedEvolve::getEnergy(const vector<numType> &psi)
     // hPsi.noalias() = currentMap*m_HamEm;
     realNumType E =  m_Ham->apply(psi,hPsi).dot(psi);
     auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
     if constexpr (logTimings) logger().log("FusedEvolve Energy Time taken 1 (ms)",duration);
     return E;
 }
@@ -2761,7 +2761,7 @@ void FusedEvolve::evolveDerivativeProj(const vector<numType> &finalVector, vecto
     // logger().log("dest.dot start deriv", dest.dot(m_start)); // this should be 1
     // logger().log("hpsi.dot start deriv", hPsi.dot(m_start)); // this should be E
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     if constexpr (logTimings) logger().log("DerivProjTimeTaken (ms)", duration);
 }
 
@@ -3047,9 +3047,9 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
 
     Hessian = m_compressMatrix * Hessian * m_compressMatrix.transpose();
     auto time6 = std::chrono::high_resolution_clock::now();
-    auto duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
-    auto duration4 = std::chrono::duration_cast<std::chrono::milliseconds>(time5-time2).count();
-    auto duration5 = std::chrono::duration_cast<std::chrono::milliseconds>(time6-time5).count();
+    long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+    long duration4 = std::chrono::duration_cast<std::chrono::milliseconds>(time5-time2).count();
+    long duration5 = std::chrono::duration_cast<std::chrono::milliseconds>(time6-time5).count();
     if constexpr (logTimings)
     {
         logger().log("FusedEvolve HessianProj Time taken 1 (ms)",duration1);

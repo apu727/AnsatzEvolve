@@ -75,7 +75,7 @@ void benchmarkDeriv(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> ro
         ansatz->getDerivativeVec(Ham,deriv);
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("deriv Time taken:",duration);
 }
 
@@ -91,7 +91,7 @@ void benchmarkRotate(stateAnsatz* ansatz, const std::vector<ansatz::rotationElem
         ansatz->calcRotationAlongPath(rp,destVec,startVec);
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("Rotate Time taken:",duration);
     startVec.copy(destVec);
 
@@ -121,7 +121,7 @@ void benchmarkRotate3(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
         ansatz->updateAngles(angles);
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("Rotate3 Time taken:",duration);
 
 
@@ -712,7 +712,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
             std::array<numType,numberToFuse> cosines;
             for (indexType idx = 0; idx < numberToFuse; idx++)
             {
-                sincos(rotationPath[i+idx].second,&sines[idx],&cosines[idx]);
+                mysincos(rotationPath[i+idx].second,&sines[idx],&cosines[idx]);
             }
 
 
@@ -1334,7 +1334,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
     compressor::deCompressVector<numType>(startVec,destVec,comp);
 
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("FusedRotate" + std::to_string(numberToFuse) +" Time taken:",duration);
     if constexpr (!BraketWithTangentOfResult)
     {
@@ -1540,8 +1540,8 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
             numType S2;
             numType C1;
             numType C2;
-            sincos(rotationPath[i].second,&S1,&C1);
-            sincos(rotationPath[i+1].second,&S2,&C2);
+            mysincos(rotationPath[i].second,&S1,&C1);
+            mysincos(rotationPath[i+1].second,&S2,&C2);
 
 
             //rot0 only
@@ -1671,7 +1671,7 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
     compressor::deCompressVector<numType>(startVec,destVec,comp);
 
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("FusedRotate Time taken:",duration);
 
 }
@@ -1938,8 +1938,8 @@ void benchmarkRotate4(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
             numType S2;
             numType C1;
             numType C2;
-            sincos(rotationPath[i].second,&S1,&C1);
-            sincos(rotationPath[i+1].second,&S2,&C2);
+            mysincos(rotationPath[i].second,&S1,&C1);
+            mysincos(rotationPath[i+1].second,&S2,&C2);
             uint32_t onlyRot1StartIdx = onlyrot1Start[i/numberToFuse];
             size_t j = 0;
             for ( ;j < myFusedAnsatz[i/numberToFuse].size() && j < onlyRot1StartIdx ; j++)
@@ -2036,7 +2036,7 @@ void benchmarkRotate4(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
         compressor::deCompressVector<numType>(start,destVec,comp);
     }
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("FusedRotate Time taken:",duration);
 
 }
@@ -2169,7 +2169,7 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
 
             double S = 0;
             double C = 0;
-            sincos(theta,&S,&C);
+            mysincos(theta,&S,&C);
 
             auto iIdx = iGenerators[i].begin();
             auto jIdx = jGenerators[i].begin();
@@ -2199,7 +2199,7 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
         }
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("Rotate2 Time taken:",duration);
 
 
@@ -2237,7 +2237,7 @@ void benchmarkMemAccess(stateAnsatz* ansatz, std::vector<ansatz::rotationElement
         }
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("memaccess Time taken:",duration);
     logger().log("NumIt:", numIt);
 
@@ -2273,7 +2273,7 @@ void benchmarkMemAccess2(stateAnsatz* ansatz, std::vector<ansatz::rotationElemen
         }
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("memaccess2 Time taken:",duration);
     logger().log("NumIt:", numIt);
 
@@ -2309,7 +2309,7 @@ void benchmarkMemAccess3(stateAnsatz* ansatz, std::vector<ansatz::rotationElemen
         }
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("memaccess3 Time taken:",duration);
     logger().log("NumIt:", numIt);
 
@@ -2335,7 +2335,7 @@ void benchmarkMemAccess4(stateAnsatz* ansatz, std::vector<ansatz::rotationElemen
         destVec.resize(startVec.size(),false,nullptr); // need memset version
     }
     auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop-start).count();
     logger().log("memaccess4 Time taken:",duration);
     logger().log("NumIt:", numIt);
 
@@ -2392,7 +2392,7 @@ void benchmarkApplyHamMyVectorise(vector<numType>& dest, const sparseMatrix<real
 
     auto endTime = std::chrono::high_resolution_clock::now();
 
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("Apply Hamiltonian Without Eigen time taken:",duration);
 }
 
@@ -2418,7 +2418,7 @@ void benchmarkApplyHamEigenDirect(const vector<numType>& dest,const  Eigen::Spar
 
     auto endTime = std::chrono::high_resolution_clock::now();
 
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("Apply Hamiltonian With Eigen no copy time taken:",duration);
 }
 
@@ -2444,7 +2444,7 @@ void benchmarkApplyHamEigenDirect2(const vector<numType>& dest,const  Eigen::Spa
 
     auto endTime = std::chrono::high_resolution_clock::now();
 
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("Apply Hamiltonian2 With Eigen no copy time taken:",duration);
 }
 
@@ -2459,7 +2459,7 @@ void benchmarkApplyHam(stateAnsatz* ansatz, std::vector<ansatz::rotationElement>
         Ham.multiply(dest,temp);
     }
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("Apply Hamiltonian time taken:",duration);
 
     //Now do it with Eigen
@@ -2559,7 +2559,7 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, std
             f.wait();
 
         auto endTime = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+        long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
         logger().log("Combined Time taken:",duration);
         delete[] resultPtrsl;
     };
@@ -2586,7 +2586,7 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, std
             {
                 realNumType S;
                 realNumType C;
-                sincos(r.second,&S,&C);
+                mysincos(r.second,&S,&C);
 
                 ansatz->getLie()->getLieAlgebraMatrix(r.first)->rotateAndBraketWithTangentOfResult(S,C,start,start,*vecPtr++,**ptr++);
             }
@@ -2651,7 +2651,7 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, std
         FE.evolve(dest3,angles);
     }
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     logger().log("FusedEvolve evolve Time taken total:",duration);
     startTime = std::chrono::high_resolution_clock::now();
 
