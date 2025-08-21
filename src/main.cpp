@@ -25,6 +25,8 @@ struct options
     std::string filePath = "";
     bool ok = true;
     bool benchmark = false;
+    bool noCompress = false;
+    bool onlyEvolve = false;
 
     static options parse(int argc, char* argv[])
     {
@@ -73,6 +75,14 @@ struct options
             else if (!strcmp(arg,"benchmark"))
             {
                 o.benchmark = true;
+            }
+            else if (!strcmp(arg,"nocompress"))
+            {
+                o.noCompress = true;
+            }
+            else if (!strcmp(arg,"onlyevolve"))
+            {
+                o.onlyEvolve = true;
             }
             else if (!strcmp(arg,"help"))
             {
@@ -181,6 +191,7 @@ int main(int argc, char *argv[])
     }
     logger().log("SZSym:",SZSym);
     logger().log("particleNumSym:",allSameParticleNumber);
+
     logger().log("NumberOfQubits",numberOfQubits);
     logger().log("NumberOfParticles",numberOfParticles);
     logger().log("SpinUp",spinUp);
@@ -188,11 +199,11 @@ int main(int argc, char *argv[])
     std::shared_ptr<stateRotate> lie = nullptr;
     std::shared_ptr<compressor> comp;
     std::shared_ptr<FusedEvolve> FE;
-    if (allSameParticleNumber && SZSym)
+    if (allSameParticleNumber && SZSym && !opt.noCompress)
         comp = std::make_shared<SZAndnumberOperatorCompressor>(statevectorCoeffs.size(),spinUp,spinDown);
-    if (allSameParticleNumber && !SZSym)
+    if (allSameParticleNumber && !SZSym && !opt.noCompress)
         comp = std::make_shared<numberOperatorCompressor>(statevectorCoeffs.size(),numberOfParticles);
-
+    logger().log("comp",comp.get());
     std::vector<stateRotate::exc> excs;
     if (opt.makeLie)
     {
@@ -234,9 +245,13 @@ int main(int argc, char *argv[])
     // sparseMatrix<realNumType,numType> Ham;
     // if (!Ham.loadMatrix(filePath,numberOfQubits,comp))
     //     return 1;
-    std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(filePath,numberOfQubits,comp);
-    if (!Ham->ok())
-        return 1;
+    std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham;
+    if (!opt.onlyEvolve)
+    {
+        Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(filePath,numberOfQubits,comp);
+        if (!Ham->ok())
+            return 1;
+    }
     // Ham.dumpMatrix(filePath);
 
 
@@ -248,7 +263,19 @@ int main(int argc, char *argv[])
     {
         FE = std::make_shared<FusedEvolve>(start,Ham,quantityCalc.m_compressMatrix,quantityCalc.m_deCompressMatrix);
         FE->updateExc(excs);
+        if (opt.onlyEvolve)
+        {
+            FE = std::make_shared<FusedEvolve>(start,Ham,quantityCalc.m_compressMatrix,quantityCalc.m_deCompressMatrix);
+            FE->updateExc(excs);
+            vector<numType> dest;
+            std::vector<realNumType> angles(rotationPath.size());
+            std::transform(rotationPaths[1].begin(),rotationPaths[1].end(), angles.begin(),[](baseAnsatz::rotationElement r){return r.second;});
+            // logger().log("angles:",angles);
+            FE->evolve(dest,angles);
+            return 0;
+        }
     }
+
     if (opt.benchmark)
     {
         benchmark(myAnsatz.get(),rotationPaths[1], Ham,quantityCalc.m_compressMatrix, quantityCalc.m_deCompressMatrix);
