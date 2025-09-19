@@ -62,6 +62,11 @@ def showPlot(man, startAtMinimum = False):
     from matplotlib.widgets import Button, Slider
     man.optimise()
     OptAngles = man.getAngles()
+    optimisedEnergy = man.getExpectationValue()
+    currPos = OptAngles.copy()
+    if not startAtMinimum:
+        currPos *= 0
+
     Hessian = man.getHessianComp()
     E,V = np.linalg.eigh(Hessian)
 
@@ -73,13 +78,26 @@ def showPlot(man, startAtMinimum = False):
     else:
         dir1 = np.zeros(Hessian.shape[0])
         dir2 = np.zeros(Hessian.shape[0])
-        yScaleStart = np.linalg.norm(OptAngles)*2
+        dir1[1] = 1
+        dir2[2] = 1
+        # yScaleStart = np.linalg.norm(OptAngles)*2
 
-        dir1 = OptAngles/np.linalg.norm(OptAngles)
-        dir2 = V[:,1]
+        # dir1 = OptAngles/np.linalg.norm(OptAngles)
+        # idx = 0
+        
+        # for i,e in enumerate(E):
+        #     if np.abs(e) < 1e-10:
+        #         continue
+        #     if idx == 0:
+        #         dir1 = V[:,i]
+        #     else:
+        #         dir2 = V[:,i]
+        #     idx += 1
+        #     if idx >= 2:
+        #         break
     
     def compute(xScale,yScale):
-        count = 400
+        count = 50
         # print(xScale)
         # print(yScale)
         XScaleSpace = np.linspace(-xScale,xScale,count)
@@ -92,34 +110,33 @@ def showPlot(man, startAtMinimum = False):
         # for i in range(dirs1.shape[0]):
         #     for j in range(dirs1.shape[0]):
         #         XYVec[i,j,:] = dirs1[i,:] + dirs2[j,:]
-        if startAtMinimum:
-            XYVec = dirs1[:, None, :] + dirs2[None, :, :] + OptAngles[None,None,:]
-        else:
-            XYVec = dirs1[:, None, :] + dirs2[None, :, :]
+        XYVec = dirs1[:, None, :] + dirs2[None, :, :] + currPos[None,None,:]
+        
         XYVec = XYVec.reshape((dirs1.shape[0]*dirs1.shape[0],dirs1.shape[1]))
         
         X,Y = np.meshgrid(XScaleSpace,yScaleSpace)
 
-        Energies = np.array(man.getExpectationValues(XYVec)).reshape((dirs1.shape[0],dirs1.shape[0]))
+        Energies = man.getExpectationValues(XYVec).reshape((dirs1.shape[0],dirs1.shape[0]))
         # return X,Y,Energies
         return XScaleSpace,yScaleSpace,Energies
 
     # Create the figure and the line that we will manipulate
     fig, ax = plt.subplots()
     # contourPlot = [ax.contourf(*compute(xScaleStart,yScaleStart))]
-    contourPlot = [ax.pcolormesh(*compute(xScaleStart,yScaleStart))]
+    contourPlot = [ax.pcolormesh(*compute(xScaleStart,yScaleStart),shading="gouraud",cmap="inferno")]
     cbar = [fig.colorbar(contourPlot[0], ax=ax)]
 
     # adjust the main plot to make room for the sliders
-    fig.subplots_adjust(left=0.2, bottom=0.25,right=0.5)
+    # fig.subplots_adjust(left=0.2, bottom=0.25,right=0.5)
+    fig.subplots_adjust(left=0.2, bottom=0.25)
 
     # Make a horizontal slider to control the frequency.
     axfreq = fig.add_axes([0.25, 0.1, 0.65, 0.03])
     xRange = Slider(
         ax=axfreq,
         label='xScale',
-        valmin=0.1,
-        valmax=30,
+        valmin=0.001,
+        valmax=1,
         valinit=xScaleStart,
     )
 
@@ -128,8 +145,8 @@ def showPlot(man, startAtMinimum = False):
     yRange = Slider(
         ax=axamp,
         label="yScale",
-        valmin=0.1,
-        valmax=30,
+        valmin=0.001,
+        valmax=1,
         valinit=yScaleStart,
         orientation="vertical"
     )
@@ -138,72 +155,72 @@ def showPlot(man, startAtMinimum = False):
         cbar[0].remove()
         contourPlot[0].remove()
         X,Y,Energies = compute(xRange.val,yRange.val)
-        contourPlot[0] = ax.pcolormesh(X,Y,Energies)
+        contourPlot[0] = ax.pcolormesh(X,Y,Energies,shading="gouraud",cmap="inferno")
         ax.set_xlim(-xRange.val,xRange.val)
         ax.set_ylim(-yRange.val,yRange.val)
         cbar[0] = fig.colorbar(contourPlot[0], ax=ax)
         fig.canvas.draw_idle()
 
-    def updateDir(val):
-        for idx in range(n_sliders):
-            if idx < Hessian.shape[0]:
-                dir1[idx] = ParamSliders[idx].val
-            else:
-                dir2[idx-Hessian.shape[0]] = ParamSliders[idx].val
-        update(val)
+    # def updateDir(val):
+    #     for idx in range(n_sliders):
+    #         if idx < Hessian.shape[0]:
+    #             dir1[idx] = ParamSliders[idx].val
+    #         else:
+    #             dir2[idx-Hessian.shape[0]] = ParamSliders[idx].val
+    #     update(val)
 
-    #Sliders to adjust parameters
-    ParamAxs = []
-    ParamSliders = []
+    # Sliders to adjust parameters
+    # ParamAxs = []
+    # ParamSliders = []
 
-    n_sliders = Hessian.shape[0]*2  # 16
-    n_cols = Hessian.shape[0]                    # number of columns
-    n_rows = int(np.ceil(n_sliders / n_cols))
+    # n_sliders = Hessian.shape[0]*2  # 16
+    # n_cols = Hessian.shape[0]                    # number of columns
+    # n_rows = int(np.ceil(n_sliders / n_cols))
 
-    # Define the panel for sliders
-    panel_left = 0.55
-    panel_bottom = 0.25
-    panel_width = 0.3
-    panel_height = 0.63
+    # # Define the panel for sliders
+    # panel_left = 0.55
+    # panel_bottom = 0.25
+    # panel_width = 0.3
+    # panel_height = 0.63
 
-    slider_width = panel_width / n_cols * 0.9   # small margin between sliders
-    slider_height = panel_height / n_rows * 0.9
-    x_margin = (panel_width / n_cols) * 0.05
-    y_margin = (panel_height / n_rows) * 0.15
+    # slider_width = panel_width / n_cols * 0.9   # small margin between sliders
+    # slider_height = panel_height / n_rows * 0.9
+    # x_margin = (panel_width / n_cols) * 0.05
+    # y_margin = (panel_height / n_rows) * 0.15
     
     
         
-    for idx in range(n_sliders):
-        row = idx // n_cols
-        col = idx % n_cols
+    # for idx in range(n_sliders):
+    #     row = idx // n_cols
+    #     col = idx % n_cols
         
-        x_pos = panel_left + col * (slider_width + x_margin)
-        y_pos = panel_bottom + (n_rows - 1 - row) * (slider_height + y_margin)  # top to bottom
+    #     x_pos = panel_left + col * (slider_width + x_margin)
+    #     y_pos = panel_bottom + (n_rows - 1 - row) * (slider_height + y_margin)  # top to bottom
 
-        PA = fig.add_axes([x_pos, y_pos, slider_width, slider_height])
-        ParamAxs.append(PA)
-        if idx < Hessian.shape[0]:
-            txt = f"YAng{idx+1}"
-            ParamSliders.append(Slider(
-                ax=PA,
-                label=txt,
-                valmin=-1,
-                valmax=1,
-                valinit=dir1[idx],
-                orientation="vertical"
-            ))
-        else:
-            txt = f"XAng{idx+1-Hessian.shape[0]}"
-            ParamSliders.append(Slider(
-                ax=PA,
-                label=txt,
-                valmin=-1,
-                valmax=1,
-                valinit=dir2[idx-Hessian.shape[0]],
-                orientation="vertical"
-            ))
+    #     PA = fig.add_axes([x_pos, y_pos, slider_width, slider_height])
+    #     ParamAxs.append(PA)
+    #     if idx < Hessian.shape[0]:
+    #         txt = f"YAng{idx+1}"
+    #         ParamSliders.append(Slider(
+    #             ax=PA,
+    #             label=txt,
+    #             valmin=-1,
+    #             valmax=1,
+    #             valinit=dir1[idx],
+    #             orientation="vertical"
+    #         ))
+    #     else:
+    #         txt = f"XAng{idx+1-Hessian.shape[0]}"
+    #         ParamSliders.append(Slider(
+    #             ax=PA,
+    #             label=txt,
+    #             valmin=-1,
+    #             valmax=1,
+    #             valinit=dir2[idx-Hessian.shape[0]],
+    #             orientation="vertical"
+    #         ))
         
-        ParamSliders[-1].on_changed(updateDir)
+    #     ParamSliders[-1].on_changed(updateDir)
 
 
 
@@ -216,16 +233,63 @@ def showPlot(man, startAtMinimum = False):
     yRange.on_changed(update)
 
     # Create a `matplotlib.widgets.Button` to reset the sliders to initial values.
-    resetax = fig.add_axes([0.8, 0.025, 0.1, 0.04])
-    button = Button(resetax, 'Reset', hovercolor='0.975')
+    def setupNext():
+        nonlocal currPos,dir1,dir2
+        man.setAngles(currPos)
+        Hessian = man.getHessianComp()
+        Grad = man.getGradientComp()
+        print(f"You've found: {man.getExpectationValue()}, Computer found: {optimisedEnergy}")
+        print(f"GradNorm: {np.linalg.norm(Grad)}")
+        E,V = np.linalg.eigh(Hessian)
+        print(E)
+        dir1 = Grad
+        for i in range(len(E)):
+            if abs(E[i]) > 1e-10:
+                # E[i] = abs(1/E[i])
+                E[i] = 1/E[i]
+            else:
+                E[i] = 0
+        dir2 = -V@np.diag(E)@V.T @ Grad.T
+        update(0)
 
+    def onclick(event):
+        # print('%s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+        #     ('double' if event.dblclick else 'single', event.button,
+        #     event.x, event.y, event.xdata, event.ydata))
+        if (event.button != 3):
+            return
+        nonlocal currPos,dir1,dir2
+        currPos = currPos + event.xdata*dir2 + event.ydata*dir1
+        setupNext()
+
+        
+
+    cid = fig.canvas.mpl_connect('button_press_event', onclick)
+    
+    resetax = fig.add_axes([0.8, 0.025, 0.1, 0.04])
+    optax = fig.add_axes([0.65, 0.025, 0.1, 0.04])
+    button = Button(resetax, 'NewtonStep', hovercolor='0.975')
+    button2 = Button(optax, 'Optimise', hovercolor='0.975')
 
     def reset(event):
         xRange.reset()
         yRange.reset()
-        for p in ParamSliders:
-            p.reset()
-    button.on_clicked(reset)
+        # for p in ParamSliders:
+        #     p.reset()
+    def newtonStep(event):
+        nonlocal currPos,dir1,dir2
+        currPos += dir2
+        setupNext()
+
+    def optimise(event):
+        nonlocal currPos,dir1,dir2
+        man.setAngles(currPos)
+        man.optimise()
+        currPos = man.getAngles()
+        setupNext()
+
+    button.on_clicked(newtonStep)
+    button2.on_clicked(optimise)
 
     plt.show()
 

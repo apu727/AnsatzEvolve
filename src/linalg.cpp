@@ -442,6 +442,15 @@ vector<dataType>::vector(const std::vector<dataType>& data) : vector(data.size()
     std::copy(data.begin(),data.end(),this->m_data);
 }
 
+template<typename dataType>
+vector<dataType>::operator vector<dataType>::EigenVector() const
+{
+    vector<dataType>::EigenVector ret(this->m_jSize);
+    Eigen::Map<Eigen::Matrix<dataType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> thisMap(this->m_data,this->m_iSize,this->m_jSize);
+    ret = thisMap;
+    return ret;
+}
+
 
 
 

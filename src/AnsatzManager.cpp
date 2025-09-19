@@ -665,7 +665,7 @@ bool stateAnsatzManager::getHessianComp(const std::vector<realNumType> &angles, 
     return success;
 }
 
-bool stateAnsatzManager::getExpectationValues(Matrix<realNumType>::EigenMatrix &angles, std::vector<realNumType> &exptValue)
+bool stateAnsatzManager::getExpectationValues(Matrix<realNumType>::EigenMatrix &angles, vector<realNumType>::EigenVector &exptValue)
 {
     bool success = true;
     if (!validateToRun())
@@ -694,9 +694,8 @@ bool stateAnsatzManager::getExpectationValues(Matrix<realNumType>::EigenMatrix &
             Matrix<numType> multiple;
             m_FA->evolveMultiple(multiple,angles);
             vector<realNumType> Es = m_FA->getEnergies(multiple);
-            exptValue.assign(Es.begin(),Es.end());
-            for (auto& E : exptValue)
-                E += m_nuclearEnergy;
+            exptValue = Es;
+            exptValue.array() += m_nuclearEnergy;
         }
         else
         {

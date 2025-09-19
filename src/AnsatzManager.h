@@ -107,7 +107,7 @@ public:
     bool getHessianComp(const std::vector<realNumType>& angles, Matrix<realNumType>::EigenMatrix& hessian);
 
     //Compute on each set of angles
-    bool getExpectationValues(Matrix<realNumType>::EigenMatrix& angles, std::vector<realNumType>& exptValue);
+    bool getExpectationValues(Matrix<realNumType>::EigenMatrix& angles, vector<realNumType>::EigenVector& exptValue);
 
     //Calculation functions
     bool optimise();
