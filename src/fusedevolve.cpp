@@ -2136,6 +2136,92 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
     long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     if constexpr (logTimings) logger().log("FusedEvolve Time taken:",duration);
 }
+
+void FusedEvolve::evolveMultiple(Matrix<numType> &destMatrix, const Matrix<realNumType>::EigenMatrix &anglesMatrix, vector<numType> *specifiedStart)
+{
+    if (!m_excsCached)
+        regenCache();
+    destMatrix.resize(anglesMatrix.rows(),specifiedStart == nullptr ? m_start.size() : specifiedStart->size(),m_lieIsCompressed,m_compressor,false);
+    for (long i = 0; i < anglesMatrix.rows(); i++)
+    {
+        if (specifiedStart == nullptr)
+            destMatrix.getJVectorView(i).copy(m_start);
+        else
+            destMatrix.getJVectorView(i).copy(*specifiedStart);
+    }
+
+    Eigen::Matrix<realNumType,-1,-1,Eigen::RowMajor> permAnglesMatrix(anglesMatrix.rows(),anglesMatrix.cols());
+
+    // std::transform(m_excPerm.begin(),m_excPerm.end(),permAngles.begin(),[&angles](size_t i){return angles[i];});
+    for (size_t i = 0; i < m_excPerm.size(); i++)
+    {
+        permAnglesMatrix.col(i) = anglesMatrix.col(m_excPerm[i]);
+    }
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+    std::vector<std::future<void>> futs;
+    threadpool& pool = threadpool::getInstance(NUM_CORES);
+    long stepSize = std::max(permAnglesMatrix.rows()/(long)NUM_CORES,1l);
+    for (long angleIdx = 0; angleIdx < permAnglesMatrix.rows(); angleIdx += stepSize)
+    {
+        long angleIdxStop = std::min(angleIdx + stepSize,permAnglesMatrix.rows());
+        futs.push_back(pool.queueWork(
+        [this,&destMatrix,&permAnglesMatrix,angleIdx,angleIdxStop]()
+          {
+                for (long idx = angleIdx; idx < angleIdxStop; idx++)
+                {
+                    auto dest = destMatrix.getJVectorView(idx);
+                    auto permAngles = Eigen::Map<const Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>>(&permAnglesMatrix(idx,0),1,permAnglesMatrix.cols());
+                    for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+                    {
+                        size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
+                        switch (m_fusedSizes[i])
+                        {
+                            EvolveDiagonal(1,uint8_t)
+                            EvolveDiagonal(2,uint8_t)
+                            EvolveDiagonal(3,uint8_t)
+                            EvolveDiagonal(4,uint8_t)
+                            EvolveDiagonal(5,uint8_t)
+                            EvolveDiagonal(6,uint8_t)
+                            EvolveDiagonal(7,uint8_t)
+                            EvolveDiagonal(8,uint16_t)
+                            EvolveDiagonal(9,uint16_t)
+                            EvolveDiagonal(10,uint16_t)
+                            EvolveDiagonal(11,uint16_t)
+                            EvolveDiagonal(12,uint16_t)
+                        case 0:
+                            logger().log("Unhandled case 0");
+                            __builtin_trap();
+                            break;
+
+                            Evolve(1,uint8_t)
+                            Evolve(2,uint8_t)
+                            Evolve(3,uint8_t)
+                            Evolve(4,uint8_t)
+                            Evolve(5,uint8_t)
+                            Evolve(6,uint8_t)
+                            Evolve(7,uint8_t)
+                            Evolve(8,uint16_t)
+                            Evolve(9,uint16_t)
+                            Evolve(10,uint16_t)
+                            Evolve(11,uint16_t)
+                            Evolve(12,uint16_t)
+
+                        default:
+                            __builtin_trap();
+                        }
+                    }
+                }
+          }));
+    }
+    for (auto& f : futs)
+        f.wait();
+    auto endTime = std::chrono::high_resolution_clock::now();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    if constexpr (logTimings) logger().log("FusedEvolveMultiple Time taken:",duration);
+}
+
+
 #define EvolveDer(N,dataType)\
 case N:\
 {\
@@ -2685,6 +2771,23 @@ realNumType FusedEvolve::getEnergy(const vector<numType> &psi)
     long duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
     if constexpr (logTimings) logger().log("FusedEvolve Energy Time taken 1 (ms)",duration);
     return E;
+}
+
+vector<realNumType> FusedEvolve::getEnergies(const Matrix<numType> &psi)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+    Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&psi.at(0,0),psi.m_iSize,psi.m_jSize);
+    Eigen::Matrix<numType,-1,-1,Eigen::RowMajor> hPsi(psi.m_iSize,psi.m_jSize);
+    Eigen::Map<Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> hPsiMap(hPsi.data(),hPsi.rows(),hPsi.cols());
+    m_Ham->apply(currentMap,hPsiMap);
+    vector<realNumType> ret(psi.m_iSize);
+    Eigen::Map<Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>,Eigen::Aligned32>EMap(&ret[0],1,ret.size());
+    EMap = (hPsi * currentMap.transpose()).diagonal().real();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+    if constexpr (logTimings) logger().log("FusedEvolve Energies Time taken 1 (ms)",duration);
+    return ret;
 }
 
 void FusedEvolve::evolveDerivativeProj(const vector<numType> &finalVector, vector<realNumType> &deriv, const std::vector<realNumType> &angles, const vector<numType> &projVector, realNumType *Energy)

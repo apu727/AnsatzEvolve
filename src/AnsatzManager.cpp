@@ -5,6 +5,8 @@
  */
 #include "AnsatzManager.h"
 #include "logger.h"
+#include "threadpool.h"
+#include "TUPSLoadingUtils.h"
 #include <filesystem>
 
 bool stateAnsatzManager::validateToRun()
@@ -98,7 +100,8 @@ bool stateAnsatzManager::construct()
         }
         logger().log("SZSym:",m_SZSym);
         logger().log("particleNumSym:",m_particleSym);
-        setHamiltonian();
+        if (!setHamiltonian())
+            return false;
         if constexpr(useFused)
         {
             if (m_compressStateVectors)
@@ -113,9 +116,9 @@ bool stateAnsatzManager::construct()
             m_FA = std::make_shared<FusedEvolve>(m_start,m_Ham,m_compressMatrix,m_deCompressMatrix);
             m_FA->updateExc(m_excitations);
             m_rotationPath.clear(); // probably empty but lets make sure
-            m_rotationPath.assign(m_angles.size(),{0,0});
-            setRotationPathFromAngles();
-            m_angles.clear();
+            m_rotationPath.assign(m_excitations.size(),{0,0});
+            setAnglesFromRotationPath();
+            evolve();
             m_isConstructed = true;
         }
         else
@@ -123,13 +126,12 @@ bool stateAnsatzManager::construct()
 
             m_lie = std::make_shared<stateRotate>(m_numberOfQubits,m_compressor);
             m_rotationPath.clear(); // probably empty but lets make sure
-            m_angles.clear();
             for (auto& e : m_excitations)
             {
                 m_lie->getLieAlgebraMatrix(e);
                 m_rotationPath.push_back({m_lie->convertDataToIdx(&e),0});
-                m_angles.push_back(0);
             }
+            setAnglesFromRotationPath();
             m_ansatz = std::make_shared<stateAnsatz>(&m_target,m_start,m_lie.get());
             m_ansatz->setCalculateFirstDerivatives(false);
             m_ansatz->setCalculateSecondDerivatives(false);
@@ -148,6 +150,7 @@ bool stateAnsatzManager::construct()
 
 void stateAnsatzManager::setRotationPathFromAngles()
 {
+    m_rotationPath.resize(m_angles.size());
     for (size_t i = 0; i < m_rotationPath.size(); i++)
     {
         m_rotationPath[i].second = m_angles[i];
@@ -156,19 +159,40 @@ void stateAnsatzManager::setRotationPathFromAngles()
 
 void stateAnsatzManager::setAnglesFromRotationPath()
 {
+    m_angles.resize(m_rotationPath.size());
     for (size_t i = 0; i < m_angles.size(); i++)
     {
         m_angles[i] = m_rotationPath[i].second;
     }
 }
 
+void stateAnsatzManager::evolve()
+{
+    if constexpr(useFused)
+    {
+        m_FA->evolve(m_current,m_angles);
+    }
+    else
+    {
+        m_ansatz->updateAngles(m_angles);
+    }
+}
+
 bool stateAnsatzManager::setHamiltonian()
 {
-    m_Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(m_coeffs,m_iIndexes,m_jIndexes,m_compressor);
-    m_coeffs.clear();
-    m_iIndexes.clear();
-    m_jIndexes.clear();
-    return m_Ham->ok();
+    if (m_iIndexes.size() != 0)
+    {
+        m_Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(m_coeffs,m_iIndexes,m_jIndexes,m_compressor);
+        m_coeffs.clear();
+        m_iIndexes.clear();
+        m_jIndexes.clear();
+        return m_Ham->ok();
+    }
+    else
+    {
+        m_Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(m_runPath,m_numberOfQubits,m_compressor);
+        return m_Ham->ok();
+    }
 }
 
 stateAnsatzManager::stateAnsatzManager(): m_target({1},{1},{1},1)
@@ -434,17 +458,27 @@ bool stateAnsatzManager::setAngles(std::vector<realNumType> angles)
     if (success && angles != m_angles)
     {
         m_angles = angles;
-        if constexpr(useFused)
-        {
-            m_FA->evolve(m_current,angles);
-        }
-        else
-        {
-            setRotationPathFromAngles();
-            m_ansatz->updateAngles(m_angles);
-        }
+        setRotationPathFromAngles();
+        evolve();
     }
     return success;
+}
+
+vector<realNumType>::EigenVector stateAnsatzManager::getAngles()
+{
+    bool success = true;
+    if (!validateToRun())
+    {
+        success = false;
+    }
+    if (success)
+    {
+        vector<realNumType> v(m_angles);
+        vector<realNumType>::EigenVector ev = v;
+        ev = m_TUPSQuantities->m_normCompressMatrix*ev;
+        return ev;
+    }
+    return vector<realNumType>::EigenVector();
 }
 
 bool stateAnsatzManager::getExpectationValue(realNumType &exptValue)
@@ -463,6 +497,7 @@ bool stateAnsatzManager::getExpectationValue(realNumType &exptValue)
     {
         exptValue = m_Ham->apply(m_ansatz->getVec(),tempNumType).dot(m_ansatz->getVec());
     }
+    exptValue += m_nuclearEnergy;
     return success;
 }
 
@@ -630,6 +665,54 @@ bool stateAnsatzManager::getHessianComp(const std::vector<realNumType> &angles, 
     return success;
 }
 
+bool stateAnsatzManager::getExpectationValues(Matrix<realNumType>::EigenMatrix &angles, std::vector<realNumType> &exptValue)
+{
+    bool success = true;
+    if (!validateToRun())
+    {
+        success = false;
+        return success;
+    }
+
+    if (angles.cols() == (long)m_rotationPath.size())
+        ; // decompressed angles are good;
+    else if ((int)(angles.cols()) == m_numberOfUniqueParameters)
+    {// need to decompress the angles
+        angles = angles * m_TUPSQuantities->m_deCompressMatrix.transpose();
+    }
+    else
+    {
+        success = false;
+        logger().log("Incorrect number of angles given", angles.cols());
+    }
+
+    if (success)
+    {
+
+        if constexpr(useFused)
+        {
+            Matrix<numType> multiple;
+            m_FA->evolveMultiple(multiple,angles);
+            vector<realNumType> Es = m_FA->getEnergies(multiple);
+            exptValue.assign(Es.begin(),Es.end());
+            for (auto& E : exptValue)
+                E += m_nuclearEnergy;
+        }
+        else
+        {
+            std::vector<realNumType> anglesV;
+            exptValue.resize(angles.rows());
+            for (long i = 0; i < angles.rows(); i++)
+            {
+                anglesV.assign(angles.row(i).begin(),angles.row(i).end());
+                m_ansatz->updateAngles(anglesV);
+                exptValue[i] = m_Ham->apply(m_ansatz->getVec(),tempNumType).dot(m_ansatz->getVec()) + m_nuclearEnergy;
+            }
+        }
+    }
+    return success;
+}
+
 bool stateAnsatzManager::optimise()
 {
     bool success = true;
@@ -645,6 +728,7 @@ bool stateAnsatzManager::optimise()
     if (!useFused)
         m_rotationPath = m_ansatz->getRotationPath();
     setAnglesFromRotationPath();
+    evolve();
     return success;
 }
 

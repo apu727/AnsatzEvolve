@@ -947,8 +947,6 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                     {
                         if (lastGoodTFowardSteps > tMax/2)
                             lastGoodTFowardSteps = tMax/2;
-                        t = t/2;
-                        tMax = tMax/2;
                         newT = lastGoodTFowardSteps;
                         angles = anglesCopy;
                         for (size_t i = 0; i < angles.size();i++)

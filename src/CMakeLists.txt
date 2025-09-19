@@ -18,6 +18,10 @@ else()
     set(CMAKE_CXX_FLAGS "-Wall -Wextra -march=native -fopenmp -Wmaybe-uninitialized -fuse-ld=gold")
 endif()
 
+if (COMPILE_PYTHON_LIBS)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fvisibility=hidden")
+endif()
+
 # set(CMAKE_VERBOSE_MAKEFILE on)
 # include(GNUInstallDirs)
 include_directories(./third-party/eigen-3.4.0)
@@ -75,5 +79,24 @@ set(fortran_files test.F90 AnsatzSynthInterface.f90)
 add_executable(FortranBindingsTest ${fortran_files})
 target_link_libraries(FortranBindingsTest AnsatzSynthInterface)
 set_source_files_properties(test.F90 PROPERTIES COMPILE_FLAGS -ffree-line-length-none)
+
+#Python Interface
+set(PYTHON_MODULE_SOURCES PyAnsatzEvolve.cpp)
+
+if (COMPILE_PYTHON_LIBS)
+    set(pybind11_DIR ${CMAKE_SOURCE_DIR}/../share/cmake/pybind11/)
+    set(PYBIND11_FINDPYTHON ON)
+    find_package(pybind11 CONFIG REQUIRED)
+
+    pybind11_add_module(PyAnsatzEvolve ${PYTHON_MODULE_SOURCES})
+
+
+    # target_include_directories(cppNEGF PRIVATE ./third-party/eigen-3.4.0)
+    target_link_libraries(PyAnsatzEvolve PUBLIC AnsatzSynthInterface)
+
+    #InstallDir
+    install(TARGETS PyAnsatzEvolve DESTINATION ${CMAKE_SOURCE_DIR}/../) # Set Install prefix to python directory
+endif()
+
 
 
