@@ -330,6 +330,15 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
                 Ham += np.diag([-nuclearEnergy]*len(Ham))
 
             assert(numAlphaelectrons == numBetaElectrons)
+            qubitPerm = []
+            qubitIdx = 0
+            for i in range(numSpatialOrbitals*2):
+                if getSpatialFromSpin(i) in frozenOrbitals:
+                    qubitPerm.append(-1)
+                else:
+                    qubitPerm.append(qubitIdx)
+                    qubitIdx += 1
+            
             with open(outputName + "_Ham_Index.dat","w") as indexF:
                 with open(outputName + "_Ham_Coeff.dat","w") as CoeffF:
                     for i in range(len(Ham)):
@@ -341,12 +350,16 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
                             braInt = 1 # Offset to get correct format
                             ketInt = 1
                             for occ in bra:
-                                braInt += 1<<occ
+                                newOcc = qubitPerm[occ]
+                                if newOcc > 0:
+                                    braInt += 1<<newOcc
                             for occ in ket:
-                                ketInt += 1<<occ
+                                newOcc = qubitPerm[occ]
+                                if newOcc > 0:
+                                    ketInt += 1<<newOcc
                             indexF.write(f"{braInt} {ketInt}\n")
                             CoeffF.write(f"{Ham[i,j]}\n")
-                    fockSpaceSize = pow(2,2*numSpatialOrbitals)
+                    fockSpaceSize = pow(2,2*len(activeOrbitals))
                     indexF.write(f"{fockSpaceSize} {fockSpaceSize}")
                     CoeffF.write(f"0\n")
 
