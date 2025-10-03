@@ -40,8 +40,8 @@ slaterDeterminantPositions = [posA,posB]
 
 # outputName = f"H2_Linear"
 # atomString = f"H 0 0 0 ; H 0 0 2  ;"
-outputName = f"H4_Linear"
-atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ;"
+outputName = f"L1"
+atomString = f"N 0 0 0; N 0 0 1.1;"
 # outputName = f"H6_Linear"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ;"
 # outputName = f"H8_Linear"
@@ -59,7 +59,7 @@ activeOrbitals = None
 
 # outputName = f"H4_L1"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ;"
-frozenOrbitals = set()
+frozenOrbitals = {0,2}
 activeOrbitals = None
 
 subtractNuclearEnergy = True
@@ -351,11 +351,11 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
                             ketInt = 1
                             for occ in bra:
                                 newOcc = qubitPerm[occ]
-                                if newOcc > 0:
+                                if newOcc >= 0:
                                     braInt += 1<<newOcc
                             for occ in ket:
                                 newOcc = qubitPerm[occ]
-                                if newOcc > 0:
+                                if newOcc >= 0:
                                     ketInt += 1<<newOcc
                             indexF.write(f"{braInt} {ketInt}\n")
                             CoeffF.write(f"{Ham[i,j]}\n")
