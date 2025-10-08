@@ -59,7 +59,7 @@ activeOrbitals = None
 
 # outputName = f"H4_L1"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ;"
-frozenOrbitals = {0,2}
+frozenOrbitals = {0,1}
 activeOrbitals = None
 
 subtractNuclearEnergy = True
@@ -125,7 +125,13 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
     print(orbs)
     if (perfectPairing):
         orbs2 = np.zeros_like(orbs)
-        pairing = [2*i for i in range(numSpatialOrbitals//2)] + [numSpatialOrbitals - 2*i - 1 for i in range(numSpatialOrbitals//2)]
+        nfroz=len(frozenOrbitals)
+        if set(range(nfroz)) != frozenOrbitals:
+            print("nfroz and frozen orbitals are inconsistent") # If someone tries to freeze {0,3} etc. 
+            quit()
+
+        pairing = [i for i in range(nfroz)] + [2*i+nfroz for i in range((numSpatialOrbitals-nfroz)//2)] + [numSpatialOrbitals - 2*i - 1 for i in range((numSpatialOrbitals-nfroz)//2)]
+        print("pairing=", pairing)
         for i,p in enumerate(pairing):
             orbs2[:,p] = orbs[:,i]
         orbs = orbs2
