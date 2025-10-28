@@ -82,7 +82,7 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
 #ifdef useComplex
         if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0)
         {
-            phase = iu;
+            phase *= iu;
         }
         else
         {

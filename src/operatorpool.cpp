@@ -40,19 +40,32 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
     uint32_t activeBits =  0;
     uint32_t createBits = 0;
     uint32_t annihilateBits = 0;
+    uint32_t signMask = 0;
+    uint32_t permPhase = 1;
+
+
     if (a[2] > -1 && a[3] > -1)
     {
         if (a[0] == a[1] || a[2] == a[3])
             fprintf(stderr,"Wrong order in creation annihilation operators");
         createBits = (1<<a[0]) | (1<<a[1]);
         annihilateBits = (1<<a[2]) | (1<<a[3]);
+        signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1) ^((1<<a[2])-1) ^((1<<a[3])-1);
+        signMask = signMask & ~((1<<a[0]) | (1<<a[1]) | (1<<a[2]) | (1<<a[3]));
         activeBits = createBits | annihilateBits;
+        if (a[0] < a[1])
+            permPhase *= -1;
+        if (a[2] < a[3])
+            permPhase *= -1;
     }
     else
     {
         createBits = (1<<a[0]);
         annihilateBits = (1<<a[1]);
         activeBits = createBits | annihilateBits;
+
+        signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1);
+        signMask = signMask & ~((1<<a[0]) | (1<<a[1]));
     }
 
     uint32_t* intois_pos = intois;
@@ -68,7 +81,8 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
         uint32_t resultState = basisState;
 
 
-        numType phase = 0;
+        numType phase = permPhase;
+        phase *= (popcount(basisState & signMask) & 1) ? -1 : 1;
         uint32_t maskedBasisState = basisState & activeBits;
 
         if (createBits == annihilateBits) // number operator
@@ -76,7 +90,7 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
 #ifdef useComplex
             if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0)
             {
-                phase = iu;
+                phase *= iu;
             }
             else
             {
@@ -92,17 +106,17 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
         { // excitation operator. These are different since we need to make it anti-hermitian which is done differently
             if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0 && (((maskedBasisState ^ annihilateBits) & createBits)) == 0)
             {// This allows operators like a^+_4 a^+_3 a_3 a_2 to be handled properly
-                phase = 1;
+                phase *= 1;
                 resultState = (basisState ^ annihilateBits) ^ createBits;
             }
             else if (((maskedBasisState & createBits) ^ createBits) == 0 && (((maskedBasisState ^ createBits) & annihilateBits)) == 0)
             {
-                phase = -1;
+                phase *= -1;
                 resultState = (basisState ^ createBits) ^ annihilateBits;
             }
             else
             {
-                phase = 0;
+                phase *= 0;
             }
         }
         if (phase != numType(0))
