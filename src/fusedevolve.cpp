@@ -51,7 +51,7 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
         phase *= (popcount(state & signMask) & 1) ? -1 : 1;
         if (a[0] < a[1])
             phase *= -1;
-        if (a[2] < a[3])
+        if (a[2] > a[3]) // destroy largest first.
             phase *= -1;
     }
     else

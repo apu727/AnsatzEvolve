@@ -55,7 +55,7 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
         activeBits = createBits | annihilateBits;
         if (a[0] < a[1])
             permPhase *= -1;
-        if (a[2] < a[3])
+        if (a[2] > a[3])
             permPhase *= -1;
     }
     else
