@@ -202,7 +202,7 @@ int main(int argc, char *argv[])
     if (allSameParticleNumber && SZSym && !opt.noCompress)
         comp = std::make_shared<SZAndnumberOperatorCompressor>(statevectorCoeffs.size(),spinUp,spinDown);
     if (allSameParticleNumber && !SZSym && !opt.noCompress)
-        comp = std::make_shared<numberOperatorCompressor>(statevectorCoeffs.size(),numberOfParticles);
+        comp = std::make_shared<numberOperatorCompressor>(numberOfParticles,statevectorCoeffs.size());
     logger().log("comp",comp.get());
     std::vector<stateRotate::exc> excs;
     if (opt.makeLie)

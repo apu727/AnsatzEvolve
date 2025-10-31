@@ -53,7 +53,7 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
         signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1) ^((1<<a[2])-1) ^((1<<a[3])-1);
         signMask = signMask & ~((1<<a[0]) | (1<<a[1]) | (1<<a[2]) | (1<<a[3]));
         activeBits = createBits | annihilateBits;
-        if (a[0] < a[1])
+        if (a[0] > a[1]) // see applyExcToBasisState_ in fusedevolve.cpp
             permPhase *= -1;
         if (a[2] > a[3])
             permPhase *= -1;

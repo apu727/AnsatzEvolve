@@ -49,7 +49,7 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
         signMask = signMask & ~((1<<a[0]) | (1<<a[1]) | (1<<a[2]) | (1<<a[3]));
         activeBits = createBits | annihilateBits;
         phase *= (popcount(state & signMask) & 1) ? -1 : 1;
-        if (a[0] < a[1])
+        if (a[0] > a[1]) // We want 1 5 2 6 to have no phase to match with previous angles
             phase *= -1;
         if (a[2] > a[3]) // destroy largest first.
             phase *= -1;
@@ -830,11 +830,15 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                             {
                                 bool complexOffset = filledMap[idx] & 1;
                                 // assert(complexOffset == false);
-                                comp->compressIndex(filledMap[idx]>>1,filledMap[idx]);
+                                bool compSucc = comp->compressIndex(filledMap[idx]>>1,filledMap[idx]);
+                                assert(compSucc);
                                 filledMap[idx] = (filledMap[idx] << 1) + (complexOffset ? 1 : 0);
                             }
                             else
-                                comp->compressIndex(filledMap[idx],filledMap[idx]);
+                            {
+                                bool compSucc = comp->compressIndex(filledMap[idx],filledMap[idx]);
+                                assert(compSucc);
+                            }
                         }
                     }
                     totalRotcount += numberOfActiveRots*localVectorSize/2;
@@ -883,11 +887,15 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                         {
                             bool complexOffset = potentiallyFilledMap[idx] & 1;
                             // assert(complexOffset == false);
-                            comp->compressIndex(potentiallyFilledMap[idx]>>1,potentiallyFilledMap[idx]);
+                            bool compSucc = comp->compressIndex(potentiallyFilledMap[idx]>>1,potentiallyFilledMap[idx]);
+                            assert(compSucc);
                             potentiallyFilledMap[idx] = (potentiallyFilledMap[idx] << 1) + (complexOffset ? 1 : 0);
                         }
                         else
-                            comp->compressIndex(potentiallyFilledMap[idx],potentiallyFilledMap[idx]);
+                        {
+                            bool compSucc = comp->compressIndex(potentiallyFilledMap[idx],potentiallyFilledMap[idx]);
+                            assert(compSucc);
+                        }
                     }
                 }
             }
