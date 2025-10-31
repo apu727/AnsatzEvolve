@@ -804,7 +804,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                 initialLinks[idx] = applyExcToBasisState_(currentBasisState,rots[idx]);
                 if (initialLinks[idx].first != currentBasisState)
                 {
-                    if (initialLinks[idx].second == false)
+                    if (initialLinks[idx].first < currentBasisState) // Deduplication via forcing an increasing sequence. Signs arent reliable when using fermionic, consider 4,2 3,1 applied to |0011>
                     {
                         allPositive = false; // deduplication of basis states
                         break;

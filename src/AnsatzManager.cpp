@@ -292,8 +292,8 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
                 allSameParticleNumber = false;
                 break;
             }
-            int currSpinUp = bitwiseDot(indexes[i]>>(numberOfQubits/2),ones,32);
-            int currSpinDown = bitwiseDot(indexes[i]>>(numberOfQubits/2),ones,numberOfQubits/2);
+            int currSpinUp = bitwiseDot(i>>(numberOfQubits/2),ones,32);
+            int currSpinDown = bitwiseDot(i,ones,numberOfQubits/2);
             if (spinUp == -1 && currSpinUp != -1)
                 spinUp = currSpinUp;
             if (spinDown == -1 && currSpinDown != -1)

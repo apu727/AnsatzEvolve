@@ -226,8 +226,8 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint32_t stateVecto
     uint32_t allOnes = -1;
     for (uint32_t i = 0; i < stateVectorSize; i++)
     {
-        bool spinUpActive = bitwiseDot(i,allOnes,(numberOfQubits/2)) == (char)spinUp;
-        bool spinDownActive = bitwiseDot(i>>(numberOfQubits/2),allOnes,32) == (char)spinDown;
+        bool spinUpActive = bitwiseDot(i>>(numberOfQubits/2),allOnes,32) == (char)spinUp;
+        bool spinDownActive = bitwiseDot(i,allOnes,(numberOfQubits/2)) == (char)spinDown;
         if (spinUpActive && spinDownActive)
         {
             compressPerm[i] = activeCount;
