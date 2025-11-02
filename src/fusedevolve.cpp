@@ -522,7 +522,7 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
     static_assert(numberToFuse < sizeof(indexType)*8);
     constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
     if (!isComplex)
-        __builtin_trap();//only complex exc can be diagonal and antihermitian
+        releaseAssert(false,"only complex exc can be diagonal and antihermitian");
 
     constexpr indexType numberOfPairsOfRotations = 1<<numberToFuse;
     typedef std::vector<uint32_t> localVector; //each element represents a 2D subspace and a sign
@@ -561,7 +561,7 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
         for (indexType idx = 0; idx < numberToFuse; idx++)//TODO check that this exists in the path
         {
             rots[idx] = excPath[i+idx];
-            assert(rots[idx].isDiagonal());
+            releaseAssert(rots[idx].isDiagonal(),"rots[idx].isDiagonal()");
         }
 
         //If rot0 and rot2 are active then the index is 0b101. Note that 0b000 is always empty
@@ -581,10 +581,10 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
                 initialLinks[idx] = applyExcToBasisState_(currentBasisState,rots[idx]);
                 if (initialLinks[idx].first != currentBasisState)
                 {
-                    assert(initialLinks[idx].second);
+                    releaseAssert(initialLinks[idx].second,"initialLinks[idx].second");
                     activeRotIdx |= 1<<idx;
                     ++numberOfActiveRots;
-                    assert(currentBasisState == (initialLinks[idx].first & -2));
+                    releaseAssert(currentBasisState == (initialLinks[idx].first & -2),"currentBasisState == (initialLinks[idx].first & -2)");
                 }
             }
             //All not active
@@ -605,7 +605,7 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
                     for (uint32_t idx = 0; idx < currentLocalVectors[activeRotIdx].size(); idx++)
                     {
                         bool __attribute__ ((unused))complexOffset = currentLocalVectors[activeRotIdx][idx] & 1;
-                        assert(complexOffset == false);
+                        releaseAssert(complexOffset == false,"complexOffset == false");
                         comp->compressIndex(currentLocalVectors[activeRotIdx][idx]>>1,currentLocalVectors[activeRotIdx][idx]);
                         currentLocalVectors[activeRotIdx][idx] = currentLocalVectors[activeRotIdx][idx] << 1;
                     }
@@ -726,7 +726,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
     typedef std::vector<std::array<localVector,localVectorSize>> fusedAnsatz; //\Sum_{k=1}^{n} n choose k = 2^n for n >=0
     fusedAnsatz myFusedAnsatz;
     //preprocess
-    assert(excPath.size() % numberToFuse == 0);
+    releaseAssert(excPath.size() % numberToFuse == 0,"excPath.size() % numberToFuse == 0");
 
     std::vector<uint32_t> activebasisStates;
     activebasisStates.resize(startVec.size()*(isComplex?2:1));
@@ -831,13 +831,13 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                                 bool complexOffset = filledMap[idx] & 1;
                                 // assert(complexOffset == false);
                                 bool compSucc = comp->compressIndex(filledMap[idx]>>1,filledMap[idx]);
-                                assert(compSucc);
+                                releaseAssert(compSucc,"compSucc");
                                 filledMap[idx] = (filledMap[idx] << 1) + (complexOffset ? 1 : 0);
                             }
                             else
                             {
                                 bool compSucc = comp->compressIndex(filledMap[idx],filledMap[idx]);
-                                assert(compSucc);
+                                releaseAssert(compSucc,"compSucc");
                             }
                         }
                     }
@@ -852,7 +852,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             indexType rotIdx = 0;
             while(rotIdx < numberToFuse && (activeRotIdx & (1<<rotIdx)) == 0)
                 ++rotIdx;
-            assert(rotIdx < numberToFuse);
+            releaseAssert(rotIdx < numberToFuse,"rotIdx < numberToFuse");
 
             *(currentMap.begin()+currentMapFilledSize) = currentBasisState;
             // for (indexType t = 1; t < (1<<numberOfActiveRots); t++)
@@ -865,7 +865,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             //         __builtin_trap();
             for (size_t l = 0; l < 1ul<<numberOfActiveRots; l++)
                 for (size_t m = l+1; m < 1ul<<numberOfActiveRots; m++)
-                    assert(currentMap[currentMapFilledSize + l] != currentMap[currentMapFilledSize + m]);
+                    releaseAssert(currentMap[currentMapFilledSize + l] != currentMap[currentMapFilledSize + m],"currentMap[currentMapFilledSize + l] != currentMap[currentMapFilledSize + m]");
             currentMapFilledSize += 1<<numberOfActiveRots;
         }
         for (indexType idx = 0; idx <  localVectorSize; idx++)
@@ -888,13 +888,13 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                             bool complexOffset = potentiallyFilledMap[idx] & 1;
                             // assert(complexOffset == false);
                             bool compSucc = comp->compressIndex(potentiallyFilledMap[idx]>>1,potentiallyFilledMap[idx]);
-                            assert(compSucc);
+                            releaseAssert(compSucc,"compSucc");
                             potentiallyFilledMap[idx] = (potentiallyFilledMap[idx] << 1) + (complexOffset ? 1 : 0);
                         }
                         else
                         {
                             bool compSucc = comp->compressIndex(potentiallyFilledMap[idx],potentiallyFilledMap[idx]);
-                            assert(compSucc);
+                            releaseAssert(compSucc,"compSucc");
                         }
                     }
                 }
@@ -933,7 +933,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
     if constexpr (BraketWithTangentOfResult)
     {
         if (hPsi == nullptr || result == nullptr)
-            __builtin_trap();
+            releaseAssert(false,"(hPsi == nullptr || result == nullptr) == true when BraketWithTangentOfResult == true");
     }
     else
     {
@@ -943,7 +943,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
     }
     if constexpr(storeTangent)
     {
-        assert(tangentStore != nullptr);
+        releaseAssert(tangentStore != nullptr,"tangentStore != nullptr when storeTangent == true");
     }
 
     // if constexpr (BraketWithTangentOfResult)
@@ -1801,7 +1801,7 @@ void FusedEvolve::regenCache()
     for (auto& e : m_excs)
     {
         if constexpr (logTimings) fprintf(stderr,"%3.1hhd, %3.1hhd, %3.1hhd, %3.1hhd\n",e[0],e[1],e[2],e[3]);
-        assert(e.isDiagonal() == e.hasDiagonal());//Somethign like a^\dagger_1 a^\dagger_2 a_2 a_3 is unhandled
+        releaseAssert(e.isDiagonal() == e.hasDiagonal(),"e.isDiagonal() == e.hasDiagonal(), Something like a^dagger_1 a^dagger_2 a_2 a_3 is unhandled");//Somethign like a^\dagger_1 a^\dagger_2 a_2 a_3 is unhandled
     }
 
 
@@ -1941,8 +1941,7 @@ void FusedEvolve::regenCache()
             SetupFuseNDiagonalMacro(11,uint16_t);
             SetupFuseNDiagonalMacro(12,uint16_t);
         case 0:
-            logger().log("Unhandled case 0");
-            __builtin_trap();
+            releaseAssert(false,"Unhandled case 0");
             break;
             SetupFuseN(1,uint8_t);
             SetupFuseN(2,uint8_t);
@@ -1957,7 +1956,7 @@ void FusedEvolve::regenCache()
             SetupFuseN(11,uint16_t);
             SetupFuseN(12,uint16_t);
         default:
-            __builtin_trap();
+            releaseAssert(false,"Unhandled case default");
             static_assert(maxFuse <=12);
         }
     }
@@ -2008,8 +2007,7 @@ void FusedEvolve::cleanup()
             delete static_cast<fusedDiagonalAnsatzX<12>*>(m_fusedAnsatzes[i]);
             break;
         case 0:
-            logger().log("Unhandled case 0");
-            __builtin_trap();
+            releaseAssert(false,"Unhandled case 0 - delete");
             break;
         case 1:
             delete static_cast<fusedAnsatzX<1>*>(m_fusedAnsatzes[i]);
@@ -2048,7 +2046,7 @@ void FusedEvolve::cleanup()
             delete static_cast<fusedAnsatzX<12>*>(m_fusedAnsatzes[i]);
             break;
         default:
-            __builtin_trap();
+            releaseAssert(false,"Unhandled case default - delete");
         }
     }
     m_commuteBoundaries.clear();
