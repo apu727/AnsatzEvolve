@@ -1874,7 +1874,7 @@ void FusedEvolve::regenCache()
     }
     m_commuteBoundaries.push_back(0);
 
-    for (long i = 0; i < (long)m_excPerm.size()-1; i++)
+    for (long i = 0; i < (long)m_excPerm.size(); i++)
     {
         for (size_t j = m_commuteBoundaries.back(); j < (size_t)i; j++ )
         {
