@@ -6,7 +6,7 @@ Building all libraries and tests
 cd src
 mkdir build
 cd build
-cmake -S ../ -B .
+cmake -DCMAKE_BUILD_TYPE=Release -S ../ -B .
 cmake --build . --target all
 ```
 This builds the libraries:
