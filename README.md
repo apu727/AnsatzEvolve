@@ -74,5 +74,8 @@ all
 * Test compatibility with compilers
 * Unit tests
 * Benchmark comparisons with the state of the art such as Qiskit-AER
+* Save optimised angles to file automatically
+* Correctly determine SZ sym taking into account the operators not just the initial state
+* Add option to not find lowest eigenvalue when computing properties
 ## Authors and Citation
 AnsatzEvolve is the work of Bence Csakany, if you use it please cite this GitHub reposititory

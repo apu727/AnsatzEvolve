@@ -122,7 +122,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
     size_t oneEIntsBufferSize = CalculateFileSize(fponeEInts);//Calculate total size of file
     if (oneEIntsBufferSize != (numberOfQubits/2) * (numberOfQubits/2)*sizeof(double))
     {
-        fprintf(stderr,"oneEInts Binary file has wrong amount of data. Hamiltonians should be in Molecular orbital format");
+        fprintf(stderr,"oneEInts Binary file has wrong amount of data. Hamiltonians should be in Molecular orbital format and not adapted for permutational symmetry. i.e. S1\n");
         fclose(fponeEInts);
         fclose(fptwoEInts);
         return false;
@@ -130,7 +130,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
     size_t twoEIntsBufferSize = CalculateFileSize(fptwoEInts);//Calculate total size of file
     if (twoEIntsBufferSize != (numberOfQubits/2)*(numberOfQubits/2)*(numberOfQubits/2)*(numberOfQubits/2)*sizeof(double))
     {
-        fprintf(stderr,"twoEInts Binary file has wrong amount of data. Hamiltonians should be in Molecular orbital format");
+        fprintf(stderr,"twoEInts Binary file has wrong amount of data. Hamiltonians should be in Molecular orbital format and not adapted for permutational symmetry. i.e. S1\n");
         fclose(fponeEInts);
         fclose(fptwoEInts);
         return false;
