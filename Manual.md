@@ -221,9 +221,9 @@ It is recommended not to use this file and instead provide the one and two elect
 
 ```XX/YY_oneEInts.bin``` and   ```XX/YY_twoEInts.bin```
 
-The one and two electron integral tensors as provided by pySCF. see ```HamGen.py``` for the code to generate them. It is assumed that these binary files are in the correct format. 
+The one and two electron integral tensors as provided by pySCF. see ```HamGen.py``` for the code to generate them. It is assumed that these binary files are in the correct format with minimal error detection.
 
-At a High level, ```XX/YY_oneEInts.bin``` contains all Hamiltonian terms of the form:
+At a high level, ```XX/YY_oneEInts.bin``` contains all Hamiltonian terms of the form:
 
 ```<i|h|j>```
 
@@ -235,7 +235,9 @@ The array order is assumed to be C ordered i.e.
 ```(13|24) = <12|1/r12|34> = twoEInts[1*N^3 + 2*N^2 + 3*N + 4]```
 with ```N``` is the number of MOs.
 
-Note also that there is **no** permutational symmetry in the saved binary files. If you're working on computers with differing endianness, make sure the binary format is saved correctly for the target architecture.
+Note also that there is **no** permutational symmetry in the saved binary files. The dimension of ```oneEInts``` is therefore ```N^2```.
+```twoEInts``` is ```N^4```
+If you're working on computers with differing endianness, make sure the binary format is saved correctly for the target architecture.
 
 
 
