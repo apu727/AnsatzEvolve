@@ -6,7 +6,7 @@ Building all libraries and tests
 cd src
 mkdir build
 cd build
-cmake -S ../ -B .
+cmake -DCMAKE_BUILD_TYPE=Release -S ../ -B .
 cmake --build . --target all
 ```
 This builds the libraries:
@@ -75,7 +75,5 @@ all
 * Unit tests
 * Benchmark comparisons with the state of the art such as Qiskit-AER
 * Save optimised angles to file automatically
-* Correctly determine SZ sym taking into account the operators not just the initial state
-* Add option to not find lowest eigenvalue when computing properties
 ## Authors and Citation
 AnsatzEvolve is the work of Bence Csakany, if you use it please cite this GitHub reposititory

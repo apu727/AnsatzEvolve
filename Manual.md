@@ -27,7 +27,16 @@ The C API exposes the same functions as fortran. See ```AnsatzSynthInterface.cpp
 For C++ usage it is best to use the class ```stateAnsatzManager``` defined in ```AnsatzManager.h``` directly. If more advanced features are needed, see ```main.cpp``` for example usage. These are currently undocumented.
 The C/Fortran API directly wraps this class so all functions are similar. 
 ### Python Bindings
-TODO
+See ```Explore.py``` for an example. They are largely one to one with the Fortran bindings. See also PyAnsatzEvolve.cpp
+
+In order to compile you must specify:
+
+```-DCOMPILE_PYTHON_BINDINGS=ON```
+
+when configuring. A detectable version of pybind11 is also needed. The output library is placed in the root of the repository if the install target is specified. 
+
+```cmake --build . --target install```
+
 ### cppAnsatzSynth Standalone
 The standalone executable ```cppAnsatzSynth``` works independently of the interfaces. The only external dependency is openmp but this can be removed TODO
 The executable works from command line arguments and parsing text files. 
