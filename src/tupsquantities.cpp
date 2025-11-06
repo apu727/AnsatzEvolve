@@ -149,7 +149,7 @@ TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,num
     buildCompressionMatrices(numberOfUniqueParameters, order, m_deCompressMatrix,m_compressMatrix);
 }
 
-void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths)
+void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, bool computeLowestEigenValue)
 {
     bool useFusedEvolve = false;
     if (!myAnsatz)
@@ -360,7 +360,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
                 const vector<numType>::EigenVector &evCondensed = hessianEigVec.col(i);
                 vector<numType>::EigenVector ev(evCondensed.rows());
                 ev = m_deCompressMatrix * evCondensed;
-                // calculateNumericalSecondDerivative(rp,Energies[rpIndex],m_Ham,ev,myAnsatz);
+                // calculateNumericalSecondDerivative(anglesV,Energies[rpIndex],m_Ham,ev,FE);
 
             }
             else if (e >= -zeroThreshold && e <= zeroThreshold)
@@ -443,7 +443,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    if (m_Ham->rows() < 100000)
+    if (m_Ham->rows() < 100000 && computeLowestEigenValue)
     {
         fprintf(stderr,"Finding lowest EigenValue\n");
         vector<numType> start;
@@ -467,7 +467,10 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         // fprintf(stderr,"\n");
     }
     else
-        logger().log("Hamiltonian too big to diagonalise here");
+    {
+        if (computeLowestEigenValue)
+            logger().log("Hamiltonian too big to diagonalise here");
+    }
 }
 
 void TUPSQuantities::calculateNumericalSecondDerivative(const std::vector<ansatz::rotationElement> &rp, realNumType startEnergy, const sparseMatrix<realNumType,numType> &Ham, const vector<numType>::EigenVector &direction, stateAnsatz *myAnsatz)
@@ -496,6 +499,44 @@ void TUPSQuantities::calculateNumericalSecondDerivative(const std::vector<ansatz
         DE[i] = (E[i+1]-E[i])/offsetSize;
     }
     realNumType DDE[8];
+    for (int i = 0; i < 8; i++)
+    {
+        DDE[i] = (DE[i+1]-DE[i])/offsetSize;
+        fprintf(stderr,"%15.10lg ",(double)DDE[i]);
+    }
+    fprintf(stderr,"\n");
+    fprintf(stderr,"\n");
+}
+
+void TUPSQuantities::calculateNumericalSecondDerivative(const std::vector<realNumType> &rp, realNumType startEnergy, std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham,
+                                                        const vector<numType>::EigenVector &direction, std::shared_ptr<FusedEvolve> myAnsatz)
+{
+    //for sanity checking.
+    fprintf(stderr,"Varying energies: starting at " realNumTypeCode "\n",startEnergy);
+
+    vector<numType> temp;
+    realNumType offsetSize = 0.001;
+    realNumType E[10];
+    fprintf(stderr,"Energies:\n");
+    for (int i = -5; i < 5;i++)
+    {
+        std::vector<realNumType> rpNew = rp;
+        for (size_t idx = 0; idx < rpNew.size(); idx++)
+        {
+            rpNew[idx] += (realNumType)i*std::real(direction[idx])*offsetSize;
+        }
+        myAnsatz->evolve(temp,rpNew);
+        E[i+5] = Ham->apply(temp).dot(temp);
+        fprintf(stderr,"%15.10lg ",(double)E[i+5]);
+    }
+    fprintf(stderr,"\n");
+    realNumType DE[9];
+    for (int i = 0; i < 9; i++)
+    {
+        DE[i] = (E[i+1]-E[i])/offsetSize;
+    }
+    realNumType DDE[8];
+    fprintf(stderr,"DD Energies:\n");
     for (int i = 0; i < 8; i++)
     {
         DDE[i] = (DE[i+1]-DE[i])/offsetSize;
@@ -947,8 +988,6 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                     {
                         if (lastGoodTFowardSteps > tMax/2)
                             lastGoodTFowardSteps = tMax/2;
-                        t = t/2;
-                        tMax = tMax/2;
                         newT = lastGoodTFowardSteps;
                         angles = anglesCopy;
                         for (size_t i = 0; i < angles.size();i++)

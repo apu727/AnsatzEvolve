@@ -31,6 +31,8 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
     uint32_t activeBits =  0;
     uint32_t createBits = 0;
     uint32_t annihilateBits = 0;
+
+    numType phase = 1;
     if (a[0] < 0 && a[1] < 0)
         return std::make_pair(state,true);
 
@@ -43,13 +45,24 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
         }
         createBits = (1<<a[0]) | (1<<a[1]);
         annihilateBits = (1<<a[2]) | (1<<a[3]);
+        uint32_t signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1) ^((1<<a[2])-1) ^((1<<a[3])-1);
+        signMask = signMask & ~((1<<a[0]) | (1<<a[1]) | (1<<a[2]) | (1<<a[3]));
         activeBits = createBits | annihilateBits;
+        phase *= (popcount(state & signMask) & 1) ? -1 : 1;
+        if (a[0] > a[1]) // We want 1 5 2 6 to have no phase to match with previous angles
+            phase *= -1;
+        if (a[2] > a[3]) // destroy largest first.
+            phase *= -1;
     }
     else
     {
         createBits = (1<<a[0]);
         annihilateBits = (1<<a[1]);
         activeBits = createBits | annihilateBits;
+
+        uint32_t signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1);
+        signMask = signMask & ~((1<<a[0]) | (1<<a[1]));
+        phase *= (popcount(state & signMask) & 1) ? -1 : 1;
     }
     if (isComplex)
     {
@@ -61,7 +74,7 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
     uint32_t resultState = basisState;
 
 
-    numType phase = 0;
+
     uint32_t maskedBasisState = basisState & activeBits;
 
     if (createBits == annihilateBits) // number operator
@@ -69,7 +82,7 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
 #ifdef useComplex
         if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0)
         {
-            phase = iu;
+            phase *= iu;
         }
         else
         {
@@ -85,12 +98,12 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
     { // excitation operator. These are different since we need to make it anti-hermitian which is done differently
         if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0 && (((maskedBasisState ^ annihilateBits) & createBits)) == 0)
         {// This allows operators like a^+_4 a^+_3 a_3 a_2 to be handled properly
-            phase = 1;
+            phase *= 1;
             resultState = (basisState ^ annihilateBits) ^ createBits;
         }
         else if (((maskedBasisState & createBits) ^ createBits) == 0 && (((maskedBasisState ^ createBits) & annihilateBits)) == 0)
         {
-            phase = -1;
+            phase *= -1;
             resultState = (basisState ^ createBits) ^ annihilateBits;
         }
         else
@@ -229,7 +242,7 @@ if constexpr(toBraket)\
     temp4 = scratchSpacehPsi[firstIndex + 2 + i*rotCount];\
     scratchSpacehPsi[firstIndex + 0 + i*rotCount] =  (signs[numInLayer + i*signsStride + GatesPerLayer*1] ? 1 : -1)*temp4*S[1] + temp3 * C[1];\
     scratchSpacehPsi[firstIndex + 2 + i*rotCount] = -(signs[numInLayer + i*signsStride + GatesPerLayer*1] ? 1 : -1)*temp3*S[1] + temp4 * C[1];\
-    if (signs[numInLayer+i*signsStride + GatesPerLayer*0])\
+    if (signs[numInLayer+i*signsStride + GatesPerLayer*1])\
     {\
         *(result[1]) += std::real(myConj(temp3) * temp2);\
         *(result[1]) -= std::real(myConj(temp4) * temp1);\
@@ -252,7 +265,7 @@ if constexpr(toBraket)\
     temp4 = scratchSpacehPsi[firstIndex + 4 + i*rotCount];\
     scratchSpacehPsi[firstIndex + 0 + i*rotCount] =  (signs[numInLayer + i*signsStride + GatesPerLayer*2] ? 1 : -1)*temp4*S[2] + temp3 * C[2];\
     scratchSpacehPsi[firstIndex + 4 + i*rotCount] = -(signs[numInLayer + i*signsStride + GatesPerLayer*2] ? 1 : -1)*temp3*S[2] + temp4 * C[2];\
-    if (signs[numInLayer+i*signsStride + GatesPerLayer*0])\
+    if (signs[numInLayer+i*signsStride + GatesPerLayer*2])\
     {\
         *(result[2]) += std::real(myConj(temp3) * temp2);\
         *(result[2]) -= std::real(myConj(temp4) * temp1);\
@@ -275,7 +288,7 @@ if constexpr(toBraket)\
     temp4 = scratchSpacehPsi[firstIndex + 8 + i*rotCount];\
     scratchSpacehPsi[firstIndex + 0 + i*rotCount] =  (signs[numInLayer + i*signsStride + GatesPerLayer*3] ? 1 : -1)*temp4*S[3] + temp3 * C[3];\
     scratchSpacehPsi[firstIndex + 8 + i*rotCount] = -(signs[numInLayer + i*signsStride + GatesPerLayer*3] ? 1 : -1)*temp3*S[3] + temp4 * C[3];\
-    if (signs[numInLayer+i*signsStride + GatesPerLayer*0])\
+    if (signs[numInLayer+i*signsStride + GatesPerLayer*3])\
     {\
         *(result[3]) += std::real(myConj(temp3) * temp2);\
         *(result[3]) -= std::real(myConj(temp4) * temp1);\
@@ -509,7 +522,7 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
     static_assert(numberToFuse < sizeof(indexType)*8);
     constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
     if (!isComplex)
-        __builtin_trap();//only complex exc can be diagonal and antihermitian
+        releaseAssert(false,"only complex exc can be diagonal and antihermitian");
 
     constexpr indexType numberOfPairsOfRotations = 1<<numberToFuse;
     typedef std::vector<uint32_t> localVector; //each element represents a 2D subspace and a sign
@@ -548,7 +561,7 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
         for (indexType idx = 0; idx < numberToFuse; idx++)//TODO check that this exists in the path
         {
             rots[idx] = excPath[i+idx];
-            assert(rots[idx].isDiagonal());
+            releaseAssert(rots[idx].isDiagonal(),"rots[idx].isDiagonal()");
         }
 
         //If rot0 and rot2 are active then the index is 0b101. Note that 0b000 is always empty
@@ -568,10 +581,10 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
                 initialLinks[idx] = applyExcToBasisState_(currentBasisState,rots[idx]);
                 if (initialLinks[idx].first != currentBasisState)
                 {
-                    assert(initialLinks[idx].second);
+                    releaseAssert(initialLinks[idx].second,"initialLinks[idx].second");
                     activeRotIdx |= 1<<idx;
                     ++numberOfActiveRots;
-                    assert(currentBasisState == (initialLinks[idx].first & -2));
+                    releaseAssert(currentBasisState == (initialLinks[idx].first & -2),"currentBasisState == (initialLinks[idx].first & -2)");
                 }
             }
             //All not active
@@ -592,7 +605,7 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
                     for (uint32_t idx = 0; idx < currentLocalVectors[activeRotIdx].size(); idx++)
                     {
                         bool __attribute__ ((unused))complexOffset = currentLocalVectors[activeRotIdx][idx] & 1;
-                        assert(complexOffset == false);
+                        releaseAssert(complexOffset == false,"complexOffset == false");
                         comp->compressIndex(currentLocalVectors[activeRotIdx][idx]>>1,currentLocalVectors[activeRotIdx][idx]);
                         currentLocalVectors[activeRotIdx][idx] = currentLocalVectors[activeRotIdx][idx] << 1;
                     }
@@ -713,7 +726,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
     typedef std::vector<std::array<localVector,localVectorSize>> fusedAnsatz; //\Sum_{k=1}^{n} n choose k = 2^n for n >=0
     fusedAnsatz myFusedAnsatz;
     //preprocess
-    assert(excPath.size() % numberToFuse == 0);
+    releaseAssert(excPath.size() % numberToFuse == 0,"excPath.size() % numberToFuse == 0");
 
     std::vector<uint32_t> activebasisStates;
     activebasisStates.resize(startVec.size()*(isComplex?2:1));
@@ -791,7 +804,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                 initialLinks[idx] = applyExcToBasisState_(currentBasisState,rots[idx]);
                 if (initialLinks[idx].first != currentBasisState)
                 {
-                    if (initialLinks[idx].second == false)
+                    if (initialLinks[idx].first < currentBasisState) // Deduplication via forcing an increasing sequence. Signs arent reliable when using fermionic, consider 4,2 3,1 applied to |0011>
                     {
                         allPositive = false; // deduplication of basis states
                         break;
@@ -817,11 +830,15 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                             {
                                 bool complexOffset = filledMap[idx] & 1;
                                 // assert(complexOffset == false);
-                                comp->compressIndex(filledMap[idx]>>1,filledMap[idx]);
+                                bool compSucc = comp->compressIndex(filledMap[idx]>>1,filledMap[idx]);
+                                releaseAssert(compSucc,"compSucc");
                                 filledMap[idx] = (filledMap[idx] << 1) + (complexOffset ? 1 : 0);
                             }
                             else
-                                comp->compressIndex(filledMap[idx],filledMap[idx]);
+                            {
+                                bool compSucc = comp->compressIndex(filledMap[idx],filledMap[idx]);
+                                releaseAssert(compSucc,"compSucc");
+                            }
                         }
                     }
                     totalRotcount += numberOfActiveRots*localVectorSize/2;
@@ -835,7 +852,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             indexType rotIdx = 0;
             while(rotIdx < numberToFuse && (activeRotIdx & (1<<rotIdx)) == 0)
                 ++rotIdx;
-            assert(rotIdx < numberToFuse);
+            releaseAssert(rotIdx < numberToFuse,"rotIdx < numberToFuse");
 
             *(currentMap.begin()+currentMapFilledSize) = currentBasisState;
             // for (indexType t = 1; t < (1<<numberOfActiveRots); t++)
@@ -848,7 +865,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             //         __builtin_trap();
             for (size_t l = 0; l < 1ul<<numberOfActiveRots; l++)
                 for (size_t m = l+1; m < 1ul<<numberOfActiveRots; m++)
-                    assert(currentMap[currentMapFilledSize + l] != currentMap[currentMapFilledSize + m]);
+                    releaseAssert(currentMap[currentMapFilledSize + l] != currentMap[currentMapFilledSize + m],"currentMap[currentMapFilledSize + l] != currentMap[currentMapFilledSize + m]");
             currentMapFilledSize += 1<<numberOfActiveRots;
         }
         for (indexType idx = 0; idx <  localVectorSize; idx++)
@@ -870,11 +887,15 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                         {
                             bool complexOffset = potentiallyFilledMap[idx] & 1;
                             // assert(complexOffset == false);
-                            comp->compressIndex(potentiallyFilledMap[idx]>>1,potentiallyFilledMap[idx]);
+                            bool compSucc = comp->compressIndex(potentiallyFilledMap[idx]>>1,potentiallyFilledMap[idx]);
+                            releaseAssert(compSucc,"compSucc");
                             potentiallyFilledMap[idx] = (potentiallyFilledMap[idx] << 1) + (complexOffset ? 1 : 0);
                         }
                         else
-                            comp->compressIndex(potentiallyFilledMap[idx],potentiallyFilledMap[idx]);
+                        {
+                            bool compSucc = comp->compressIndex(potentiallyFilledMap[idx],potentiallyFilledMap[idx]);
+                            releaseAssert(compSucc,"compSucc");
+                        }
                     }
                 }
             }
@@ -912,7 +933,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
     if constexpr (BraketWithTangentOfResult)
     {
         if (hPsi == nullptr || result == nullptr)
-            __builtin_trap();
+            releaseAssert(false,"(hPsi == nullptr || result == nullptr) == true when BraketWithTangentOfResult == true");
     }
     else
     {
@@ -922,7 +943,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
     }
     if constexpr(storeTangent)
     {
-        assert(tangentStore != nullptr);
+        releaseAssert(tangentStore != nullptr,"tangentStore != nullptr when storeTangent == true");
     }
 
     // if constexpr (BraketWithTangentOfResult)
@@ -1780,7 +1801,7 @@ void FusedEvolve::regenCache()
     for (auto& e : m_excs)
     {
         if constexpr (logTimings) fprintf(stderr,"%3.1hhd, %3.1hhd, %3.1hhd, %3.1hhd\n",e[0],e[1],e[2],e[3]);
-        assert(e.isDiagonal() == e.hasDiagonal());//Somethign like a^\dagger_1 a^\dagger_2 a_2 a_3 is unhandled
+        releaseAssert(e.isDiagonal() == e.hasDiagonal(),"e.isDiagonal() == e.hasDiagonal(), Something like a^dagger_1 a^dagger_2 a_2 a_3 is unhandled");//Somethign like a^\dagger_1 a^\dagger_2 a_2 a_3 is unhandled
     }
 
 
@@ -1853,7 +1874,7 @@ void FusedEvolve::regenCache()
     }
     m_commuteBoundaries.push_back(0);
 
-    for (long i = 0; i < (long)m_excPerm.size()-1; i++)
+    for (long i = 0; i < (long)m_excPerm.size(); i++)
     {
         for (size_t j = m_commuteBoundaries.back(); j < (size_t)i; j++ )
         {
@@ -1920,8 +1941,7 @@ void FusedEvolve::regenCache()
             SetupFuseNDiagonalMacro(11,uint16_t);
             SetupFuseNDiagonalMacro(12,uint16_t);
         case 0:
-            logger().log("Unhandled case 0");
-            __builtin_trap();
+            releaseAssert(false,"Unhandled case 0");
             break;
             SetupFuseN(1,uint8_t);
             SetupFuseN(2,uint8_t);
@@ -1936,7 +1956,7 @@ void FusedEvolve::regenCache()
             SetupFuseN(11,uint16_t);
             SetupFuseN(12,uint16_t);
         default:
-            __builtin_trap();
+            releaseAssert(false,"Unhandled case default");
             static_assert(maxFuse <=12);
         }
     }
@@ -1987,8 +2007,7 @@ void FusedEvolve::cleanup()
             delete static_cast<fusedDiagonalAnsatzX<12>*>(m_fusedAnsatzes[i]);
             break;
         case 0:
-            logger().log("Unhandled case 0");
-            __builtin_trap();
+            releaseAssert(false,"Unhandled case 0 - delete");
             break;
         case 1:
             delete static_cast<fusedAnsatzX<1>*>(m_fusedAnsatzes[i]);
@@ -2027,7 +2046,7 @@ void FusedEvolve::cleanup()
             delete static_cast<fusedAnsatzX<12>*>(m_fusedAnsatzes[i]);
             break;
         default:
-            __builtin_trap();
+            releaseAssert(false,"Unhandled case default - delete");
         }
     }
     m_commuteBoundaries.clear();
@@ -2136,6 +2155,92 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
     long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
     if constexpr (logTimings) logger().log("FusedEvolve Time taken:",duration);
 }
+
+void FusedEvolve::evolveMultiple(Matrix<numType> &destMatrix, const Matrix<realNumType>::EigenMatrix &anglesMatrix, vector<numType> *specifiedStart)
+{
+    if (!m_excsCached)
+        regenCache();
+    destMatrix.resize(anglesMatrix.rows(),specifiedStart == nullptr ? m_start.size() : specifiedStart->size(),m_lieIsCompressed,m_compressor,false);
+    for (long i = 0; i < anglesMatrix.rows(); i++)
+    {
+        if (specifiedStart == nullptr)
+            destMatrix.getJVectorView(i).copy(m_start);
+        else
+            destMatrix.getJVectorView(i).copy(*specifiedStart);
+    }
+
+    Eigen::Matrix<realNumType,-1,-1,Eigen::RowMajor> permAnglesMatrix(anglesMatrix.rows(),anglesMatrix.cols());
+
+    // std::transform(m_excPerm.begin(),m_excPerm.end(),permAngles.begin(),[&angles](size_t i){return angles[i];});
+    for (size_t i = 0; i < m_excPerm.size(); i++)
+    {
+        permAnglesMatrix.col(i) = anglesMatrix.col(m_excPerm[i]);
+    }
+
+    auto startTime = std::chrono::high_resolution_clock::now();
+    std::vector<std::future<void>> futs;
+    threadpool& pool = threadpool::getInstance(NUM_CORES);
+    long stepSize = std::max(permAnglesMatrix.rows()/(long)NUM_CORES,1l);
+    for (long angleIdx = 0; angleIdx < permAnglesMatrix.rows(); angleIdx += stepSize)
+    {
+        long angleIdxStop = std::min(angleIdx + stepSize,permAnglesMatrix.rows());
+        futs.push_back(pool.queueWork(
+        [this,&destMatrix,&permAnglesMatrix,angleIdx,angleIdxStop]()
+          {
+                for (long idx = angleIdx; idx < angleIdxStop; idx++)
+                {
+                    auto dest = destMatrix.getJVectorView(idx);
+                    auto permAngles = Eigen::Map<const Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>>(&permAnglesMatrix(idx,0),1,permAnglesMatrix.cols());
+                    for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+                    {
+                        size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
+                        switch (m_fusedSizes[i])
+                        {
+                            EvolveDiagonal(1,uint8_t)
+                            EvolveDiagonal(2,uint8_t)
+                            EvolveDiagonal(3,uint8_t)
+                            EvolveDiagonal(4,uint8_t)
+                            EvolveDiagonal(5,uint8_t)
+                            EvolveDiagonal(6,uint8_t)
+                            EvolveDiagonal(7,uint8_t)
+                            EvolveDiagonal(8,uint16_t)
+                            EvolveDiagonal(9,uint16_t)
+                            EvolveDiagonal(10,uint16_t)
+                            EvolveDiagonal(11,uint16_t)
+                            EvolveDiagonal(12,uint16_t)
+                        case 0:
+                            logger().log("Unhandled case 0");
+                            __builtin_trap();
+                            break;
+
+                            Evolve(1,uint8_t)
+                            Evolve(2,uint8_t)
+                            Evolve(3,uint8_t)
+                            Evolve(4,uint8_t)
+                            Evolve(5,uint8_t)
+                            Evolve(6,uint8_t)
+                            Evolve(7,uint8_t)
+                            Evolve(8,uint16_t)
+                            Evolve(9,uint16_t)
+                            Evolve(10,uint16_t)
+                            Evolve(11,uint16_t)
+                            Evolve(12,uint16_t)
+
+                        default:
+                            __builtin_trap();
+                        }
+                    }
+                }
+          }));
+    }
+    for (auto& f : futs)
+        f.wait();
+    auto endTime = std::chrono::high_resolution_clock::now();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    if constexpr (logTimings) logger().log("FusedEvolveMultiple Time taken:",duration);
+}
+
+
 #define EvolveDer(N,dataType)\
 case N:\
 {\
@@ -2685,6 +2790,23 @@ realNumType FusedEvolve::getEnergy(const vector<numType> &psi)
     long duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
     if constexpr (logTimings) logger().log("FusedEvolve Energy Time taken 1 (ms)",duration);
     return E;
+}
+
+vector<realNumType> FusedEvolve::getEnergies(const Matrix<numType> &psi)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+    Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&psi.at(0,0),psi.m_iSize,psi.m_jSize);
+    Eigen::Matrix<numType,-1,-1,Eigen::RowMajor> hPsi(psi.m_iSize,psi.m_jSize);
+    Eigen::Map<Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> hPsiMap(hPsi.data(),hPsi.rows(),hPsi.cols());
+    m_Ham->apply(currentMap,hPsiMap);
+    vector<realNumType> ret(psi.m_iSize);
+    Eigen::Map<Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>,Eigen::Aligned32>EMap(&ret[0],1,ret.size());
+    EMap = (hPsi * currentMap.transpose()).diagonal().real();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    long duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+    if constexpr (logTimings) logger().log("FusedEvolve Energies Time taken 1 (ms)",duration);
+    return ret;
 }
 
 void FusedEvolve::evolveDerivativeProj(const vector<numType> &finalVector, vector<realNumType> &deriv, const std::vector<realNumType> &angles, const vector<numType> &projVector, realNumType *Energy)

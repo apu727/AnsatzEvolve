@@ -14,6 +14,44 @@
 
 #include <vector>
 
+bool OperatorsHaveSZSymmetry(int numberOfQubits, const std::vector<stateRotate::exc>& excs)
+{   //Ugly bodge. This has been copied from AnsatzManager.cpp. Ideally we should also use that but this breaks the build structure
+    bool ret = true;
+    uint32_t spinDownBitMask = (1<<(numberOfQubits/2))-1;
+    uint32_t spinUpBitMask = ((1<<(numberOfQubits))-1) ^ spinDownBitMask;
+
+    for (const auto& e : excs)
+    {
+        uint32_t create = 0;
+        uint32_t destroy = 0;
+        if (e.isSingleExc())
+        {
+            create = (1<<e.first);
+            destroy = (1<<e.second);
+        }
+        else if (e.isDoubleExc())
+        {
+            create = (1<<e.first) | (1 << e.second);
+            destroy = (1<<e.third) | (1 << e.fourth);
+        }
+        else
+        {
+            char msg[100] = {};
+            sprintf(msg,"exc is neither single nor double excitation %i, %i, %i, %i\n",e.first, e.second, e.third, e.fourth);
+            releaseAssert(false, msg);
+        }
+        int spinUpCreate = popcount(create & spinUpBitMask);
+        int spinDownCreate = popcount(create & spinDownBitMask);
+
+        int spinUpDestroy = popcount(destroy & spinUpBitMask);
+        int spinDownDestroy = popcount(destroy & spinDownBitMask);
+        ret = ret && (spinUpCreate == spinUpDestroy) && (spinDownCreate == spinDownDestroy);
+    }
+    if (excs.size() == 0)
+        ret = false;
+    return ret;
+}
+
 struct options
 {
     bool optimise = false;
@@ -27,9 +65,29 @@ struct options
     bool benchmark = false;
     bool noCompress = false;
     bool onlyEvolve = false;
-
+    bool noLowestEigenValue = false;
+    static void printHelp()
+    {
+        logger().log("Help:");
+        logger().log("'optimise' ----------------- Do newton raphson steps starting at the first path in the parameter file");
+        logger().log("'iterativeoptimise' -------- Do iterative newton raphson steps starting at the first path in the parameter file - in development");
+        logger().log("'makelie' ------------------ Use the old ansatz to perform computations. Not recommended for new codes.");
+        logger().log("'subspacediag' ------------- Load parameters from the parameter file and diagonalise in the subspace spanned by the resultant wavefunctions");
+        logger().log("'writeproperties' ---------- Print various properties about the solutions found in the parameter file to stdout ");
+        logger().log("'generatepathsForsubspace' - Generate random angles and optimise using newton raphson. Pseudo basin hopping");
+        logger().log("'filepath XX/YY' ----------- Set the file path to search for resources. filepath should be the complete prefix. E.g. for Hams/H10_Paramaters.dat supply 'filepath Hams/H10'");
+        logger().log("'benchmark' ---------------- Benchmarks various operations. Used for development and subject to change");
+        logger().log("'NoLowestEigenValue'-------- Don't compute the lowest eigenvalue of the Hamiltonian");
+        logger().log("'help' --------------------- Print this");
+    }
     static options parse(int argc, char* argv[])
     {
+        if (argc <= 1)
+        {
+            logger().log("Usage: /path/to/cppAnsatzSynth <options>");
+            printHelp();
+            std::exit(0);
+        }
         options o;
         for (int count = 1; count < argc; count++)
         {
@@ -84,20 +142,14 @@ struct options
             {
                 o.onlyEvolve = true;
             }
+            else if (!strcmp(arg,"NoLowestEigenValue"))
+            {
+                o.noLowestEigenValue = true;
+            }
             else if (!strcmp(arg,"help"))
             {
-                logger().log("Help:");
-                logger().log("'optimise' ----------------- Do newton raphson steps starting at the first path in the parameter file");
-                logger().log("'iterativeoptimise' -------- Do iterative newton raphson steps starting at the first path in the parameter file - in development");
-                logger().log("'makelie' ------------------ Use the old ansatz to perform computations. Not recommended for new codes.");
-                logger().log("'subspacediag' ------------- Load parameters from the parameter file and diagonalise in the subspace spanned by the resultant wavefunctions");
-                logger().log("'writeproperties' ---------- Print various properties about the solutions found in the parameter file to stdout ");
-                logger().log("'generatepathsForsubspace' - Generate random angles and optimise using newton raphson. Pseudo basin hopping");
-                logger().log("'filepath XX/YY' ----------- Set the file path to search for resources. filepath should be the complete prefix. E.g. for Hams/H10_Paramaters.dat supply 'filepath Hams/H10'");
-                logger().log("'benchmark' ---------------- Benchmarks various operations. Used for development and subject to change");
-                logger().log("'help' --------------------- Print this");
+                printHelp();
                 std::exit(0);
-
             }
             else
             {
@@ -189,6 +241,14 @@ int main(int argc, char *argv[])
         logger().log("Could not determine spin number");
         return 1;
     }
+    logger().log("Initial state SZSym:",SZSym);
+    {
+        std::vector<stateRotate::exc> excs;
+        stateRotate::loadOperators(filePath + + "_Operators.dat",excs); // we may load it twice. Oh well.
+        bool OperatorSZSym = OperatorsHaveSZSymmetry(numberOfQubits,excs);
+        logger().log("Operator SZSym:",OperatorSZSym);
+        SZSym = OperatorSZSym && SZSym;
+    }
     logger().log("SZSym:",SZSym);
     logger().log("particleNumSym:",allSameParticleNumber);
 
@@ -202,7 +262,7 @@ int main(int argc, char *argv[])
     if (allSameParticleNumber && SZSym && !opt.noCompress)
         comp = std::make_shared<SZAndnumberOperatorCompressor>(statevectorCoeffs.size(),spinUp,spinDown);
     if (allSameParticleNumber && !SZSym && !opt.noCompress)
-        comp = std::make_shared<numberOperatorCompressor>(statevectorCoeffs.size(),numberOfParticles);
+        comp = std::make_shared<numberOperatorCompressor>(numberOfParticles,statevectorCoeffs.size());
     logger().log("comp",comp.get());
     std::vector<stateRotate::exc> excs;
     if (opt.makeLie)
@@ -367,6 +427,6 @@ int main(int argc, char *argv[])
 
 
     if (opt.writeProperties)
-        quantityCalc.writeProperties(myAnsatz,FE,rotationPaths);
+        quantityCalc.writeProperties(myAnsatz,FE,rotationPaths, !opt.noLowestEigenValue);
     return 0;
 }

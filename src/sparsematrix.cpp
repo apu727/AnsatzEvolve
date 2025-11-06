@@ -682,9 +682,9 @@ const dataType* sparseMatrix<dataType,vectorType>::at(uint32_t i, uint32_t j, bo
     {
         if (*iIdx == i && *jIdx == j)
             return &*d;
-        *iIdx++;
-        *jIdx++;
-        *d++;
+        iIdx++;
+        jIdx++;
+        d++;
     }
     success = false;
     return &def;

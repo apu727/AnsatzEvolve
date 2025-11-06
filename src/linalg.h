@@ -428,13 +428,7 @@ public:
 
     dataType& operator[](int size){assert(this->m_iSize == 1 && this->at(0,size) == this->m_data[size]); return this->m_data[size];}
     const dataType& operator[](int size)const{assert(this->m_iSize == 1 && this->at(0,size) == this->m_data[size]); return this->m_data[size];}
-    operator EigenVector () const
-    {
-        EigenVector ret(this->m_jSize);
-        for (size_t i = 0; i < this->m_jSize; i++)
-            ret[i] = (*this)[i];
-        return ret;
-    }
+    operator EigenVector () const;
 
     realNumType dot(const vector &other) const;
     std::complex<realNumType> cdot(const vector &other) const; //always returns a complex value.

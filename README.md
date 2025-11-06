@@ -74,5 +74,6 @@ all
 * Test compatibility with compilers
 * Unit tests
 * Benchmark comparisons with the state of the art such as Qiskit-AER
+* Save optimised angles to file automatically
 ## Authors and Citation
 AnsatzEvolve is the work of Bence Csakany, if you use it please cite this GitHub reposititory

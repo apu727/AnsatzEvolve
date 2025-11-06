@@ -40,8 +40,8 @@ slaterDeterminantPositions = [posA,posB]
 
 # outputName = f"H2_Linear"
 # atomString = f"H 0 0 0 ; H 0 0 2  ;"
-outputName = f"H4_Linear"
-atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ;"
+outputName = f"L1"
+atomString = f"N 0 0 0; N 0 0 1.1;"
 # outputName = f"H6_Linear"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ;"
 # outputName = f"H8_Linear"
@@ -59,7 +59,7 @@ activeOrbitals = None
 
 # outputName = f"H4_L1"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ;"
-frozenOrbitals = set()
+frozenOrbitals = {0,1}
 activeOrbitals = None
 
 subtractNuclearEnergy = True
@@ -125,7 +125,13 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
     print(orbs)
     if (perfectPairing):
         orbs2 = np.zeros_like(orbs)
-        pairing = [2*i for i in range(numSpatialOrbitals//2)] + [numSpatialOrbitals - 2*i - 1 for i in range(numSpatialOrbitals//2)]
+        nfroz=len(frozenOrbitals)
+        if set(range(nfroz)) != frozenOrbitals:
+            print("nfroz and frozen orbitals are inconsistent") # If someone tries to freeze {0,3} etc. 
+            quit()
+
+        pairing = [i for i in range(nfroz)] + [2*i+nfroz for i in range((numSpatialOrbitals-nfroz)//2)] + [numSpatialOrbitals - 2*i - 1 for i in range((numSpatialOrbitals-nfroz)//2)]
+        print("pairing=", pairing)
         for i,p in enumerate(pairing):
             orbs2[:,p] = orbs[:,i]
         orbs = orbs2
@@ -330,6 +336,15 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
                 Ham += np.diag([-nuclearEnergy]*len(Ham))
 
             assert(numAlphaelectrons == numBetaElectrons)
+            qubitPerm = []
+            qubitIdx = 0
+            for i in range(numSpatialOrbitals*2):
+                if getSpatialFromSpin(i) in frozenOrbitals:
+                    qubitPerm.append(-1)
+                else:
+                    qubitPerm.append(qubitIdx)
+                    qubitIdx += 1
+            
             with open(outputName + "_Ham_Index.dat","w") as indexF:
                 with open(outputName + "_Ham_Coeff.dat","w") as CoeffF:
                     for i in range(len(Ham)):
@@ -341,12 +356,16 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
                             braInt = 1 # Offset to get correct format
                             ketInt = 1
                             for occ in bra:
-                                braInt += 1<<occ
+                                newOcc = qubitPerm[occ]
+                                if newOcc >= 0:
+                                    braInt += 1<<newOcc
                             for occ in ket:
-                                ketInt += 1<<occ
+                                newOcc = qubitPerm[occ]
+                                if newOcc >= 0:
+                                    ketInt += 1<<newOcc
                             indexF.write(f"{braInt} {ketInt}\n")
                             CoeffF.write(f"{Ham[i,j]}\n")
-                    fockSpaceSize = pow(2,2*numSpatialOrbitals)
+                    fockSpaceSize = pow(2,2*len(activeOrbitals))
                     indexF.write(f"{fockSpaceSize} {fockSpaceSize}")
                     CoeffF.write(f"0\n")
 
