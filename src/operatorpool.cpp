@@ -218,8 +218,8 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint32_t stateVecto
     assert(numberOfQubits %2 == 0);
     assert(numberOfQubits < 32);
     m_numberOfQubits = numberOfQubits;
-    m_spinUpBitMask = (1<<(numberOfQubits/2))-1;
-    m_spinDownBitMask = ((1<<(numberOfQubits))-1) ^ m_spinUpBitMask;
+    m_spinDownBitMask = (1<<(numberOfQubits/2))-1;
+    m_spinUpBitMask = ((1<<(numberOfQubits))-1) ^ m_spinDownBitMask;
 
     compressPerm.resize(stateVectorSize);
     uint32_t activeCount = 0;

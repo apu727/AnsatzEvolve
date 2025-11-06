@@ -51,13 +51,15 @@ private:
     int m_numberOfParticles = -1;
     int m_spinUp = -1;
     int m_spinDown = -1;
-    bool m_SZSym;
+    bool m_InitialSZSym = false;
+    bool m_OperatorSZSym = false;
     bool m_particleSym = false;
     int m_numberOfQubits = -1;
     std::vector<std::pair<int,realNumType>> m_parameterDependency;
 
 
     bool setHamiltonian();
+    void setOperatorSymmetry();
     std::vector<int> m_iIndexes;
     std::vector<int> m_jIndexes;
     std::vector<realNumType> m_coeffs;

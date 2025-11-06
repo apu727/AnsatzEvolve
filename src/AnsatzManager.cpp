@@ -89,16 +89,20 @@ bool stateAnsatzManager::construct()
     }
     if (success)
     {
+        setOperatorSymmetry();
         if (m_particleSym)
         {
             m_compressStateVectors = true;
-            if (m_SZSym)
+            if (m_InitialSZSym && m_OperatorSZSym)
                 m_compressor = std::make_shared<SZAndnumberOperatorCompressor>(1<<m_numberOfQubits,m_spinUp,m_spinDown);
             else
                 m_compressor = std::make_shared<numberOperatorCompressor>(m_numberOfParticles,1<<m_numberOfQubits);
+
             // m_Ham.compress(m_compressor);
         }
-        logger().log("SZSym:",m_SZSym);
+        logger().log("m_InitialSZSym:",m_InitialSZSym);
+        logger().log("m_OperatorSZSym:",m_OperatorSZSym);
+        logger().log("SZSym:",m_InitialSZSym && m_OperatorSZSym);
         logger().log("particleNumSym:",m_particleSym);
         if (!setHamiltonian())
             return false;
@@ -193,6 +197,43 @@ bool stateAnsatzManager::setHamiltonian()
         m_Ham = std::make_shared<HamiltonianMatrix<realNumType,numType>>(m_runPath,m_numberOfQubits,m_compressor);
         return m_Ham->ok();
     }
+}
+
+void stateAnsatzManager::setOperatorSymmetry()
+{
+    m_OperatorSZSym = true;
+    uint32_t spinDownBitMask = (1<<(m_numberOfQubits/2))-1;
+    uint32_t spinUpBitMask = ((1<<(m_numberOfQubits))-1) ^ spinDownBitMask;
+
+    for (const auto& e : m_excitations)
+    {
+        uint32_t create = 0;
+        uint32_t destroy = 0;
+        if (e.isSingleExc())
+        {
+            create = (1<<e.first);
+            destroy = (1<<e.second);
+        }
+        else if (e.isDoubleExc())
+        {
+            create = (1<<e.first) | (1 << e.second);
+            destroy = (1<<e.third) | (1 << e.fourth);
+        }
+        else
+        {
+            char msg[100] = {};
+            sprintf(msg,"exc is neither single nor double excitation %i, %i, %i, %i\n",e.first, e.second, e.third, e.fourth);
+            releaseAssert(false, msg);
+        }
+        int spinUpCreate = popcount(create & spinUpBitMask);
+        int spinDownCreate = popcount(create & spinDownBitMask);
+
+        int spinUpDestroy = popcount(destroy & spinUpBitMask);
+        int spinDownDestroy = popcount(destroy & spinDownBitMask);
+        m_OperatorSZSym = m_OperatorSZSym && (spinUpCreate == spinUpDestroy) && (spinDownCreate == spinDownDestroy);
+    }
+    if (m_excitations.size() == 0)
+        m_OperatorSZSym = false;
 }
 
 stateAnsatzManager::stateAnsatzManager(): m_target({1},{1},{1},1)
@@ -314,7 +355,7 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
         m_numberOfParticles = -1;
         m_spinUp = -1;
         m_spinDown = -1;
-        m_SZSym = false;
+        m_InitialSZSym = false;
         m_particleSym = false;
 
         if (allSameParticleNumber && numberOfParticles != -1)
@@ -323,7 +364,7 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
             m_particleSym = true;
             if (SZSym && spinUp != -1 && spinDown != -1)
             {
-                m_SZSym = true;
+                m_InitialSZSym = true;
                 m_spinUp = spinUp;
                 m_spinDown = spinDown;
             }

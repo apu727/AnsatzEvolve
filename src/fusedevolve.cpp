@@ -242,7 +242,7 @@ if constexpr(toBraket)\
     temp4 = scratchSpacehPsi[firstIndex + 2 + i*rotCount];\
     scratchSpacehPsi[firstIndex + 0 + i*rotCount] =  (signs[numInLayer + i*signsStride + GatesPerLayer*1] ? 1 : -1)*temp4*S[1] + temp3 * C[1];\
     scratchSpacehPsi[firstIndex + 2 + i*rotCount] = -(signs[numInLayer + i*signsStride + GatesPerLayer*1] ? 1 : -1)*temp3*S[1] + temp4 * C[1];\
-    if (signs[numInLayer+i*signsStride + GatesPerLayer*0])\
+    if (signs[numInLayer+i*signsStride + GatesPerLayer*1])\
     {\
         *(result[1]) += std::real(myConj(temp3) * temp2);\
         *(result[1]) -= std::real(myConj(temp4) * temp1);\
@@ -265,7 +265,7 @@ if constexpr(toBraket)\
     temp4 = scratchSpacehPsi[firstIndex + 4 + i*rotCount];\
     scratchSpacehPsi[firstIndex + 0 + i*rotCount] =  (signs[numInLayer + i*signsStride + GatesPerLayer*2] ? 1 : -1)*temp4*S[2] + temp3 * C[2];\
     scratchSpacehPsi[firstIndex + 4 + i*rotCount] = -(signs[numInLayer + i*signsStride + GatesPerLayer*2] ? 1 : -1)*temp3*S[2] + temp4 * C[2];\
-    if (signs[numInLayer+i*signsStride + GatesPerLayer*0])\
+    if (signs[numInLayer+i*signsStride + GatesPerLayer*2])\
     {\
         *(result[2]) += std::real(myConj(temp3) * temp2);\
         *(result[2]) -= std::real(myConj(temp4) * temp1);\
@@ -288,7 +288,7 @@ if constexpr(toBraket)\
     temp4 = scratchSpacehPsi[firstIndex + 8 + i*rotCount];\
     scratchSpacehPsi[firstIndex + 0 + i*rotCount] =  (signs[numInLayer + i*signsStride + GatesPerLayer*3] ? 1 : -1)*temp4*S[3] + temp3 * C[3];\
     scratchSpacehPsi[firstIndex + 8 + i*rotCount] = -(signs[numInLayer + i*signsStride + GatesPerLayer*3] ? 1 : -1)*temp3*S[3] + temp4 * C[3];\
-    if (signs[numInLayer+i*signsStride + GatesPerLayer*0])\
+    if (signs[numInLayer+i*signsStride + GatesPerLayer*3])\
     {\
         *(result[3]) += std::real(myConj(temp3) * temp2);\
         *(result[3]) -= std::real(myConj(temp4) * temp1);\

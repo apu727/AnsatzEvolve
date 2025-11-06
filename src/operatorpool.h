@@ -101,6 +101,8 @@ public:
         exc(int8_t (&arr)[4]){first = arr[0]; second = arr[1]; third = arr[2]; fourth = arr[3];}
         exc(uint32_t val){first = val >> 24; second = val >> 16; third = val >> 8; fourth = val;}
         operator uint32_t() const {return ((uint8_t)first << 24) + ((uint8_t)second << 16) + ((uint8_t) third << 8) + (uint8_t)fourth;}
+        bool isSingleExc() const {return first >= 0 && second >= 0 && third < 0 && fourth < 0;}
+        bool isDoubleExc() const {return first >= 0 && second >= 0 && third >= 0 && fourth >= 0;}
         const int8_t& operator [](size_t idx) const
         {
             switch (idx)

@@ -35,6 +35,8 @@ class TUPSQuantities
     void calculateNumericalSecondDerivative(
         const std::vector<ansatz::rotationElement> &rp, realNumType startEnergy, const sparseMatrix<realNumType,numType> &Ham,
         const vector<numType>::EigenVector &direction, stateAnsatz* myAnsatz);
+    void calculateNumericalSecondDerivative(const std::vector<realNumType> &rp, realNumType startEnergy, std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham,
+                                            const vector<numType>::EigenVector &direction, std::shared_ptr<FusedEvolve> myAnsatz);
     void buildCompressionMatrices(int numberOfUniqueParameters, std::vector<std::pair<int,realNumType>> order,
                                   sparseMatrix<realNumType,numType>::EigenSparseMatrix &deCompressMatrix, sparseMatrix<realNumType,numType>::EigenSparseMatrix &compressMatrix);
     void asyncHij(const sparseMatrix<realNumType,numType> &Ham, const std::vector<std::vector<vector<numType>>>& secondDerivTensor,
@@ -58,7 +60,7 @@ public:
     TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::vector<std::pair<int,realNumType>> order,
                    int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile = nullptr);
 
-    void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths);
+    void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, bool computeLowestEigenValue = true);
     void OptimiseTupsLBFGS(sparseMatrix<realNumType,numType> &Ham, std::vector<ansatz::rotationElement> &rotationPath,
                       stateAnsatz& myAnsatz, bool blanking = false);
 
