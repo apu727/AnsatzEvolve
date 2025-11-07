@@ -59,5 +59,4 @@ extern unsigned long NUM_CORES;
 
 #define Bool2String(x) (x ? "True" : "False")
 
-#define EXPORT_FUNCTION _attribute__((visibility("default")))
 #endif // GLOBALS_H
