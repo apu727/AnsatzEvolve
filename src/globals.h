@@ -59,4 +59,5 @@ extern unsigned long NUM_CORES;
 
 #define Bool2String(x) (x ? "True" : "False")
 
+
 #endif // GLOBALS_H
