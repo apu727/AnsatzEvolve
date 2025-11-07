@@ -982,7 +982,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                     break;
 
 
-                if (energyTrial > Energy && gradVector_mu.norm() > 1e-8)
+                if (energyTrial-Energy > 1e-10 && gradVector_mu.norm() > 1e-8 && (newT*updateAngles).norm() > 1e-8)
                 {
                     if (doingForwardsSteps)
                     {
@@ -1036,6 +1036,8 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             // logger().log("Energy Trial", energyTrial);
             // logger().log("initialDirectionalDeriv",initialDirectionalDeriv);
             // logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
+            // logger().log("(newT*updateAngles).norm()",(newT*updateAngles).norm());
+            // logger().log("updateAnglesNorm", updateAngles.norm());
             // if (!(abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
             //     logger().log("Failed to meet wolfe condition",searchCount);
 
