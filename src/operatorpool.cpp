@@ -241,6 +241,7 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
             // compressPerm[i] = -1;
         }
     }
+    logger().log("Compressed statevector size (elements)",decompressPerm.size());
 }
 
 bool SZAndnumberOperatorCompressor::opDoesSomething(excOp &e)
