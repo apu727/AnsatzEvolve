@@ -36,6 +36,12 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
     if (a[0] < 0 && a[1] < 0)
         return std::make_pair(state,true);
 
+    if (isComplex)
+    {
+        complexSet = state & 1;
+        state = state >>1;
+    }
+
     if (a[2] > -1 && a[3] > -1)
     {
         if (a[0] == a[1] || a[2] == a[3])
@@ -64,11 +70,7 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
         signMask = signMask & ~((1<<a[0]) | (1<<a[1]));
         phase *= (popcount(state & signMask) & 1) ? -1 : 1;
     }
-    if (isComplex)
-    {
-        complexSet = state & 1;
-        state = state >>1;
-    }
+
 
     uint32_t basisState = state;
     uint32_t resultState = basisState;
