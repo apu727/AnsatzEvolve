@@ -214,7 +214,7 @@ int readCsvState(std::vector<std::complex<realNumType>>& Coeffs, const std::stri
 int readCsvState(std::vector<realNumType>& Coeffs, std::vector<uint64_t>& indexes, const std::string& filePath, int &numQubits)
 {
     FILE *fp;
-    char str1[32];
+    char str1[64];
     realNumType coeff = 0;
     realNumType imag = 0;
 
@@ -235,7 +235,7 @@ int readCsvState(std::vector<realNumType>& Coeffs, std::vector<uint64_t>& indexe
     while(EOF != ret )
     {
         coeff = 0;
-        ret = fscanf(fp, " %31[10], " realNumTypeCode " , " realNumTypeCode " ,\n", str1, &coeff,&imag);
+        ret = fscanf(fp, " %63[10], " realNumTypeCode " , " realNumTypeCode " ,\n", str1, &coeff,&imag);
         if (ret == EOF)
             break;
         if (ret < 2)
