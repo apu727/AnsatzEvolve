@@ -179,7 +179,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
         for (size_t k = 0; k < numberOfQubits; k++)
         {
             std::pair kIdx = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-            if (jBasisState & (1<<k))
+            if (jBasisState & (1ul<<k))
             {
                 if (k != trueIdx0 && k != trueIdx2)
                     Energy += getTwoElectronEnergy({idxs[0],kIdx,idxs[2],kIdx});
@@ -193,7 +193,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
         realNumType Energy = 0;
         for (size_t k = 0; k < numberOfQubits; k++)
         {
-            if (!(jBasisState & (1<<k)))
+            if (!(jBasisState & (1ul<<k)))
                 continue;
             std::pair kIdx = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
             //h_ii
@@ -201,7 +201,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
 
             for (size_t l = k+1; l < numberOfQubits; l++)
             {
-                if (!(jBasisState & (1<<l)))
+                if (!(jBasisState & (1ul<<l)))
                     continue;
                 std::pair lIdx = {l % (numberOfQubits/2),l >= (numberOfQubits/2)};
                 Energy += getTwoElectronEnergy({kIdx,lIdx,kIdx,lIdx});
@@ -225,12 +225,12 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
         {
             bool isSet = false;
             bool jsSet = false;
-            if (iBasisState & (1<< k))
+            if (iBasisState & (1ul<< k))
             {
                 isSet = true;
                 eveniElecSoFar = !eveniElecSoFar;
             }
-            if (jBasisState & (1<<k))
+            if (jBasisState & (1ul<<k))
             {
                 jsSet = true;
                 evenjElecSoFar = !evenjElecSoFar;
@@ -286,7 +286,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
     }
     else
     {
-        compressedSize = 1<<numberOfQubits;
+        compressedSize = 1ul<<numberOfQubits;
     }
 
     for (size_t i = 0; i < compressedSize; i++)
@@ -299,15 +299,15 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
         assert(numberOfQubits < 256);
         for (std::uint_fast8_t a = 0; a < numberOfQubits; a++)
         {
-            if(jBasisState & (1<<a))
+            if(jBasisState & (1ul<<a))
                 continue;
             for (std::uint_fast8_t b = a+1; b < numberOfQubits; b++)
             {
-                if(jBasisState & (1<<b))
+                if(jBasisState & (1ul<<b))
                     continue;
                 for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
                 {
-                    if (!(jBasisState & (1<<c)))
+                    if (!(jBasisState & (1ul<<c)))
                         continue;
                     if (c == a || c == b)
                         continue;
@@ -315,10 +315,10 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
                     {
                         if (d == b || d == a)
                             continue;
-                        if (!(jBasisState & (1<<d)))
+                        if (!(jBasisState & (1ul<<d)))
                             continue;
 
-                        uint64_t iBasisState = ((1<<a) | (1<<b)) ^ ((1<<c | 1<< d) ^ jBasisState);
+                        uint64_t iBasisState = ((1ul<<a) | (1ul<<b)) ^ ((1ul<<c | 1ul<< d) ^ jBasisState);
                         if (iBasisState < jBasisState)
                             continue;
                         assert(iBasisState != jBasisState);
@@ -349,16 +349,16 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
 
         for (std::uint_fast8_t a = 0; a < numberOfQubits; a++)
         {
-            if ((jBasisState & (1<<a)))
+            if ((jBasisState & (1ul<<a)))
                 continue;
             for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
             {
                 if (c == a)
                     continue;
-                if (!(jBasisState & (1<<c)))
+                if (!(jBasisState & (1ul<<c)))
                     continue;
 
-                uint64_t iBasisState = ((1<<a)) ^ ((1<<c) ^ jBasisState);
+                uint64_t iBasisState = ((1ul<<a)) ^ ((1ul<<c) ^ jBasisState);
                 if (iBasisState < jBasisState)
                     continue;
                 assert(iBasisState != jBasisState);
@@ -486,14 +486,14 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
     {
         for (std::uint_fast8_t b = a+1; b < numberOfQubits; b++) //create
         {
-            // uint64_t iBasisState = (1<<a) | (1<<b);
+            // uint64_t iBasisState = (1ul<<a) | (1ul<<b);
             for (std::uint_fast8_t c = 0; c < numberOfQubits; c++) //annihilate
             {
                 for (std::uint_fast8_t d = c+1; d < numberOfQubits; d++) //annihilate
                 {
                     //Note we include the permutation abcd,abdc, bacd, badc as the same thing. This is guaranteed by a < b, c < d
 
-                    // uint64_t jBasisState = (1<<c) | (1<<d);
+                    // uint64_t jBasisState = (1ul<<c) | (1ul<<d);
 
                     // realNumType Energy = getElement(iBasisState,jBasisState); //TODO optimise since we know these are
                     std::pair<size_t,bool> idxs[4];
@@ -509,10 +509,10 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
                     if (abs(Energy) > tol)//TODO threshold
                     {
                         // operators.push_back({a,b,c,d});
-                        uint64_t create = (1<<a) | (1<<b);
-                        uint64_t destroy = (1<<c) | (1<<d);
-                        uint64_t signMask = ((1<<a)-1) ^ ((1<<b)-1) ^((1<<c)-1) ^((1<<d)-1);
-                        signMask = signMask & ~((1<<a) | (1<<b) | (1<<c) | (1<<d));
+                        uint64_t create = (1ul<<a) | (1ul<<b);
+                        uint64_t destroy = (1ul<<c) | (1ul<<d);
+                        uint64_t signMask = ((1ul<<a)-1) ^ ((1ul<<b)-1) ^((1ul<<c)-1) ^((1ul<<d)-1);
+                        signMask = signMask & ~((1ul<<a) | (1ul<<b) | (1ul<<c) | (1ul<<d));
                         operators.push_back({create,destroy,signMask});
                         vals.push_back(Energy);
                     }
@@ -523,19 +523,19 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
 
     for (std::uint_fast8_t a = 0; a < numberOfQubits; a++)
     {
-         // uint64_t iBasisState = (1<<a);
+         // uint64_t iBasisState = (1ul<<a);
         for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
         {
-            // uint64_t jBasisState = (1<<c);
+            // uint64_t jBasisState = (1ul<<c);
 
             realNumType Energy = oneEInts(a % (numberOfQubits/2), c % (numberOfQubits/2));
             if (abs(Energy) > tol)//TODO threshold
             {
                 // operators.push_back({a,a,c,c});
-                uint64_t create = (1<<a);
-                uint64_t destroy = (1<<c);
-                uint64_t signMask = ((1<<a)-1) ^ ((1<<c)-1);
-                signMask = signMask & ~((1<<a) | (1<<c));
+                uint64_t create = (1ul<<a);
+                uint64_t destroy = (1ul<<c);
+                uint64_t signMask = ((1ul<<a)-1) ^ ((1ul<<c)-1);
+                signMask = signMask & ~((1ul<<a) | (1ul<<c));
                 operators.push_back({create,destroy,signMask});
                 vals.push_back(Energy);
             }
@@ -669,7 +669,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
     }
     else
     {
-        m_linearSize = 1<<numberOfQubits;
+        m_linearSize = 1ul<<numberOfQubits;
     }
     logger().log("Matrix linear size",m_linearSize);
     bool success  = s_loadMatrix(m_fullyConstructedMatrix,filePath,comp,m_linearSize);
@@ -682,7 +682,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
 
     success = s_loadOneAndTwoElectronsIntegrals<dataType>(m_operators,m_vals,filePath,numberOfQubits);
     m_isSecQuantConstructed = success;
-    size_t sizeEstimate = 0.3*choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2)*(1<<numberOfQubits);
+    size_t sizeEstimate = 0.3*choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2)*(1ul<<numberOfQubits);
     if (comp)
     {
         sizeEstimate = 0.3*comp->getCompressedSize() * choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2);

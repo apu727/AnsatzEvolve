@@ -12,7 +12,7 @@
 stateRotate::stateRotate(int nQubits, std::shared_ptr<compressor> comp)
 {
     m_nQubits = nQubits;
-    m_dim = 1<<m_nQubits;
+    m_dim = 1ul<<m_nQubits;
     if (comp)
     {
         m_compressStateVectors = true;
@@ -48,10 +48,10 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
     {
         if (a[0] == a[1] || a[2] == a[3])
             fprintf(stderr,"Wrong order in creation annihilation operators");
-        createBits = (1<<a[0]) | (1<<a[1]);
-        annihilateBits = (1<<a[2]) | (1<<a[3]);
-        signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1) ^((1<<a[2])-1) ^((1<<a[3])-1);
-        signMask = signMask & ~((1<<a[0]) | (1<<a[1]) | (1<<a[2]) | (1<<a[3]));
+        createBits = (1ul<<a[0]) | (1ul<<a[1]);
+        annihilateBits = (1ul<<a[2]) | (1ul<<a[3]);
+        signMask = ((1ul<<a[0])-1) ^ ((1ul<<a[1])-1) ^((1ul<<a[2])-1) ^((1ul<<a[3])-1);
+        signMask = signMask & ~((1ul<<a[0]) | (1ul<<a[1]) | (1ul<<a[2]) | (1ul<<a[3]));
         activeBits = createBits | annihilateBits;
         if (a[0] > a[1]) // see applyExcToBasisState_ in fusedevolve.cpp
             permPhase *= -1;
@@ -60,12 +60,12 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
     }
     else
     {
-        createBits = (1<<a[0]);
-        annihilateBits = (1<<a[1]);
+        createBits = (1ul<<a[0]);
+        annihilateBits = (1ul<<a[1]);
         activeBits = createBits | annihilateBits;
 
-        signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1);
-        signMask = signMask & ~((1<<a[0]) | (1<<a[1]));
+        signMask = ((1ul<<a[0])-1) ^ ((1ul<<a[1])-1);
+        signMask = signMask & ~((1ul<<a[0]) | (1ul<<a[1]));
     }
 
     uint64_t* intois_pos = intois;
@@ -218,8 +218,8 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
     assert(numberOfQubits %2 == 0);
     assert(numberOfQubits < 64);
     m_numberOfQubits = numberOfQubits;
-    m_spinDownBitMask = (1<<(numberOfQubits/2))-1;
-    m_spinUpBitMask = ((1<<(numberOfQubits))-1) ^ m_spinDownBitMask;
+    m_spinDownBitMask = (1ul<<(numberOfQubits/2))-1;
+    m_spinUpBitMask = ((1ul<<(numberOfQubits))-1) ^ m_spinDownBitMask;
     m_decompressedSize = stateVectorSize;
     m_spinUp = spinUp;
     m_spinDown = spinDown;

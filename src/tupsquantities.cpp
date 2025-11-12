@@ -1630,12 +1630,12 @@ void TUPSQuantities::doSubspaceDiagonalisation(std::shared_ptr<stateAnsatz> myAn
         Matrix<numType>::EigenMatrix DensityMatrix(numberOfQubits,numberOfQubits);
         for (int i = 0; i < numberOfQubits; i++)
         {//        <a^\dagger_i a_j>
-            size_t iBitMask = 1<<i;
+            size_t iBitMask = 1ul<<i;
 
             for (int j = 0; j <=i; j++)
             {
                 numType cumulate = 0;
-                size_t jBitMask = 1<<j;
+                size_t jBitMask = 1ul<<j;
                 for (size_t k = 0; k < decompressedLowestEigenVector.size(); k++)
                 {
                     size_t k2;

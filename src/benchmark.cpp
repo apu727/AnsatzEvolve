@@ -148,14 +148,14 @@ std::pair<uint64_t,bool> applyExcToBasisState(uint64_t state, const stateRotate:
             fprintf(stderr,"Wrong order in creation annihilation operators");
             return std::make_pair(state,true);
         }
-        createBits = (1<<a[0]) | (1<<a[1]);
-        annihilateBits = (1<<a[2]) | (1<<a[3]);
+        createBits = (1ul<<a[0]) | (1ul<<a[1]);
+        annihilateBits = (1ul<<a[2]) | (1ul<<a[3]);
         activeBits = createBits | annihilateBits;
     }
     else
     {
-        createBits = (1<<a[0]);
-        annihilateBits = (1<<a[1]);
+        createBits = (1ul<<a[0]);
+        annihilateBits = (1ul<<a[1]);
         activeBits = createBits | annihilateBits;
     }
 

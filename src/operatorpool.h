@@ -25,7 +25,7 @@ constexpr char bitwiseDot(const uint64_t a, const uint64_t b, int dim)
     //     prod>>=1;
     // }
     // return ret;
-    uint64_t i = a & b & (dim < 64 ? ((1<<dim) -1) : -1);
+    uint64_t i = a & b & (dim < 64 ? ((1ul<<dim) -1) : -1);
     return popcount(i);
 }
 
@@ -186,9 +186,9 @@ public:
             for (int8_t i = 0; i < 4; i++)
             {
                 if ((*this)[i] != -1)
-                    first = first | 1<<(*this)[i];
+                    first = first | 1ul<<(*this)[i];
                 if (other[i] != -1)
-                    second = second | 1<<other[i];
+                    second = second | 1ul<<other[i];
             }
             allNonEqual = !(first & second);
 
@@ -229,8 +229,8 @@ public:
                 assert(fourth == -1);
                 return first == second;
             }
-            uint64_t create = (1<<first) | (1<<second);
-            uint64_t annihilate = (1<<third) | (1<<fourth);
+            uint64_t create = (1ul<<first) | (1ul<<second);
+            uint64_t annihilate = (1ul<<third) | (1ul<<fourth);
             assert(third != fourth);//Double destroy
             assert(first != second); //Double create
             //dont care about order

@@ -49,10 +49,10 @@ std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate
             fprintf(stderr,"Wrong order in creation annihilation operators");
             return std::make_pair(state,true);
         }
-        createBits = (1<<a[0]) | (1<<a[1]);
-        annihilateBits = (1<<a[2]) | (1<<a[3]);
-        uint64_t signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1) ^((1<<a[2])-1) ^((1<<a[3])-1);
-        signMask = signMask & ~((1<<a[0]) | (1<<a[1]) | (1<<a[2]) | (1<<a[3]));
+        createBits = (1ul<<a[0]) | (1ul<<a[1]);
+        annihilateBits = (1ul<<a[2]) | (1ul<<a[3]);
+        uint64_t signMask = ((1ul<<a[0])-1) ^ ((1ul<<a[1])-1) ^((1ul<<a[2])-1) ^((1ul<<a[3])-1);
+        signMask = signMask & ~((1ul<<a[0]) | (1ul<<a[1]) | (1ul<<a[2]) | (1ul<<a[3]));
         activeBits = createBits | annihilateBits;
         phase *= (popcount(state & signMask) & 1) ? -1 : 1;
         if (a[0] > a[1]) // We want 1 5 2 6 to have no phase to match with previous angles
@@ -62,12 +62,12 @@ std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate
     }
     else
     {
-        createBits = (1<<a[0]);
-        annihilateBits = (1<<a[1]);
+        createBits = (1ul<<a[0]);
+        annihilateBits = (1ul<<a[1]);
         activeBits = createBits | annihilateBits;
 
-        uint64_t signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1);
-        signMask = signMask & ~((1<<a[0]) | (1<<a[1]));
+        uint64_t signMask = ((1ul<<a[0])-1) ^ ((1ul<<a[1])-1);
+        signMask = signMask & ~((1ul<<a[0]) | (1ul<<a[1]));
         phase *= (popcount(state & signMask) & 1) ? -1 : 1;
     }
 

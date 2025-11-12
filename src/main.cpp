@@ -17,8 +17,8 @@
 bool OperatorsHaveSZSymmetry(int numberOfQubits, const std::vector<stateRotate::exc>& excs)
 {   //Ugly bodge. This has been copied from AnsatzManager.cpp. Ideally we should also use that but this breaks the build structure
     bool ret = true;
-    uint64_t spinDownBitMask = (1<<(numberOfQubits/2))-1;
-    uint64_t spinUpBitMask = ((1<<(numberOfQubits))-1) ^ spinDownBitMask;
+    uint64_t spinDownBitMask = (1ul<<(numberOfQubits/2))-1;
+    uint64_t spinUpBitMask = ((1ul<<(numberOfQubits))-1) ^ spinDownBitMask;
 
     for (const auto& e : excs)
     {
@@ -26,13 +26,13 @@ bool OperatorsHaveSZSymmetry(int numberOfQubits, const std::vector<stateRotate::
         uint64_t destroy = 0;
         if (e.isSingleExc())
         {
-            create = (1<<e.first);
-            destroy = (1<<e.second);
+            create = (1ul<<e.first);
+            destroy = (1ul<<e.second);
         }
         else if (e.isDoubleExc())
         {
-            create = (1<<e.first) | (1 << e.second);
-            destroy = (1<<e.third) | (1 << e.fourth);
+            create = (1ul<<e.first) | (1ul << e.second);
+            destroy = (1ul<<e.third) | (1ul << e.fourth);
         }
         else
         {
@@ -248,7 +248,7 @@ int main(int argc, char *argv[])
     std::shared_ptr<compressor> comp;
     std::shared_ptr<FusedEvolve> FE;
     if (allSameParticleNumber && SZSym && !opt.noCompress)
-        comp = std::make_shared<SZAndnumberOperatorCompressor>(1<<numberOfQubits,spinUp,spinDown);
+        comp = std::make_shared<SZAndnumberOperatorCompressor>(1ul<<numberOfQubits,spinUp,spinDown);
     if (allSameParticleNumber && !SZSym && !opt.noCompress)
         comp = std::make_shared<numberOperatorCompressor>(numberOfParticles,statevectorCoeffs.size());
     logger().log("comp",comp.get());
@@ -270,7 +270,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        start.resize(1<<numberOfQubits,false,comp);
+        start.resize(1ul<<numberOfQubits,false,comp);
     }
 
 

@@ -94,9 +94,9 @@ bool stateAnsatzManager::construct()
         {
             m_compressStateVectors = true;
             if (m_InitialSZSym && m_OperatorSZSym)
-                m_compressor = std::make_shared<SZAndnumberOperatorCompressor>(1<<m_numberOfQubits,m_spinUp,m_spinDown);
+                m_compressor = std::make_shared<SZAndnumberOperatorCompressor>(1ul<<m_numberOfQubits,m_spinUp,m_spinDown);
             else
-                m_compressor = std::make_shared<numberOperatorCompressor>(m_numberOfParticles,1<<m_numberOfQubits);
+                m_compressor = std::make_shared<numberOperatorCompressor>(m_numberOfParticles,1ul<<m_numberOfQubits);
 
             // m_Ham.compress(m_compressor);
         }
@@ -202,8 +202,8 @@ bool stateAnsatzManager::setHamiltonian()
 void stateAnsatzManager::setOperatorSymmetry()
 {
     m_OperatorSZSym = true;
-    uint64_t spinDownBitMask = (1<<(m_numberOfQubits/2))-1;
-    uint64_t spinUpBitMask = ((1<<(m_numberOfQubits))-1) ^ spinDownBitMask;
+    uint64_t spinDownBitMask = (1ul<<(m_numberOfQubits/2))-1;
+    uint64_t spinUpBitMask = ((1ul<<(m_numberOfQubits))-1) ^ spinDownBitMask;
 
     for (const auto& e : m_excitations)
     {
@@ -211,13 +211,13 @@ void stateAnsatzManager::setOperatorSymmetry()
         uint64_t destroy = 0;
         if (e.isSingleExc())
         {
-            create = (1<<e.first);
-            destroy = (1<<e.second);
+            create = (1ul<<e.first);
+            destroy = (1ul<<e.second);
         }
         else if (e.isDoubleExc())
         {
-            create = (1<<e.first) | (1 << e.second);
-            destroy = (1<<e.third) | (1 << e.fourth);
+            create = (1ul<<e.first) | (1ul << e.second);
+            destroy = (1ul<<e.third) | (1ul << e.fourth);
         }
         else
         {
@@ -293,7 +293,7 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
     }
     if (success)
     {
-        m_start.resize(1<<numberOfQubits,false,nullptr);
+        m_start.resize(1ul<<numberOfQubits,false,nullptr);
         for (size_t i = 0; i < indexes.size(); i++)
         {
             m_start[indexes[i]] = coeffs[i];

@@ -227,7 +227,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
         for (size_t k = 0; k < numberOfQubits; k++)
         {
             std::pair kIdx = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
-            if (jBasisState & (1<<k))
+            if (jBasisState & (1ul<<k))
             {
                 if (k != trueIdx0 && k != trueIdx2)
                     Energy += getTwoElectronEnergy({idxs[0],kIdx,idxs[2],kIdx});
@@ -241,7 +241,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
         realNumType Energy = 0;
         for (size_t k = 0; k < numberOfQubits; k++)
         {
-            if (!(jBasisState & (1<<k)))
+            if (!(jBasisState & (1ul<<k)))
                 continue;
             std::pair kIdx = {k % (numberOfQubits/2),k >= (numberOfQubits/2)};
             //h_ii
@@ -249,7 +249,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
 
             for (size_t l = k+1; l < numberOfQubits; l++)
             {
-                if (!(jBasisState & (1<<l)))
+                if (!(jBasisState & (1ul<<l)))
                     continue;
                 std::pair lIdx = {l % (numberOfQubits/2),l >= (numberOfQubits/2)};
                 Energy += getTwoElectronEnergy({kIdx,lIdx,kIdx,lIdx});
@@ -273,12 +273,12 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
         {
             bool isSet = false;
             bool jsSet = false;
-            if (iBasisState & (1<< k))
+            if (iBasisState & (1ul<< k))
             {
                 isSet = true;
                 eveniElecSoFar = !eveniElecSoFar;
             }
-            if (jBasisState & (1<<k))
+            if (jBasisState & (1ul<<k))
             {
                 jsSet = true;
                 evenjElecSoFar = !evenjElecSoFar;
@@ -334,7 +334,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
     }
     else
     {
-        compressedSize = 1<<numberOfQubits;
+        compressedSize = 1ul<<numberOfQubits;
     }
     size_t expectedMatrixSize = choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2)*compressedSize; // An estimate;
     me->m_iIndexes.reserve(expectedMatrixSize);
@@ -362,15 +362,15 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
             assert(numberOfQubits < 256);
             for (std::uint_fast8_t a = 0; a < numberOfQubits; a++)
             {
-                if(jBasisState & (1<<a))
+                if(jBasisState & (1ul<<a))
                     continue;
                 for (std::uint_fast8_t b = a+1; b < numberOfQubits; b++)
                 {
-                    if(jBasisState & (1<<b))
+                    if(jBasisState & (1ul<<b))
                         continue;
                     for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
                     {
-                        if (!(jBasisState & (1<<c)))
+                        if (!(jBasisState & (1ul<<c)))
                             continue;
                         if (c == a || c == b)
                             continue;
@@ -378,10 +378,10 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
                         {
                             if (d == b || d == a)
                                 continue;
-                            if (!(jBasisState & (1<<d)))
+                            if (!(jBasisState & (1ul<<d)))
                                 continue;
 
-                            uint64_t iBasisState = ((1<<a) | (1<<b)) ^ ((1<<c | 1<< d) ^ jBasisState);
+                            uint64_t iBasisState = ((1ul<<a) | (1ul<<b)) ^ ((1ul<<c | 1ul<< d) ^ jBasisState);
                             if (iBasisState < jBasisState)
                                 continue;
                             assert(iBasisState != jBasisState);
@@ -412,16 +412,16 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
 
             for (std::uint_fast8_t a = 0; a < numberOfQubits; a++)
             {
-                if ((jBasisState & (1<<a)))
+                if ((jBasisState & (1ul<<a)))
                     continue;
                 for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
                 {
                     if (c == a)
                         continue;
-                    if (!(jBasisState & (1<<c)))
+                    if (!(jBasisState & (1ul<<c)))
                         continue;
 
-                    uint64_t iBasisState = ((1<<a)) ^ ((1<<c) ^ jBasisState);
+                    uint64_t iBasisState = ((1ul<<a)) ^ ((1ul<<c) ^ jBasisState);
                     if (iBasisState < jBasisState)
                         continue;
                     assert(iBasisState != jBasisState);

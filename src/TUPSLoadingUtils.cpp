@@ -199,9 +199,9 @@ int readCsvState(std::vector<std::complex<realNumType>>& Coeffs, const std::stri
         uint64_t bitstring_Int = 0;
         for (size_t i=0; i < bitstring.length(); i++)
         {
-            bitstring_Int |= ((1 << i) * (bitstring[bitstring.length()-i-1] == '1'));
+            bitstring_Int |= ((1ul << i) * (bitstring[bitstring.length()-i-1] == '1'));
         }
-        size_t vectorSizeNeeded = 1<<bitstring.length();
+        size_t vectorSizeNeeded = 1ul<<bitstring.length();
         if (Coeffs.size() < vectorSizeNeeded)
             Coeffs.resize(vectorSizeNeeded,0);
 
@@ -257,7 +257,7 @@ int readCsvState(std::vector<realNumType>& Coeffs, std::vector<uint64_t>& indexe
         uint64_t bitstring_Int = 0;
         for (size_t i=0; i < bitstring.length(); i++)
         {
-            bitstring_Int |= ((1 << i) * (bitstring[bitstring.length()-i-1] == '1'));
+            bitstring_Int |= ((1ul << i) * (bitstring[bitstring.length()-i-1] == '1'));
         }
         if (numQubits == -1)
         {
