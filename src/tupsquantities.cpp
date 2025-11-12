@@ -173,12 +173,33 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     std::vector<realNumType> NumberOfZeroMetricDiagonalValues(rotationPaths.size());
 
     std::vector<realNumType> NormOfGradVector(rotationPaths.size());
+    std::vector<numType> OverlapWithGroundState(rotationPaths.size());
+    std::vector<numType> MagOfOverlapWithGroundState(rotationPaths.size());
     Matrix<realNumType>::EigenMatrix FrechetDistance(rotationPaths.size(),rotationPaths.size());
     //Jacobian?
 
     vector<numType> temp; //temporary
     vector<numType> dest;
+    Eigen::MatrixXd FCIEigenVectors;
 
+    if (m_Ham->canGetSparse() && m_Ham->rows() < 5000 && computeLowestEigenValue)
+    {
+        fprintf(stderr,"Finding all eigenvectors\n");
+        Eigen::MatrixXd h = m_Ham->getSparse().toDense();
+        auto es = Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> (h,Eigen::ComputeEigenvectors);
+        Eigen::VectorXd TrueEigenValues = es.eigenvalues();
+        FCIEigenVectors = es.eigenvectors();
+
+        fprintf(stderr,"TrueEigenValues:\n");
+        for (long i = 0; i < TrueEigenValues.rows() && i < 10; i++)
+            fprintf(stderr,"%20.10lg",TrueEigenValues[i]);
+        fprintf(stderr,"\n");
+    }
+    else
+    {
+        if (computeLowestEigenValue)
+            logger().log("Hamiltonian too big to fully construct");
+    }
 
 
     for (size_t rpIndex = 0; rpIndex < rotationPaths.size(); rpIndex++)
@@ -414,6 +435,8 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         }
 
         NormOfGradVector[rpIndex] = gradVector.norm();
+        OverlapWithGroundState[rpIndex] = destEM.conjugate().transpose() * FCIEigenVectors.col(0);
+        MagOfOverlapWithGroundState[rpIndex] = std::abs(OverlapWithGroundState[rpIndex]);
         realNumType Mag = dest.dot(dest);
         if (std::fabs(Mag-1.) > 1e-5)
             fprintf(stderr,"Magnitude for path %zu is not 1 but " realNumTypeCode "\n",rpIndex,Mag);
@@ -443,34 +466,9 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    if (m_Ham->rows() < 100000 && computeLowestEigenValue)
-    {
-        fprintf(stderr,"Finding lowest EigenValue\n");
-        vector<numType> start;
-        start.copy(dest);
-        vector<numType> next;
-        m_Ham->apply(start,next);
-        while(abs(next.dot(start) + 1) > 1e-10)
-        {
-            static_cast<Matrix<numType>&>(start) = std::move(next);
-            m_Ham->apply(start,next);
-            // fprintf(stderr,"NExtNorm: %lg\n", next.norm());
-            next.normalize();
-            // fprintf(stderr,"error: %lg\n", abs(next.dot(start) + 1));
-        }
-        fprintf(stderr, "Largest E Value,%.16lg",(m_Ham->apply(next).dot(next)));
+    printOutputLine(OverlapWithGroundState,"OverlapWithGroundState");
+    printOutputLine(MagOfOverlapWithGroundState,"MagOfOverlapWithGroundState");
 
-        // auto TrueEigenValues = Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> (m_HamEm,Eigen::EigenvaluesOnly).eigenvalues();
-        // fprintf(stderr,"TrueEigenValues:\n");
-        // for (long i = 0; i < TrueEigenValues.rows() && i < 10; i++)
-        //     fprintf(stderr,"%20.10lg",TrueEigenValues[i]);
-        // fprintf(stderr,"\n");
-    }
-    else
-    {
-        if (computeLowestEigenValue)
-            logger().log("Hamiltonian too big to diagonalise here");
-    }
 }
 
 void TUPSQuantities::calculateNumericalSecondDerivative(const std::vector<ansatz::rotationElement> &rp, realNumType startEnergy, const sparseMatrix<realNumType,numType> &Ham, const vector<numType>::EigenVector &direction, stateAnsatz *myAnsatz)
@@ -2052,8 +2050,17 @@ realNumType TUPSQuantities::iterativeTups(FusedEvolve& FE, std::vector<baseAnsat
     }
     return Energy;
 }
-#define columnSize "26"
+#ifdef useComplex
+#define columnSize "42"
+#define complexColumnSize "20"
 #define textColumnSize "40"
+#else
+#define columnSize "26"
+#define complexColumnSize "26"
+#define textColumnSize "40"
+#endif
+
+
 
 void TUPSQuantities::printOutputLine(std::vector<double>& toPrint, std::string name)
 {
@@ -2062,6 +2069,18 @@ void TUPSQuantities::printOutputLine(std::vector<double>& toPrint, std::string n
     for (auto n : toPrint)
     {
         fprintf(m_file,"%-" columnSize ".16lg", n);
+    }
+    fprintf(m_file,"\n");
+
+}
+
+void TUPSQuantities::printOutputLine(std::vector<std::complex<double>>& toPrint, std::string name)
+{
+    fprintf(m_file,"%-" textColumnSize "s",name.c_str());
+    //fprintf(stderr,"%-" columnSize "s", "N/A");
+    for (auto n : toPrint)
+    {
+        fprintf(m_file,"%-" complexColumnSize ".16lg, %-" complexColumnSize ".16lg", n.real(), n.imag());
     }
     fprintf(m_file,"\n");
 

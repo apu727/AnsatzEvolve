@@ -20,6 +20,7 @@
 class TUPSQuantities
 {
     void printOutputLine(std::vector<double>& toPrint, std::string name);
+    void printOutputLine(std::vector<std::complex<double>>& toPrint, std::string name);
     void printOutputLine(std::vector<long double>& toPrint, std::string name);
     void printOutputHeaders(size_t numberOfPathsExHF);
 
@@ -70,6 +71,7 @@ public:
     realNumType iterativeTups(stateAnsatz &myAnsatz, std::vector<baseAnsatz::rotationElement> &rp, bool avoidNegativeHessianValues);
     realNumType iterativeTups(FusedEvolve& FE, std::vector<baseAnsatz::rotationElement> &rp, bool avoidNegativeHessianValues);
     void doSubspaceDiagonalisation(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE,  size_t numberOfMinima,const std::vector<std::vector<ansatz::rotationElement>>& rotationPaths);
+
 
 
 };
