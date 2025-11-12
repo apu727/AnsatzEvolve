@@ -10,7 +10,7 @@
 /********************TUPS Stuff*****************/
 //reads a statevector from filepath(csv) into Coeffs. Coeffs[3] corresponds to 00011:x. Length of Coeffs is determined by length of bitstring in file
 int readCsvState(std::vector<std::complex<realNumType>>& Coeffs, const std::string& filePath);
-int readCsvState(std::vector<realNumType>& Coeffs, const std::string& filePath);
+int readCsvState(std::vector<realNumType>& Coeffs, std::vector<uint64_t>& indexes, const std::string& filePath, int &numQubits);
 
 //reads in the nuclear energy
 void LoadNuclearEnergy(realNumType &NuclearEnergy, std::string filePath);

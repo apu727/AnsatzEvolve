@@ -204,7 +204,7 @@ bool stateRotate::loadOperators(std::string filePath, std::vector<stateRotate::e
     return 1;
 }
 
-SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVectorSize, uint64_t spinUp, uint64_t spinDown)
+SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVectorSize, int spinUp, int spinDown)
 {//Compresses for a specific spin, It assumes that the top N/2 bits are spin up and vice versa
     uint64_t numberOfQubits = 0;
     {
@@ -220,23 +220,25 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
     m_numberOfQubits = numberOfQubits;
     m_spinDownBitMask = (1<<(numberOfQubits/2))-1;
     m_spinUpBitMask = ((1<<(numberOfQubits))-1) ^ m_spinDownBitMask;
+    m_decompressedSize = stateVectorSize;
+    m_spinUp = spinUp;
+    m_spinDown = spinDown;
 
-    compressPerm.resize(stateVectorSize);
-    uint64_t activeCount = 0;
-    uint64_t allOnes = -1;
+    // compressPerm.resize(stateVectorSize);
+    // uint64_t activeCount = 0;
     for (uint64_t i = 0; i < stateVectorSize; i++)
     {
-        bool spinUpActive = bitwiseDot(i>>(numberOfQubits/2),allOnes,64) == (char)spinUp;
-        bool spinDownActive = bitwiseDot(i,allOnes,(numberOfQubits/2)) == (char)spinDown;
+        bool spinUpActive = popcount(i & m_spinUpBitMask) == (char)m_spinUp;
+        bool spinDownActive = popcount(i & m_spinDownBitMask) == (char)m_spinDown;
         if (spinUpActive && spinDownActive)
         {
-            compressPerm[i] = activeCount;
+            // compressPerm[i] = activeCount;
             decompressPerm.push_back(i);
-            activeCount++;
+            // activeCount++;
         }
         else
         {
-            compressPerm[i] = -1;
+            // compressPerm[i] = -1;
         }
     }
 }

@@ -2452,6 +2452,11 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
     // vector<numType> psi;
     Matrix<numType> Ts;
     // Matrix<numType> HTs;
+    {
+        size_t memoryEstimate = (angles.size()+1)*(m_start.size())*(sizeof(numType));
+        // if (memoryEstimate > 10000000000/*10GB*/)
+            logger().log("Trying to allocate (GB)",(double)memoryEstimate/1e9);
+    }
     Ts.resize(angles.size()+1,m_start.size(),m_lieIsCompressed,m_compressor);
     //The last one is psi
     vectorView<Matrix<numType>,Eigen::RowMajor> psi = Ts.getJVectorView(angles.size());

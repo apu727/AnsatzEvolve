@@ -54,7 +54,7 @@ constexpr char explicitPopcount(uint32_t i)
 #endif
 
 
-
+// template <class derived>
 class compressor;
 
 template<typename dataType>

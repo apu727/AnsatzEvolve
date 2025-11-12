@@ -61,19 +61,15 @@ public:
     virtual void blankAllButOne() = 0;
     virtual size_t getMaxBlankCount() const = 0;
 };
-
+//template <class derived> // avoids virtual dispatch, Eigen style
 class compressor
 {
 protected:
-    std::vector<int64_t> compressPerm;
+    // std::vector<int64_t> compressPerm;
     std::vector<int64_t> decompressPerm;
 public:
-    bool compressIndex(uint64_t index, uint64_t& compressedIdx)
-    {
-        assert(index < compressPerm.size());
-        compressedIdx = compressPerm[index];
-        return compressPerm[index] >= 0;
-    };
+    virtual bool compressIndex(uint64_t index, uint64_t& compressedIdx) = 0;
+
     bool deCompressIndex(uint64_t index, uint64_t& decompressedIdx)
     {
         assert(index < decompressPerm.size());
@@ -96,11 +92,27 @@ public:
         }
 
         dst.resize(thisPtr->decompressPerm.size(),true,thisPtr,false);
-        for (size_t i = 0; i < thisPtr->compressPerm.size(); i++)
+        for (size_t i = 0; i < src.size(); i++)
         {
-            int64_t newIdx = thisPtr->compressPerm[i];
-            if (newIdx >= 0)
+            uint64_t newIdx;
+            if (thisPtr->compressIndex(i,newIdx))
                 dst[newIdx] = src[i];
+        }
+    }
+
+    template<typename VectorType>
+    static void compressVector(std::vector<VectorType> coeffs, std::vector<uint64_t> indexes, vectorView<Matrix<VectorType>,Eigen::RowMajor> dst,
+                               std::shared_ptr<compressor> thisPtr)
+    {
+        assert(indexes.size() == coeffs.size());
+        std::shared_ptr<compressor> srcCompressor;
+
+        dst.resize(thisPtr->decompressPerm.size(),true,thisPtr);
+        for (size_t i = 0; i < coeffs.size(); i++)
+        {
+            uint64_t newIdx;
+            if (thisPtr->compressIndex(indexes[i],newIdx))
+                dst[newIdx] = coeffs[i];
         }
     }
 
@@ -111,7 +123,7 @@ public:
         assert(src.getIsCompressed(srcCompressor) == true); // decompressing a decompressed vector is an error. This is to catch bugs
         assert(srcCompressor.get() == thisPtr.get());
 
-        dst.resize(thisPtr->compressPerm.size(),false,thisPtr);
+        dst.resize(thisPtr->getUnCompressedSize(),false,thisPtr);
         for (size_t i = 0; i < thisPtr->decompressPerm.size(); i++)
         {
             int64_t newIdx = thisPtr->decompressPerm[i];
@@ -122,7 +134,7 @@ public:
     virtual ~compressor(){};
 
     size_t getCompressedSize(){return decompressPerm.size();}
-    size_t getUnCompressedSize(){return compressPerm.size();}
+    virtual size_t getUnCompressedSize() = 0;
     virtual void dummyImplement() = 0; // To make this an abstract base class. Derived class needs to implement the construction of compressPerm and decompressPerm
     virtual bool opDoesSomething(excOp& op) = 0;
 };

@@ -164,6 +164,7 @@ int main(int argc, char *argv[])
 {
     //std::vector<uint64_t> statevectorBasis;
     std::vector<numType> statevectorCoeffs;
+    std::vector<uint64_t> statevectorIndexes;
     options opt = options::parse(argc,argv);
     const std::string& filePath = opt.filePath;
     if (!opt.ok)
@@ -174,7 +175,8 @@ int main(int argc, char *argv[])
         return 1;
     }
     threadpool::getInstance(NUM_CORES); // create the threadpool
-    if (!readCsvState(statevectorCoeffs,filePath + "_Initial.dat"))
+    int numberOfQubits = 0;
+    if (!readCsvState(statevectorCoeffs,statevectorIndexes,filePath + "_Initial.dat",numberOfQubits))
     {
         logger().log("Failed to read statevectorCoeffs from",filePath + "_Initial.dat" );
         return 1;
@@ -186,28 +188,14 @@ int main(int argc, char *argv[])
     bool SZSym = true;
     int spinUp = -1;
     int spinDown = -1;
-    int numberOfQubits = 0;
-    {
-        size_t dummy = statevectorCoeffs.size()-1;
-        while(dummy)
-        {
-            numberOfQubits++;
-            dummy = dummy >>1;
-        }
-    }
-
 
 
     for (size_t i = 0; i < statevectorCoeffs.size(); i++)
     {
-        if (statevectorCoeffs[i] == 0.)
-        {
-            continue;
-        }
         if (numberOfQubits %2 != 0)
             SZSym = false;
 
-        char currNumberOfParticles = bitwiseDot(i,ones,64);
+        char currNumberOfParticles = bitwiseDot(statevectorIndexes[i],ones,64);
 
         if (numberOfParticles == -1 && currNumberOfParticles != -1)
         {
@@ -219,8 +207,8 @@ int main(int argc, char *argv[])
             break;
         }
 
-        int currSpinUp = bitwiseDot(i>>(numberOfQubits/2),ones,64);
-        int currSpinDown = bitwiseDot(i,ones,numberOfQubits/2);
+        int currSpinUp = bitwiseDot(statevectorIndexes[i]>>(numberOfQubits/2),ones,64);
+        int currSpinDown = bitwiseDot(statevectorIndexes[i],ones,numberOfQubits/2);
         if (spinUp == -1 && currSpinUp != -1)
             spinUp = currSpinUp;
         if (spinDown == -1 && currSpinDown != -1)
@@ -260,7 +248,7 @@ int main(int argc, char *argv[])
     std::shared_ptr<compressor> comp;
     std::shared_ptr<FusedEvolve> FE;
     if (allSameParticleNumber && SZSym && !opt.noCompress)
-        comp = std::make_shared<SZAndnumberOperatorCompressor>(statevectorCoeffs.size(),spinUp,spinDown);
+        comp = std::make_shared<SZAndnumberOperatorCompressor>(1<<numberOfQubits,spinUp,spinDown);
     if (allSameParticleNumber && !SZSym && !opt.noCompress)
         comp = std::make_shared<numberOperatorCompressor>(numberOfParticles,statevectorCoeffs.size());
     logger().log("comp",comp.get());
@@ -275,7 +263,15 @@ int main(int argc, char *argv[])
         stateRotate::loadOperators(filePath + + "_Operators.dat",excs);
     }
 
-    vector<numType> start(statevectorCoeffs);
+    vector<numType> start;
+    if (comp)
+    {
+        start.resize(comp->getCompressedSize(),true,comp);
+    }
+    else
+    {
+        start.resize(1<<numberOfQubits,false,comp);
+    }
 
 
     std::shared_ptr<stateAnsatz> myAnsatz = nullptr;
@@ -284,9 +280,7 @@ int main(int argc, char *argv[])
         myAnsatz = std::make_shared<stateAnsatz>(&target,start,lie.get());
     else if (comp)
     {
-        vector<numType> temp;
-        compressor::compressVector<numType>(start,temp,comp);
-        static_cast<Matrix<numType>&>(start) = std::move(temp);
+        compressor::compressVector<numType>(statevectorCoeffs,statevectorIndexes,start,comp);
     }
 
 

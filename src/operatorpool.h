@@ -6,7 +6,6 @@
 #ifndef OPERATORPOOL_H
 #define OPERATORPOOL_H
 
-#include <list>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -43,32 +42,54 @@ public:
 
 class numberOperatorCompressor : public compressor
 {
+    static const uint64_t allOnes = -1;
+    int m_numberOfParticles;
+    size_t m_decompressedSize;
 public:
-    numberOperatorCompressor(uint64_t numberOfParticles, uint64_t stateVectorSize)
+    bool compressIndex(uint64_t index, uint64_t& compressedIdx) override
+    {
+        if (popcount(index) == m_numberOfParticles)
+        {
+            auto elem = std::lower_bound(decompressPerm.begin(),decompressPerm.end(),index); // binary search.
+            if (elem == decompressPerm.end())
+            {
+                fprintf(stderr,"compressed index not found. numberOperator\n");
+                __builtin_trap();
+            }
+            compressedIdx = elem - decompressPerm.begin();
+            return true;
+        }
+        else
+        {
+            compressedIdx = -1;
+            return false;
+        }
+    }
+    numberOperatorCompressor(int numberOfParticles, uint64_t stateVectorSize)
     {
         assert(numberOfParticles <= 64);
-
-
-        compressPerm.resize(stateVectorSize);
-        uint64_t activeCount = 0;
-        uint64_t allOnes = -1;
+        m_numberOfParticles = numberOfParticles;
+        m_decompressedSize = stateVectorSize;
+        // compressPerm.resize(stateVectorSize);
+        // uint64_t activeCount = 0;
         for (uint64_t i = 0; i < stateVectorSize; i++)
         {
             bool indexActive = bitwiseDot(i,allOnes,64) == (char)numberOfParticles;
             if (indexActive)
             {
-                compressPerm[i] = activeCount;
+                // compressPerm[i] = activeCount;
                 decompressPerm.push_back(i);
-                activeCount++;
+                // activeCount++;
             }
             else
             {
-                compressPerm[i] = -1;
+                // compressPerm[i] = -1;
             }
         }
     }
-    virtual void dummyImplement(){}
-    virtual bool opDoesSomething(excOp&){return true;} // Always true for now. All operators are particle conserving
+    size_t getUnCompressedSize() override { return m_decompressedSize; }
+    virtual void dummyImplement() override{}
+    virtual bool opDoesSomething(excOp&) override{return true;} // Always true for now. All operators are particle conserving
 };
 
 class SZAndnumberOperatorCompressor : public compressor
@@ -77,10 +98,35 @@ class SZAndnumberOperatorCompressor : public compressor
     uint64_t m_qubitBitMask;
     uint64_t m_spinUpBitMask;
     uint64_t m_spinDownBitMask;
+    int m_spinUp;
+    int m_spinDown;
+    size_t m_decompressedSize = 0;
 public:
-    SZAndnumberOperatorCompressor(uint64_t stateVectorSize, uint64_t spinUp, uint64_t spinDown);
-    virtual void dummyImplement(){}
-    virtual bool opDoesSomething(excOp&);
+    bool compressIndex(uint64_t index, uint64_t& compressedIdx) override
+    {
+        bool spinUpActive = popcount(index & m_spinUpBitMask) == (char)m_spinUp;
+        bool spinDownActive = popcount(index & m_spinDownBitMask) == (char)m_spinDown;
+        if (spinUpActive && spinDownActive)
+        {
+            auto elem = std::lower_bound(decompressPerm.begin(),decompressPerm.end(),index); // binary search.
+            if (elem == decompressPerm.end())
+            {
+                fprintf(stderr,"compressed index not found. SZ\n");
+                __builtin_trap();
+            }
+            compressedIdx = elem - decompressPerm.begin();
+            return true;
+        }
+        else
+        {
+            compressedIdx = -1;
+            return false;
+        }
+    }
+    SZAndnumberOperatorCompressor(uint64_t stateVectorSize, int spinUp, int spinDown);
+    size_t getUnCompressedSize() override { return m_decompressedSize; }
+    virtual void dummyImplement() override{}
+    virtual bool opDoesSomething(excOp&) override;
 };
 
 class stateRotate : public operatorPool

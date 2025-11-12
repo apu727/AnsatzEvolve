@@ -211,7 +211,7 @@ int readCsvState(std::vector<std::complex<realNumType>>& Coeffs, const std::stri
     return 1;
 }
 
-int readCsvState(std::vector<realNumType>& Coeffs, const std::string& filePath)
+int readCsvState(std::vector<realNumType>& Coeffs, std::vector<uint64_t>& indexes, const std::string& filePath, int &numQubits)
 {
     FILE *fp;
     char str1[32];
@@ -228,6 +228,9 @@ int readCsvState(std::vector<realNumType>& Coeffs, const std::string& filePath)
     }
 
     int ret = 0;
+    numQubits = -1;
+    Coeffs.clear();
+    indexes.clear();
 
     while(EOF != ret )
     {
@@ -256,13 +259,23 @@ int readCsvState(std::vector<realNumType>& Coeffs, const std::string& filePath)
         {
             bitstring_Int |= ((1 << i) * (bitstring[bitstring.length()-i-1] == '1'));
         }
-        size_t vectorSizeNeeded = 1<<bitstring.length();
-        if (Coeffs.size() < vectorSizeNeeded)
-            Coeffs.resize(vectorSizeNeeded,0);
-
-        Coeffs[bitstring_Int] = coeff;
+        if (numQubits == -1)
+        {
+            numQubits = bitstring.length();
+        }
+        else
+        {
+            releaseAssert(numQubits ==  (int)bitstring.length(),"numQubits ==  bitstring.length()");
+        }
+        Coeffs.push_back(coeff);
+        indexes.push_back(bitstring_Int);
     }
     fclose(fp);
+    if (numQubits == -1)
+    {
+        fprintf(stderr,"unable to determine number of qubits\n");
+        return 0;
+    }
     return 1;
 }
 
