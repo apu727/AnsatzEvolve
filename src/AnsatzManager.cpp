@@ -202,13 +202,13 @@ bool stateAnsatzManager::setHamiltonian()
 void stateAnsatzManager::setOperatorSymmetry()
 {
     m_OperatorSZSym = true;
-    uint32_t spinDownBitMask = (1<<(m_numberOfQubits/2))-1;
-    uint32_t spinUpBitMask = ((1<<(m_numberOfQubits))-1) ^ spinDownBitMask;
+    uint64_t spinDownBitMask = (1<<(m_numberOfQubits/2))-1;
+    uint64_t spinUpBitMask = ((1<<(m_numberOfQubits))-1) ^ spinDownBitMask;
 
     for (const auto& e : m_excitations)
     {
-        uint32_t create = 0;
-        uint32_t destroy = 0;
+        uint64_t create = 0;
+        uint64_t destroy = 0;
         if (e.isSingleExc())
         {
             create = (1<<e.first);
@@ -306,7 +306,7 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
         m_numberOfQubits = numberOfQubits;
 
         //Determine number of particles
-        uint32_t ones = -1;
+        uint64_t ones = -1;
         int numberOfParticles = -1;
         bool allSameParticleNumber = true;
         bool SZSym = true;
@@ -322,7 +322,7 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
             {
                 continue;
             }
-            char currNumberOfParticles = bitwiseDot(indexes[i],ones,32);
+            char currNumberOfParticles = bitwiseDot(indexes[i],ones,64);
 
             if (numberOfParticles == -1 && currNumberOfParticles != -1)
             {
@@ -333,7 +333,7 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
                 allSameParticleNumber = false;
                 break;
             }
-            int currSpinUp = bitwiseDot(indexes[i]>>(numberOfQubits/2),ones,32);
+            int currSpinUp = bitwiseDot(indexes[i]>>(numberOfQubits/2),ones,64);
             int currSpinDown = bitwiseDot(indexes[i],ones,numberOfQubits/2);
             if (spinUp == -1 && currSpinUp != -1)
                 spinUp = currSpinUp;

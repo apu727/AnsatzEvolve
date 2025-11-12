@@ -11,9 +11,9 @@
 #include <future>
 #include <numeric>
 //The setup functions
-constexpr char dot(const uint32_t a, const uint32_t b, int dim)
+constexpr char dot(const uint64_t a, const uint64_t b, int dim)
 {
-    uint32_t prod = a&b;
+    uint64_t prod = a&b;
     char ret = 0; //at most 32
     for (int i = 0; i < dim; i++)
     {
@@ -24,13 +24,13 @@ constexpr char dot(const uint32_t a, const uint32_t b, int dim)
 }
 
 //State and sign. True is +ve
-std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate::exc& a)
+std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate::exc& a)
 {
     constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
     bool complexSet = false;
-    uint32_t activeBits =  0;
-    uint32_t createBits = 0;
-    uint32_t annihilateBits = 0;
+    uint64_t activeBits =  0;
+    uint64_t createBits = 0;
+    uint64_t annihilateBits = 0;
 
     numType phase = 1;
     if (a[0] < 0 && a[1] < 0)
@@ -51,7 +51,7 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
         }
         createBits = (1<<a[0]) | (1<<a[1]);
         annihilateBits = (1<<a[2]) | (1<<a[3]);
-        uint32_t signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1) ^((1<<a[2])-1) ^((1<<a[3])-1);
+        uint64_t signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1) ^((1<<a[2])-1) ^((1<<a[3])-1);
         signMask = signMask & ~((1<<a[0]) | (1<<a[1]) | (1<<a[2]) | (1<<a[3]));
         activeBits = createBits | annihilateBits;
         phase *= (popcount(state & signMask) & 1) ? -1 : 1;
@@ -66,18 +66,18 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
         annihilateBits = (1<<a[1]);
         activeBits = createBits | annihilateBits;
 
-        uint32_t signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1);
+        uint64_t signMask = ((1<<a[0])-1) ^ ((1<<a[1])-1);
         signMask = signMask & ~((1<<a[0]) | (1<<a[1]));
         phase *= (popcount(state & signMask) & 1) ? -1 : 1;
     }
 
 
-    uint32_t basisState = state;
-    uint32_t resultState = basisState;
+    uint64_t basisState = state;
+    uint64_t resultState = basisState;
 
 
 
-    uint32_t maskedBasisState = basisState & activeBits;
+    uint64_t maskedBasisState = basisState & activeBits;
 
     if (createBits == annihilateBits) // number operator
     {
@@ -158,9 +158,9 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
 
 template<typename indexType, indexType numberOfRotsThatExist>
 void fillCurrentMap(indexType activeRotsIdx, indexType numberToFuse,
-                    uint32_t* currentMap, bool* currentSigns,
+                    uint64_t* currentMap, bool* currentSigns,
                     indexType rotIdx, indexType numberOfActiveRotationsSoFar,
-                    const std::array<std::pair<uint32_t,bool>,numberOfRotsThatExist>& initialLinks, const std::array<stateRotate::exc,numberOfRotsThatExist>& rots)
+                    const std::array<std::pair<uint64_t,bool>,numberOfRotsThatExist>& initialLinks, const std::array<stateRotate::exc,numberOfRotsThatExist>& rots)
 {
     const indexType localVectorSize = 1<<numberToFuse;
 
@@ -444,7 +444,7 @@ inline void BENCHMARK_rotate(realNumType* scratchSpace,const bool* signs, const 
     else
     {
         constexpr indexType pseudoVectorSize = 1<<numberToFuse;
-        constexpr uint32_t signsStride = (pseudoVectorSize/2)*numberToFuse;
+        constexpr uint64_t signsStride = (pseudoVectorSize/2)*numberToFuse;
         static_assert((pseudoVectorSize/2)*numberToFuse < 1<<16);
         constexpr indexType rotCount = 1<<numberToFuse;
 
@@ -490,11 +490,11 @@ inline void BENCHMARK_rotate(realNumType* scratchSpace,const bool* signs, const 
     }
 }
 template<typename indexType, indexType numberToFuse>
-inline void storeTangents(realNumType* scratchSpace, const uint32_t*  const currentMap, const bool* signs, realNumType*__restrict__ const (&tangentLocation)[numberToFuse], size_t numberToRepeat)
+inline void storeTangents(realNumType* scratchSpace, const uint64_t*  const currentMap, const bool* signs, realNumType*__restrict__ const (&tangentLocation)[numberToFuse], size_t numberToRepeat)
 {
 
     constexpr indexType pseudoVectorSize = 1<<numberToFuse;
-    constexpr uint32_t signsStride = (pseudoVectorSize/2)*numberToFuse;
+    constexpr uint64_t signsStride = (pseudoVectorSize/2)*numberToFuse;
     constexpr indexType rotCount = 1<<numberToFuse;
 
     for (size_t i = 0; i < numberToRepeat; i++)
@@ -527,19 +527,19 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
         releaseAssert(false,"only complex exc can be diagonal and antihermitian");
 
     constexpr indexType numberOfPairsOfRotations = 1<<numberToFuse;
-    typedef std::vector<uint32_t> localVector; //each element represents a 2D subspace and a sign
+    typedef std::vector<uint64_t> localVector; //each element represents a 2D subspace and a sign
     typedef std::vector<std::array<localVector,numberOfPairsOfRotations>> fusedDiagonalAnsatz; //\Sum_{k=1}^{n} n choose k = 2^n for n >=0.
     //Each element of the array is a specific set of rotations active. Each element of the vector is a repetition
 
     fusedDiagonalAnsatz myFusedAnsatz;
-    std::vector<uint32_t> activebasisStates;
+    std::vector<uint64_t> activebasisStates;
     activebasisStates.resize(startVec.size()*(isComplex?2:1));
 
     std::shared_ptr<compressor> comp;
     bool isCompressed = startVec.getIsCompressed(comp);
     if (isCompressed)
     {
-        for (uint32_t i = 0; i < startVec.size(); i++)
+        for (uint64_t i = 0; i < startVec.size(); i++)
         {
 
             if (isComplex)
@@ -569,13 +569,13 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
         //If rot0 and rot2 are active then the index is 0b101. Note that 0b000 is always empty
         std::array<localVector,numberOfPairsOfRotations> currentLocalVectors;
 
-        for(uint32_t currentCompIndex = 0; currentCompIndex < activebasisStates.size(); currentCompIndex++)
+        for(uint64_t currentCompIndex = 0; currentCompIndex < activebasisStates.size(); currentCompIndex++)
         {
-            uint32_t currentBasisState = activebasisStates[currentCompIndex];
+            uint64_t currentBasisState = activebasisStates[currentCompIndex];
             if (currentBasisState & 1)
                 continue;//These are already the complex element and will lead to a negative phase
 
-            std::array<std::pair<uint32_t,bool>,numberToFuse> initialLinks;
+            std::array<std::pair<uint64_t,bool>,numberToFuse> initialLinks;
             indexType activeRotIdx = 0;
             indexType numberOfActiveRots = 0;
             for (uint8_t idx = 0; idx < numberToFuse; idx++)
@@ -604,7 +604,7 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
             {
                 if (isCompressed)
                 {
-                    for (uint32_t idx = 0; idx < currentLocalVectors[activeRotIdx].size(); idx++)
+                    for (uint64_t idx = 0; idx < currentLocalVectors[activeRotIdx].size(); idx++)
                     {
                         bool __attribute__ ((unused))complexOffset = currentLocalVectors[activeRotIdx][idx] & 1;
                         releaseAssert(complexOffset == false,"complexOffset == false");
@@ -625,7 +625,7 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
 template<typename indexType, indexType numberToFuse, bool BraketWithTangentOfResult, bool storeTangent, bool parallelise = false,
          //Various expressions that are needed to get the types right
          indexType numberOfPairsOfRotations = 1<<numberToFuse,
-         typename localVector = std::vector<uint32_t>,
+         typename localVector = std::vector<uint64_t>,
          typename fusedDiagonalAnsatz = std::array<localVector,numberOfPairsOfRotations>>
 
 #define RunFuseNKernel(indexInUnroll)\
@@ -722,7 +722,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
     constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
     constexpr indexType localVectorSize = 1<<numberToFuse;
     typedef std::array<bool,(localVectorSize/2)*numberToFuse> signMap; //true means +ve
-    typedef std::array<uint32_t,localVectorSize> localVectorMap;
+    typedef std::array<uint64_t,localVectorSize> localVectorMap;
     typedef std::vector<std::pair<localVectorMap,signMap>> localVector;
 
     typedef std::vector<std::array<localVector,localVectorSize>> fusedAnsatz; //\Sum_{k=1}^{n} n choose k = 2^n for n >=0
@@ -730,14 +730,14 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
     //preprocess
     releaseAssert(excPath.size() % numberToFuse == 0,"excPath.size() % numberToFuse == 0");
 
-    std::vector<uint32_t> activebasisStates;
+    std::vector<uint64_t> activebasisStates;
     activebasisStates.resize(startVec.size()*(isComplex?2:1));
 
     std::shared_ptr<compressor> comp;
     bool isCompressed = startVec.getIsCompressed(comp);
     if (isCompressed)
     {
-        for (uint32_t i = 0; i < startVec.size(); i++)
+        for (uint64_t i = 0; i < startVec.size(); i++)
         {
 
             if (isComplex)
@@ -793,11 +793,11 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
         std::array<indexType,localVectorSize> currentRotFilledSize;
         currentRotFilledSize.fill(localVectorSize); // causes a new one to be added to currentLocalVectors when needed
 
-        for(uint32_t currentCompIndex = 0; currentCompIndex < activebasisStates.size(); currentCompIndex++)
+        for(uint64_t currentCompIndex = 0; currentCompIndex < activebasisStates.size(); currentCompIndex++)
         {
-            uint32_t currentBasisState = activebasisStates[currentCompIndex];
+            uint64_t currentBasisState = activebasisStates[currentCompIndex];
 
-            std::array<std::pair<uint32_t,bool>,numberToFuse> initialLinks;
+            std::array<std::pair<uint64_t,bool>,numberToFuse> initialLinks;
             indexType activeRotIdx = 0;
             indexType numberOfActiveRots = 0;
             bool allPositive = true;
@@ -826,7 +826,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
                     localVectorMap& filledMap = currentLocalVectors[activeRotIdx].back().first;
                     if (isCompressed)
                     {
-                        for (uint32_t idx = 0; idx < localVectorSize; idx++)
+                        for (uint64_t idx = 0; idx < localVectorSize; idx++)
                         {
                             if (isComplex)
                             {
@@ -858,12 +858,12 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
 
             *(currentMap.begin()+currentMapFilledSize) = currentBasisState;
             // for (indexType t = 1; t < (1<<numberOfActiveRots); t++)
-            //     *(currentMap.begin() + currentMapFilledSize + t) = (uint32_t)-1;
+            //     *(currentMap.begin() + currentMapFilledSize + t) = (uint64_t)-1;
 
-            uint32_t currentSignsStep = numberOfActiveRots*currentMapFilledSize/2;
+            uint64_t currentSignsStep = numberOfActiveRots*currentMapFilledSize/2;
             fillCurrentMap<indexType,numberToFuse>(activeRotIdx,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
             // for (indexType t = 0; t < (1<<numberOfActiveRots); t++)
-            //     if (*(currentMap.begin() + currentMapFilledSize + t) == (uint32_t)-1)
+            //     if (*(currentMap.begin() + currentMapFilledSize + t) == (uint64_t)-1)
             //         __builtin_trap();
             for (size_t l = 0; l < 1ul<<numberOfActiveRots; l++)
                 for (size_t m = l+1; m < 1ul<<numberOfActiveRots; m++)
@@ -875,15 +875,15 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             if (currentLocalVectors[idx].size() != 0) // for the first iteration
             {
                 indexType filledSize = currentRotFilledSize[idx];
-                totalRotcount += dot(idx,(uint32_t)-1,sizeof(idx)*8)*localVectorSize/2;
+                totalRotcount += dot(idx,(uint64_t)-1,sizeof(idx)*8)*localVectorSize/2;
                 localVectorMap& potentiallyFilledMap = currentLocalVectors[idx].back().first;
                 if (filledSize < localVectorSize)
-                    potentiallyFilledMap[filledSize] = (uint32_t)-1;
+                    potentiallyFilledMap[filledSize] = (uint64_t)-1;
 
                 //The last one will not have been compressed
                 if (isCompressed)
                 {
-                    for (uint32_t idx = 0; idx < filledSize; idx++)
+                    for (uint64_t idx = 0; idx < filledSize; idx++)
                     {
                         if (isComplex)
                         {
@@ -918,7 +918,7 @@ template<typename indexType, indexType numberToFuse, bool BraketWithTangentOfRes
 //Various expressions that are needed to get the types right
          indexType localVectorSize = 1<<numberToFuse,
          typename signMap = std::array<bool,(localVectorSize/2)*numberToFuse>, //true means +ve
-         typename localVectorMap = std::array<uint32_t,localVectorSize>,
+         typename localVectorMap = std::array<uint64_t,localVectorSize>,
          typename localVector = std::vector<std::pair<localVectorMap,signMap>>,
          typename fusedAnsatz = /*std::vector<*/std::array<localVector,localVectorSize>>/*>*/
 
@@ -985,7 +985,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
 
                     for (indexType idx = 0; idx < localVectorSize; idx++)
                     {
-                        if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint32_t)-1)
+                        if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint64_t)-1)
                         {
                             filledSize = idx;
                             break;
@@ -1038,7 +1038,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
 
                     for (indexType idx = 0; idx < localVectorSize; idx++)
                     {
-                        if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint32_t)-1)
+                        if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint64_t)-1)
                         {
                             filledSize = idx;
                             break;
@@ -1188,7 +1188,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                     indexType filledSize = localVectorSize;
                     for (indexType idx = 0; idx < localVectorSize; idx++)
                     {
-                        if (currentMap[idx] == (uint32_t)-1)
+                        if (currentMap[idx] == (uint64_t)-1)
                         {
                             filledSize = idx;
                             break;
@@ -1278,7 +1278,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                     indexType filledSize = localVectorSize;
                     for (indexType idx = 0; idx < localVectorSize; idx++)
                     {
-                        if (currentMap[idx] == (uint32_t)-1)
+                        if (currentMap[idx] == (uint64_t)-1)
                         {
                             filledSize = idx;
                             break;
@@ -1372,7 +1372,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                     indexType filledSize = localVectorSize;
                     for (indexType idx = 0; idx < localVectorSize; idx++)
                     {
-                        if (currentMap[idx] == (uint32_t)-1)
+                        if (currentMap[idx] == (uint64_t)-1)
                         {
                             filledSize = idx;
                             break;
@@ -1478,7 +1478,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
 
                     for (indexType idx = 0; idx < localVectorSize; idx++)
                     {
-                        if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint32_t)-1)
+                        if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint64_t)-1)
                         {
                             filledSize = idx;
                             break;

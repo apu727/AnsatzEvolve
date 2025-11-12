@@ -68,13 +68,13 @@ protected:
     std::vector<int64_t> compressPerm;
     std::vector<int64_t> decompressPerm;
 public:
-    bool compressIndex(uint32_t index, uint32_t& compressedIdx)
+    bool compressIndex(uint64_t index, uint64_t& compressedIdx)
     {
         assert(index < compressPerm.size());
         compressedIdx = compressPerm[index];
         return compressPerm[index] >= 0;
     };
-    bool deCompressIndex(uint32_t index, uint32_t& decompressedIdx)
+    bool deCompressIndex(uint64_t index, uint64_t& decompressedIdx)
     {
         assert(index < decompressPerm.size());
         decompressedIdx = decompressPerm[index];
@@ -137,13 +137,13 @@ template<typename dataType, typename vectorType>
 class sparseMatrix : public targetMatrix<dataType,vectorType>
 {
 
-    std::vector<uint32_t> m_iIndexes;
-    std::vector<uint32_t> m_jIndexes;
+    std::vector<uint64_t> m_iIndexes;
+    std::vector<uint64_t> m_jIndexes;
     std::vector<dataType> m_data;
     dataType def = dataType();
-    uint32_t m_iSize = 0;
-    uint32_t m_jSize = 0;
-    std::vector<uint32_t> m_blankingVector; // vector that multiplies by 1 or 0 depending of if the column/row is allowed.
+    uint64_t m_iSize = 0;
+    uint64_t m_jSize = 0;
+    std::vector<uint64_t> m_blankingVector; // vector that multiplies by 1 or 0 depending of if the column/row is allowed.
 
     friend bool s_loadMatrix <>(sparseMatrix<dataType,vectorType>* me,std::string filePath);
     friend bool s_loadOneAndTwoElectronsIntegrals <>(sparseMatrix<dataType,vectorType>* me,std::string filePath,size_t numberOfQubits, std::shared_ptr<compressor> comp);
@@ -156,9 +156,9 @@ class sparseMatrix : public targetMatrix<dataType,vectorType>
 public:
     sparseMatrix();
     sparseMatrix(const std::vector<dataType>& value, const std::vector<int>& iIndex, const std::vector<int>& jIndex,int);
-    sparseMatrix(dataType* value, uint32_t* iIndex, uint32_t* jIndex,size_t N,
+    sparseMatrix(dataType* value, uint64_t* iIndex, uint64_t* jIndex,size_t N,
                  std::shared_ptr<compressor> compressor, bool isRotationGenerator = false);
-    sparseMatrix(dataType* value, uint32_t* iIndex, uint32_t* jIndex,size_t N);
+    sparseMatrix(dataType* value, uint64_t* iIndex, uint64_t* jIndex,size_t N);
     sparseMatrix(const Matrix<dataType>& other);
 
     virtual ~sparseMatrix(){};
@@ -172,19 +172,19 @@ public:
     sparseMatrix& operator= (sparseMatrix&& other);
 
     bool allClose(dataType val,realNumType atol=1e-10);
-    const dataType* at(uint32_t i, uint32_t j, bool& success) const;
+    const dataType* at(uint64_t i, uint64_t j, bool& success) const;
 
-    dataType* at(uint32_t i, uint32_t j, bool& success){return const_cast<dataType*>(static_cast<const sparseMatrix*>(this)->at(i,j,success));}
-    const dataType* at(uint32_t i, uint32_t j) const{bool temp; return this->at(i,j,temp);}
-    dataType* at(uint32_t i, uint32_t j){bool temp; return this->at(i,j,temp);}
+    dataType* at(uint64_t i, uint64_t j, bool& success){return const_cast<dataType*>(static_cast<const sparseMatrix*>(this)->at(i,j,success));}
+    const dataType* at(uint64_t i, uint64_t j) const{bool temp; return this->at(i,j,temp);}
+    dataType* at(uint64_t i, uint64_t j){bool temp; return this->at(i,j,temp);}
 
     virtual bool addBlank() override;
     virtual size_t getBlankCount() const override {return this->m_blankCount;}
     virtual void unblankAll() override;
     virtual void blankAllButOne() override{this->m_blankCount = 1;}
     virtual size_t getMaxBlankCount() const override {return m_iSize;}
-    void setBlankingVector(const std::vector<uint32_t> &v){m_blankingVector = v;}
-    std::vector<uint32_t> &getBlankingVector(){return m_blankingVector;}
+    void setBlankingVector(const std::vector<uint64_t> &v){m_blankingVector = v;}
+    std::vector<uint64_t> &getBlankingVector(){return m_blankingVector;}
     virtual bool loadMatrix(std::string filename,size_t numberOfQubits,std::shared_ptr<compressor> comp);
     bool dumpMatrix(const std::string& filePath);
 
@@ -210,8 +210,8 @@ public:
     auto jItEnd() const {return m_jIndexes.cend();}
 
     size_t size() const{return m_jIndexes.size();}
-    uint32_t getiSize(){return m_iSize;}
-    uint32_t getjSize(){return m_jSize;}
+    uint64_t getiSize(){return m_iSize;}
+    uint64_t getjSize(){return m_jSize;}
 
     typedef Eigen::SparseMatrix<dataType,Eigen::RowMajor> EigenSparseMatrix;
 

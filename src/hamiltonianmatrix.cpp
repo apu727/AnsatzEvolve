@@ -42,10 +42,10 @@ inline bool s_loadMatrix(Eigen::SparseMatrix<dataType, Eigen::ColMajor>& destMat
     double coeffReal = 0;
     double coeffImag = 0;
 
-    uint32_t idxs[2] = {};
+    uint64_t idxs[2] = {};
 
     int ret = fscanf(fpCoeff, "%lg,  %lg  \n", &coeffReal, &coeffImag);
-    int ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
+    int ret2 = fscanf(fpIndex, "%zu %zu\n",&(idxs[0]),&(idxs[1]));
 
     std::vector<Eigen::Triplet<dataType>> tripletList;
     // tripletList.reserve(m_data.size()); //TODO estimate for size
@@ -53,14 +53,14 @@ inline bool s_loadMatrix(Eigen::SparseMatrix<dataType, Eigen::ColMajor>& destMat
     {
         // fprintf(stderr,"Read Coeff: %lf \n ", coeff);
         // fprintf(stderr,"Read Index: %u,%u \n ", idxs[0]-1,idxs[1]-1);
-        uint32_t compi = idxs[0]-1;
-        uint32_t compj = idxs[1]-1;
+        uint64_t compi = idxs[0]-1;
+        uint64_t compj = idxs[1]-1;
         if (comp)
         {
             comp->compressIndex(compi,compi);
             comp->compressIndex(compj,compj);
         }
-        if (compi != (uint32_t)-1 && compj != (uint32_t)-1)
+        if (compi != (uint64_t)-1 && compj != (uint64_t)-1)
         {
             if constexpr (std::is_same_v<dataType,typename Eigen::NumTraits<dataType>::Real>)
                 tripletList.push_back(Eigen::Triplet<dataType>(compi,compj,coeffReal));
@@ -68,7 +68,7 @@ inline bool s_loadMatrix(Eigen::SparseMatrix<dataType, Eigen::ColMajor>& destMat
                 tripletList.push_back(Eigen::Triplet<dataType>(compi,compj,dataType(coeffReal,coeffImag)));
         }
         ret = fscanf(fpCoeff, realNumTypeCode ", " realNumTypeCode " \n", &coeffReal, &coeffImag);
-        ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
+        ret2 = fscanf(fpIndex, "%zu %zu\n",&(idxs[0]),&(idxs[1]));
     }
     destMat.resize(linearSize,linearSize);
     destMat.setFromTriplets(tripletList.begin(),tripletList.end());
@@ -210,7 +210,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
         return Energy;
     };
 
-    auto getElement = [numberOfQubits,&getEnergy,&getTwoElectronEnergy,getFockMatrixElem](uint32_t iBasisState, uint32_t jBasisState)
+    auto getElement = [numberOfQubits,&getEnergy,&getTwoElectronEnergy,getFockMatrixElem](uint64_t iBasisState, uint64_t jBasisState)
     {
         std::pair<size_t,bool> idxs[4];// a^\dagger a^\dagger a a
         int8_t annihilatePos = 2;
@@ -291,7 +291,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
 
     for (size_t i = 0; i < compressedSize; i++)
     {
-        uint32_t jBasisState;
+        uint64_t jBasisState;
         if (comp)
             comp->deCompressIndex(i,jBasisState);
         else
@@ -318,21 +318,21 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
                         if (!(jBasisState & (1<<d)))
                             continue;
 
-                        uint32_t iBasisState = ((1<<a) | (1<<b)) ^ ((1<<c | 1<< d) ^ jBasisState);
+                        uint64_t iBasisState = ((1<<a) | (1<<b)) ^ ((1<<c | 1<< d) ^ jBasisState);
                         if (iBasisState < jBasisState)
                             continue;
                         assert(iBasisState != jBasisState);
                         if (comp)
                         {
-                            uint32_t temp;
+                            uint64_t temp;
                             comp->compressIndex(iBasisState,temp);
-                            if (temp == (uint32_t)-1)
+                            if (temp == (uint64_t)-1)
                                 continue;
                         }
 
                         realNumType __attribute__ ((unused))Energy = getElement(iBasisState,jBasisState);
-                        uint32_t compi = iBasisState;
-                        uint32_t compj = jBasisState;
+                        uint64_t compi = iBasisState;
+                        uint64_t compj = jBasisState;
                         if (comp)
                         {
                             comp->compressIndex(compi,compi);
@@ -358,21 +358,21 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
                 if (!(jBasisState & (1<<c)))
                     continue;
 
-                uint32_t iBasisState = ((1<<a)) ^ ((1<<c) ^ jBasisState);
+                uint64_t iBasisState = ((1<<a)) ^ ((1<<c) ^ jBasisState);
                 if (iBasisState < jBasisState)
                     continue;
                 assert(iBasisState != jBasisState);
                 if (comp)
                 {
-                    uint32_t temp;
+                    uint64_t temp;
                     comp->compressIndex(iBasisState,temp);
-                    if (temp == (uint32_t)-1)
+                    if (temp == (uint64_t)-1)
                         continue;
                 }
 
                 realNumType __attribute__ ((unused))Energy = getElement(iBasisState,jBasisState);
-                uint32_t compi = iBasisState;
-                uint32_t compj = jBasisState;
+                uint64_t compi = iBasisState;
+                uint64_t compj = jBasisState;
                 if (comp)
                 {
                     comp->compressIndex(compi,compi);
@@ -386,7 +386,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
         }
 
         realNumType __attribute__ ((unused))Energy = getElement(jBasisState,jBasisState);
-        uint32_t compj = jBasisState;
+        uint64_t compj = jBasisState;
         if (comp)
             comp->compressIndex(compj,compj);
 
@@ -481,19 +481,19 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
 
 
     constexpr double tol = 1e-13;
-    assert(numberOfQubits < 32);
+    assert(numberOfQubits < 64);
     for (std::uint_fast8_t a = 0; a < numberOfQubits; a++) //create
     {
         for (std::uint_fast8_t b = a+1; b < numberOfQubits; b++) //create
         {
-            // uint32_t iBasisState = (1<<a) | (1<<b);
+            // uint64_t iBasisState = (1<<a) | (1<<b);
             for (std::uint_fast8_t c = 0; c < numberOfQubits; c++) //annihilate
             {
                 for (std::uint_fast8_t d = c+1; d < numberOfQubits; d++) //annihilate
                 {
                     //Note we include the permutation abcd,abdc, bacd, badc as the same thing. This is guaranteed by a < b, c < d
 
-                    // uint32_t jBasisState = (1<<c) | (1<<d);
+                    // uint64_t jBasisState = (1<<c) | (1<<d);
 
                     // realNumType Energy = getElement(iBasisState,jBasisState); //TODO optimise since we know these are
                     std::pair<size_t,bool> idxs[4];
@@ -509,9 +509,9 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
                     if (abs(Energy) > tol)//TODO threshold
                     {
                         // operators.push_back({a,b,c,d});
-                        uint32_t create = (1<<a) | (1<<b);
-                        uint32_t destroy = (1<<c) | (1<<d);
-                        uint32_t signMask = ((1<<a)-1) ^ ((1<<b)-1) ^((1<<c)-1) ^((1<<d)-1);
+                        uint64_t create = (1<<a) | (1<<b);
+                        uint64_t destroy = (1<<c) | (1<<d);
+                        uint64_t signMask = ((1<<a)-1) ^ ((1<<b)-1) ^((1<<c)-1) ^((1<<d)-1);
                         signMask = signMask & ~((1<<a) | (1<<b) | (1<<c) | (1<<d));
                         operators.push_back({create,destroy,signMask});
                         vals.push_back(Energy);
@@ -523,18 +523,18 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
 
     for (std::uint_fast8_t a = 0; a < numberOfQubits; a++)
     {
-         // uint32_t iBasisState = (1<<a);
+         // uint64_t iBasisState = (1<<a);
         for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
         {
-            // uint32_t jBasisState = (1<<c);
+            // uint64_t jBasisState = (1<<c);
 
             realNumType Energy = oneEInts(a % (numberOfQubits/2), c % (numberOfQubits/2));
             if (abs(Energy) > tol)//TODO threshold
             {
                 // operators.push_back({a,a,c,c});
-                uint32_t create = (1<<a);
-                uint32_t destroy = (1<<c);
-                uint32_t signMask = ((1<<a)-1) ^ ((1<<c)-1);
+                uint64_t create = (1<<a);
+                uint64_t destroy = (1<<c);
+                uint64_t signMask = ((1<<a)-1) ^ ((1<<c)-1);
                 signMask = signMask & ~((1<<a) | (1<<c));
                 operators.push_back({create,destroy,signMask});
                 vals.push_back(Energy);
@@ -559,9 +559,9 @@ void HamiltonianMatrix<dataType, vectorType>::constructFromSecQuant()
     std::vector<Eigen::Triplet<dataType>> tripletList;
 
     // tripletList.reserve(m_data.size()); //TODO estimate for size
-    for (uint32_t k = 0; k < m_linearSize; k++)
+    for (uint64_t k = 0; k < m_linearSize; k++)
     {//basis states
-        uint32_t iBasisState = k;
+        uint64_t iBasisState = k;
         if (m_isCompressed)
             m_compressor->deCompressIndex(iBasisState,iBasisState);
 
@@ -574,10 +574,10 @@ void HamiltonianMatrix<dataType, vectorType>::constructFromSecQuant()
             // fprintf(stderr,"Read Coeff: %lf \n ", coeff);
             // fprintf(stderr,"Read Index: %u,%u \n ", idxs[0]-1,idxs[1]-1);
             //Can apply to this basisState;.
-            uint32_t j;
+            uint64_t j;
             bool sign;
 
-            uint32_t destroy = iBasisState ^ opIt->destroy;
+            uint64_t destroy = iBasisState ^ opIt->destroy;
             bool canDestroy = (destroy & opIt->destroy) == 0;
             if (!canDestroy)
                 continue;
@@ -589,7 +589,7 @@ void HamiltonianMatrix<dataType, vectorType>::constructFromSecQuant()
             sign = popcount(iBasisState & opIt->signBitMask) & 1;
             if (m_isCompressed)
                 m_compressor->compressIndex(j,j);
-            if (j == (uint32_t)-1)
+            if (j == (uint64_t)-1)
                 continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
             tripletList.push_back(Eigen::Triplet<dataType>(k,j, (sign ? -*valIt : *valIt)));
         }
@@ -633,19 +633,19 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::vector<dat
     assert(value.size() == iIndex.size() && value.size() == jIndex.size());
     std::vector<Eigen::Triplet<dataType>> triplets;
     triplets.reserve(value.size());
-    uint32_t maxI = 0;
-    uint32_t maxJ = 0;
+    uint64_t maxI = 0;
+    uint64_t maxJ = 0;
     for (size_t it = 0; it < value.size(); it++)
     {
         assert(iIndex[it] > 0 && jIndex[it] > 0);
-        uint32_t i = iIndex[it];
-        uint32_t j = jIndex[it];
+        uint64_t i = iIndex[it];
+        uint64_t j = jIndex[it];
         if (comp)
         {
             comp->compressIndex(i,i);
             comp->compressIndex(j,j);
         }
-        if (i == (uint32_t)-1 || j == (uint32_t)-1)
+        if (i == (uint64_t)-1 || j == (uint64_t)-1)
             continue;
         triplets.push_back(Eigen::Triplet<dataType>(i,j,value[it]));
         maxI = std::max(i,maxI);
@@ -790,16 +790,16 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
             futs.push_back(pool.queueWork([this,&src,&dest,startj,endj,numberOfRows](){
                 for (long j = startj; j < endj; j++)
                 {//across
-                    uint32_t jBasisState = j;
+                    uint64_t jBasisState = j;
                     if (m_isCompressed)
                         m_compressor->deCompressIndex(jBasisState,jBasisState);
 
                     auto opIt = m_operators.cbegin();
                     auto valIt = m_vals.cbegin();
                     const auto valItEnd = m_vals.cend();
-                    uint32_t badCreate = 0;
-                    uint32_t goodCreate = 0;
-                    uint32_t destroy;
+                    uint64_t badCreate = 0;
+                    uint64_t goodCreate = 0;
+                    uint64_t destroy;
                     bool canDestroy;
                     if (valIt != valItEnd)
                     {
@@ -818,7 +818,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
                             continue;
                         badCreate = 0;
 
-                        uint32_t i;
+                        uint64_t i;
                         bool sign;
 
 
@@ -842,7 +842,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
                         sign = popcount(jBasisState & opIt->signBitMask) & 1;
                         if (m_isCompressed)
                             m_compressor->compressIndex(i,i);
-                        if (i == (uint32_t)-1)
+                        if (i == (uint64_t)-1)
                             continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
                         // for (long i = 0; i < numberOfRows; i++)
@@ -934,16 +934,16 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
             futs.push_back(pool.queueWork([this,&src,&dest,startj,endj](){
                 for (long j = startj; j < endj; j++)
                 {//across
-                    uint32_t jBasisState = j;
+                    uint64_t jBasisState = j;
                     if (m_isCompressed)
                         m_compressor->deCompressIndex(jBasisState,jBasisState);
 
                     auto opIt = m_operators.cbegin();
                     auto valIt = m_vals.cbegin();
                     const auto valItEnd = m_vals.cend();
-                    uint32_t badCreate = 0;
-                    uint32_t goodCreate = 0;
-                    uint32_t destroy;
+                    uint64_t badCreate = 0;
+                    uint64_t goodCreate = 0;
+                    uint64_t destroy;
                     bool canDestroy;
                     if (valIt != valItEnd)
                     {
@@ -963,7 +963,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                             continue;
                         badCreate = 0;
 
-                        uint32_t i;
+                        uint64_t i;
                         bool sign;
 
 
@@ -987,7 +987,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         sign = popcount(jBasisState & opIt->signBitMask) & 1;
                         if (m_isCompressed)
                             m_compressor->compressIndex(i,i);
-                        if (i == (uint32_t)-1)
+                        if (i == (uint64_t)-1)
                             continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
                         // for (long i = 0; i < numberOfRows; i++)

@@ -13,10 +13,10 @@
 #include "math.h"
 
 
-constexpr char dot(const uint32_t a, const uint32_t b, int dim)
+constexpr char dot(const uint64_t a, const uint64_t b, int dim)
 {
-    uint32_t prod = a&b;
-    char ret = 0; //at most 32
+    uint64_t prod = a&b;
+    char ret = 0; //at most 64
     for (int i = 0; i < dim; i++)
     {
         ret += (prod & 1);
@@ -29,7 +29,7 @@ template <typename T>
 std::vector<std::vector<std::size_t>> Benchmark_sortPermutation(const T& vec)
 {
     /*    typedef std::array<bool,localVectorSize> signMap; //true means +ve
-    typedef std::array<uint32_t,localVectorSize> localVectorMap;
+    typedef std::array<uint64_t,localVectorSize> localVectorMap;
     typedef std::vector<std::pair<localVectorMap,signMap>> localVector;
     std::array<localVector,localVectorSize> vec;
 */
@@ -133,11 +133,11 @@ void benchmarkRotate3(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
 }
 #ifndef useComplex
 //State and sign. True is +ve
-std::pair<uint32_t,bool> applyExcToBasisState(uint32_t state, const stateRotate::exc& a)
+std::pair<uint64_t,bool> applyExcToBasisState(uint64_t state, const stateRotate::exc& a)
 {
-    uint32_t activeBits =  0;
-    uint32_t createBits = 0;
-    uint32_t annihilateBits = 0;
+    uint64_t activeBits =  0;
+    uint64_t createBits = 0;
+    uint64_t annihilateBits = 0;
     if (a[0] < 0 && a[1] < 0)
         return std::make_pair(state,true);
 
@@ -159,12 +159,12 @@ std::pair<uint32_t,bool> applyExcToBasisState(uint32_t state, const stateRotate:
         activeBits = createBits | annihilateBits;
     }
 
-    uint32_t basisState = state;
-    uint32_t resultState = basisState;
+    uint64_t basisState = state;
+    uint64_t resultState = basisState;
 
 
     numType phase = 0;
-    uint32_t maskedBasisState = basisState & activeBits;
+    uint64_t maskedBasisState = basisState & activeBits;
 
     if (createBits == annihilateBits) // number operator
     {
@@ -231,9 +231,9 @@ std::pair<uint32_t,bool> applyExcToBasisState(uint32_t state, const stateRotate:
 
 template<typename indexType, indexType numberOfRotsThatExist>
 void fillCurrentMap(indexType activeRotsIdx, indexType numberToFuse,
-                    uint32_t* currentMap, bool* currentSigns,
+                    uint64_t* currentMap, bool* currentSigns,
                     indexType rotIdx, indexType numberOfActiveRotationsSoFar,
-                    const std::array<std::pair<uint32_t,bool>,numberOfRotsThatExist>& initialLinks, const std::array<stateRotate::exc,numberOfRotsThatExist>& rots)
+                    const std::array<std::pair<uint64_t,bool>,numberOfRotsThatExist>& initialLinks, const std::array<stateRotate::exc,numberOfRotsThatExist>& rots)
 {
     const indexType localVectorSize = 1<<numberToFuse;
 
@@ -560,7 +560,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
 
 
     typedef std::array<bool,(localVectorSize/2)*numberToFuse> signMap; //true means +ve
-    typedef std::array<uint32_t,localVectorSize> localVectorMap;
+    typedef std::array<uint64_t,localVectorSize> localVectorMap;
     typedef std::vector<std::pair<localVectorMap,signMap>> localVector;
 
     typedef std::vector<std::array<localVector,localVectorSize>> fusedAnsatz; //\Sum_{k=1}^{n} n choose k = 2^n for n >=0
@@ -572,13 +572,13 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
     vector<numType> startVec;
     startVec.copy(ansatz->getStart());
 
-    std::vector<uint32_t> activebasisStates;
+    std::vector<uint64_t> activebasisStates;
     activebasisStates.resize(startVec.size());
 
     std::shared_ptr<compressor> comp;
     ansatz->getLie()->getCompressor(comp);
     assert(comp != nullptr);
-    for (uint32_t i = 0; i < startVec.size(); i++)
+    for (uint64_t i = 0; i < startVec.size(); i++)
     {
         comp->deCompressIndex(i,activebasisStates[i]);
     }
@@ -620,11 +620,11 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
         std::array<indexType,localVectorSize> currentRotFilledSize;
         currentRotFilledSize.fill(localVectorSize); // causes a new one to be added to currentLocalVectors when needed
 
-        for(uint32_t currentCompIndex = 0; currentCompIndex < activebasisStates.size(); currentCompIndex++)
+        for(uint64_t currentCompIndex = 0; currentCompIndex < activebasisStates.size(); currentCompIndex++)
         {
-            uint32_t currentBasisState = activebasisStates[currentCompIndex];
+            uint64_t currentBasisState = activebasisStates[currentCompIndex];
 
-            std::array<std::pair<uint32_t,bool>,numberToFuse> initialLinks;
+            std::array<std::pair<uint64_t,bool>,numberToFuse> initialLinks;
             indexType activeRotIdx = 0;
             indexType numberOfActiveRots = 0;
             bool allPositive = true;
@@ -651,7 +651,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
             {   if (currentLocalVectors[activeRotIdx].size() != 0) // for the first iteration
                 {
                     localVectorMap& filledMap = currentLocalVectors[activeRotIdx].back().first;
-                    for (uint32_t idx = 0; idx < localVectorSize; idx++)
+                    for (uint64_t idx = 0; idx < localVectorSize; idx++)
                         comp->compressIndex(filledMap[idx],filledMap[idx]);
                     totalRotcount += numberOfActiveRots*localVectorSize/2;
                 }
@@ -667,7 +667,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
             assert(rotIdx < numberToFuse);
 
             *(currentMap.begin()+currentMapFilledSize) = currentBasisState;
-            uint32_t currentSignsStep = numberOfActiveRots*currentMapFilledSize/2;
+            uint64_t currentSignsStep = numberOfActiveRots*currentMapFilledSize/2;
             fillCurrentMap<indexType,numberToFuse>(activeRotIdx,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
             currentMapFilledSize += 1<<numberOfActiveRots;
         }
@@ -676,13 +676,13 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
             if (currentLocalVectors[idx].size() != 0) // for the first iteration
             {
                 indexType filledSize = currentRotFilledSize[idx];
-                totalRotcount += dot(idx,(uint32_t)-1,sizeof(idx)*8)*localVectorSize/2;
+                totalRotcount += dot(idx,(uint64_t)-1,sizeof(idx)*8)*localVectorSize/2;
                 localVectorMap& potentiallyFilledMap = currentLocalVectors[idx].back().first;
                 if (filledSize < localVectorSize)
-                    potentiallyFilledMap[filledSize] = (uint32_t)-1;
+                    potentiallyFilledMap[filledSize] = (uint64_t)-1;
 
                 //The last one will not have been compressed
-                for (uint32_t idx = 0; idx < filledSize; idx++)
+                for (uint64_t idx = 0; idx < filledSize; idx++)
                     comp->compressIndex(potentiallyFilledMap[idx],potentiallyFilledMap[idx]);
             }
         }
@@ -732,7 +732,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
 
                         for (indexType idx = 0; idx < localVectorSize; idx++)
                         {
-                            if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint32_t)-1)
+                            if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint64_t)-1)
                             {
                                 filledSize = idx;
                                 break;
@@ -772,7 +772,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
 
                         for (indexType idx = 0; idx < localVectorSize; idx++)
                         {
-                            if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint32_t)-1)
+                            if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint64_t)-1)
                             {
                                 filledSize = idx;
                                 break;
@@ -869,7 +869,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
                             indexType filledSize = localVectorSize;
                             for (indexType idx = 0; idx < localVectorSize; idx++)
                             {
-                                if (currentMap[idx] == (uint32_t)-1)
+                                if (currentMap[idx] == (uint64_t)-1)
                                 {
                                     filledSize = idx;
                                     break;
@@ -933,7 +933,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
                             indexType filledSize = localVectorSize;
                             for (indexType idx = 0; idx < localVectorSize; idx++)
                             {
-                                if (currentMap[idx] == (uint32_t)-1)
+                                if (currentMap[idx] == (uint64_t)-1)
                                 {
                                     filledSize = idx;
                                     break;
@@ -1000,7 +1000,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
                             indexType filledSize = localVectorSize;
                             for (indexType idx = 0; idx < localVectorSize; idx++)
                             {
-                                if (currentMap[idx] == (uint32_t)-1)
+                                if (currentMap[idx] == (uint64_t)-1)
                                 {
                                     filledSize = idx;
                                     break;
@@ -1096,7 +1096,7 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
 
                                 for (indexType idx = 0; idx < localVectorSize; idx++)
                                 {
-                                    if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint32_t)-1)
+                                    if (j == currentLocalVectors.size()-1 && currentMap[idx] == (uint64_t)-1)
                                     {
                                         filledSize = idx;
                                         break;
@@ -1350,7 +1350,7 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
     numType scratchSpace[localVectorSize];
 
     typedef std::array<bool,localVectorSize> signMap; //true means +ve
-    typedef std::array<uint32_t,localVectorSize> localVectorMap;
+    typedef std::array<uint64_t,localVectorSize> localVectorMap;
     typedef std::vector<std::pair<localVectorMap,signMap>> localVectors;
 
     typedef std::vector<std::array<localVectors,3>> fusedAnsatz; //TODO magic number 3
@@ -1362,13 +1362,13 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
     vector<numType> startVec;
     startVec.copy(ansatz->getStart());
 
-    std::vector<uint32_t> activebasisStates;
+    std::vector<uint64_t> activebasisStates;
     activebasisStates.resize(startVec.size());
     size_t totalRotcount = 0;
     std::shared_ptr<compressor> comp;
     ansatz->getLie()->getCompressor(comp);
     assert(comp != nullptr);
-    for (uint32_t i = 0; i < startVec.size(); i++)
+    for (uint64_t i = 0; i < startVec.size(); i++)
     {
         comp->deCompressIndex(i,activebasisStates[i]);
     }
@@ -1416,14 +1416,14 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
 
 
 
-        for(uint32_t currentCompIndex = 0; currentCompIndex < activebasisStates.size(); currentCompIndex++)
+        for(uint64_t currentCompIndex = 0; currentCompIndex < activebasisStates.size(); currentCompIndex++)
         {
             // uint8_t filledSize = 0;
             localVectorMap currentMap;
             signMap currentSigns;
 
             currentSigns[0] = true;
-            uint32_t rot0i = activebasisStates[currentCompIndex];
+            uint64_t rot0i = activebasisStates[currentCompIndex];
             auto rot0j = applyExcToBasisState(rot0i,rot0);
             auto rot1j = applyExcToBasisState(rot0i,rot1);
 
@@ -1437,7 +1437,7 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
                     continue;
                 if (rot1OnlyFilledSize == localVectorSize)
                 {
-                    for (uint32_t idx = 0; idx < localVectorSize; idx++)
+                    for (uint64_t idx = 0; idx < localVectorSize; idx++)
                         comp->compressIndex(rot1Only[idx],rot1Only[idx]);
                     currentRot1OnlyVectors.push_back({rot1Only,rot1OnlySigns});
                     totalRotcount += 2;
@@ -1459,7 +1459,7 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
                     continue;
                 if (rot0OnlyFilledSize == localVectorSize)
                 {
-                    for (uint32_t idx = 0; idx < localVectorSize; idx++)
+                    for (uint64_t idx = 0; idx < localVectorSize; idx++)
                         comp->compressIndex(rot0Only[idx],rot0Only[idx]);
                     currentRot0OnlyVectors.push_back({rot0Only,rot0OnlySigns});
                     totalRotcount += 2;
@@ -1500,7 +1500,7 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
             currentSigns[1] = rot0j.second;
 
             //currentMap contains basisIndexes, need to contain compressedIndexes
-            for (uint32_t idx = 0; idx < localVectorSize; idx++)
+            for (uint64_t idx = 0; idx < localVectorSize; idx++)
                 comp->compressIndex(currentMap[idx],currentMap[idx]);
 
 
@@ -1511,7 +1511,7 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
             rot0Only[rot0OnlyFilledSize] = -1;
         if (rot0OnlyFilledSize != 0)
         {
-            for (uint32_t idx = 0; idx < rot0OnlyFilledSize; idx++)
+            for (uint64_t idx = 0; idx < rot0OnlyFilledSize; idx++)
                 comp->compressIndex(rot0Only[idx],rot0Only[idx]);
             currentRot0OnlyVectors.push_back({rot0Only,rot0OnlySigns});
             totalRotcount += 2;
@@ -1521,7 +1521,7 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
             rot1Only[rot1OnlyFilledSize] = -1;
         if (rot1OnlyFilledSize != 0)
         {
-            for (uint32_t idx = 0; idx < rot1OnlyFilledSize; idx++)
+            for (uint64_t idx = 0; idx < rot1OnlyFilledSize; idx++)
                 comp->compressIndex(rot1Only[idx],rot1Only[idx]);
             currentRot1OnlyVectors.push_back({rot1Only,rot1OnlySigns});
             totalRotcount += 2;
@@ -1554,13 +1554,13 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
                 {
                     if (j == myFusedAnsatz[i/numberToFuse][0].size()-1)
                     {
-                        if (currentMap[idx] == (uint32_t)-1)
+                        if (currentMap[idx] == (uint64_t)-1)
                         {
                             filledSize = j;
                             break;
                         }
                     }
-                    uint32_t vecIdx = currentMap[idx];
+                    uint64_t vecIdx = currentMap[idx];
                     assert(vecIdx < startVec.size());
                     scratchSpace[idx] = startVec[vecIdx];
                 }
@@ -1595,7 +1595,7 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
                 {
                     if (j == myFusedAnsatz[i/numberToFuse][1].size()-1)
                     {
-                        if (currentMap[idx] == (uint32_t)-1)
+                        if (currentMap[idx] == (uint64_t)-1)
                         {
                             filledSize = j;
                             break;
@@ -1683,10 +1683,10 @@ void benchmarkRotate4(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
     numType scratchSpace[localVectorSize];
 
     typedef std::array<bool,localVectorSize> signMap; //true means +ve
-    typedef std::array<uint32_t,localVectorSize> localVectorMap;
+    typedef std::array<uint64_t,localVectorSize> localVectorMap;
     // typedef std::array<std::pair<uint8_t,uint8_t>,localVectorSize> localSparseMatrix;
     typedef std::vector<std::pair<localVectorMap,signMap>> localVectors;
-    std::vector<uint32_t> onlyrot1Start;
+    std::vector<uint64_t> onlyrot1Start;
     typedef std::vector<localVectors> fusedAnsatz;
     fusedAnsatz myFusedAnsatz;
     //preprocess
@@ -1699,11 +1699,11 @@ void benchmarkRotate4(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
 
 
 
-        std::list<uint32_t> rot0is(rot0->iItBegin(),rot0->iItEnd());
-        std::list<uint32_t> rot0js(rot0->jItBegin(),rot0->jItEnd());
+        std::list<uint64_t> rot0is(rot0->iItBegin(),rot0->iItEnd());
+        std::list<uint64_t> rot0js(rot0->jItBegin(),rot0->jItEnd());
 
-        std::list<uint32_t> rot1is(rot1->iItBegin(),rot1->iItEnd());
-        std::list<uint32_t> rot1js(rot1->jItBegin(),rot1->jItEnd());
+        std::list<uint64_t> rot1is(rot1->iItBegin(),rot1->iItEnd());
+        std::list<uint64_t> rot1js(rot1->jItBegin(),rot1->jItEnd());
 
 
 
@@ -1940,7 +1940,7 @@ void benchmarkRotate4(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
             numType C2;
             mysincos(rotationPath[i].second,&S1,&C1);
             mysincos(rotationPath[i+1].second,&S2,&C2);
-            uint32_t onlyRot1StartIdx = onlyrot1Start[i/numberToFuse];
+            uint64_t onlyRot1StartIdx = onlyrot1Start[i/numberToFuse];
             size_t j = 0;
             for ( ;j < myFusedAnsatz[i/numberToFuse].size() && j < onlyRot1StartIdx ; j++)
             {
@@ -1950,7 +1950,7 @@ void benchmarkRotate4(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
                 uint8_t filledSize = 0;
                 for (; filledSize < localVectorSize; filledSize++)
                 {
-                    if (currentMap[filledSize] == (uint32_t)-1)
+                    if (currentMap[filledSize] == (uint64_t)-1)
                         break;
                     scratchSpace[filledSize] = start[currentMap[filledSize]];
                 }
@@ -2000,7 +2000,7 @@ void benchmarkRotate4(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
                 uint8_t filledSize = 0;
                 for (; filledSize < localVectorSize; filledSize++)
                 {
-                    if (currentMap[filledSize] == (uint32_t)-1)
+                    if (currentMap[filledSize] == (uint64_t)-1)
                         break;
                     scratchSpace[filledSize] = start[currentMap[filledSize]];
                 }
@@ -2061,15 +2061,15 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
     auto lie = ansatz->getLie();
     std::vector<bool> indexActive;
     indexActive.assign(startVec.size(),false);
-    uint32_t allOnes = -1;
-    for (uint32_t i = 0; i < indexActive.size(); i++)
+    uint64_t allOnes = -1;
+    for (uint64_t i = 0; i < indexActive.size(); i++)
     {
         if (dot(i,allOnes,32) == 10)
             indexActive[i] = true;
     }
 
-    std::vector<std::vector<uint32_t>> iGenerators;
-    std::vector<std::vector<uint32_t>> jGenerators;
+    std::vector<std::vector<uint64_t>> iGenerators;
+    std::vector<std::vector<uint64_t>> jGenerators;
     std::vector<std::vector<numType>> dataGenerators;
     {
         std::shared_ptr<compressor> lieCompressor;
@@ -2085,8 +2085,8 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
                 if (abs(*d) != 1)
                     logger().log("Magnitude not 1 but ", *d);
             }
-            std::vector<uint32_t> intoIs;
-            std::vector<uint32_t> intoJs;
+            std::vector<uint64_t> intoIs;
+            std::vector<uint64_t> intoJs;
 
             std::vector<numType> data;
             auto iIt = rotationGenerator.iItBegin();
@@ -2094,8 +2094,8 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
 
             for (auto d = rotationGenerator.begin(); d < rotationGenerator.end(); d++)
             {
-                uint32_t iIdx = *iIt;
-                uint32_t jIdx = *jIt;
+                uint64_t iIdx = *iIt;
+                uint64_t jIdx = *jIt;
                 if (lieisCompressed)
                 {
                     lieCompressor->deCompressIndex(iIdx,iIdx);
@@ -2124,8 +2124,8 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
     //Compress the matrices
     std::vector<long int> compressPerm(indexActive.size());
     std::vector<long int> decompressPerm;
-    uint32_t activeCount = 0;
-    for (uint32_t i = 0; i < indexActive.size(); i++)
+    uint64_t activeCount = 0;
+    for (uint64_t i = 0; i < indexActive.size(); i++)
     {
         if (indexActive[i])
         {
@@ -2138,9 +2138,9 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
             compressPerm[i] = -1;
         }
     }
-    for (uint32_t rpCount = 0; rpCount < iGenerators.size(); rpCount++)
+    for (uint64_t rpCount = 0; rpCount < iGenerators.size(); rpCount++)
     {
-        for (uint32_t i = 0; i < iGenerators[rpCount].size(); i++)
+        for (uint64_t i = 0; i < iGenerators[rpCount].size(); i++)
         {
             iGenerators[rpCount][i] = compressPerm[iGenerators[rpCount][i]];
             jGenerators[rpCount][i] = compressPerm[jGenerators[rpCount][i]];
@@ -2154,7 +2154,7 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
     {
         bool onTemp1 = true;
         vector<numType> src(activeCount);
-        for (uint32_t i = 0; i < startVec.size(); i++)
+        for (uint64_t i = 0; i < startVec.size(); i++)
         {
             long int newIdx = compressPerm[i];
             if (newIdx >= 0)
@@ -2191,7 +2191,7 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
         //TODO this is not done in the other rotate branch.
         destVec.resize(startVec.size(),false,nullptr);
 
-        for (uint32_t i = 0; i < src.size(); i++)
+        for (uint64_t i = 0; i < src.size(); i++)
         {
             long int newIdx = decompressPerm[i];
             if (newIdx >= 0)

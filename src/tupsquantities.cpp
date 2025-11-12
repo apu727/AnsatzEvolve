@@ -10,7 +10,7 @@
 #include "threadpool.h"
 #include <iostream>
 
-char countActiveBits(uint32_t state)
+char countActiveBits(uint64_t state)
 {
     char ret = 0;
     while(state != 0)

@@ -51,7 +51,7 @@ Matrix<dataType>::Matrix(size_t iSize, size_t jSize)
 }
 
 template<typename dataType>
-Matrix<dataType>::Matrix(int value, const std::vector<uint32_t>& iIndex, const std::vector<uint32_t>& jIndex, int size)
+Matrix<dataType>::Matrix(int value, const std::vector<uint64_t>& iIndex, const std::vector<uint64_t>& jIndex, int size)
 {
     m_iSize = m_jSize = size;
     assert(iIndex.size() == jIndex.size());

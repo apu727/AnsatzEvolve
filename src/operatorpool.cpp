@@ -31,17 +31,17 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
     if (m_lieAlgebraIndexExcReverseMap.find(makeExcHash(a)) != m_lieAlgebraIndexExcReverseMap.end())
         return &m_lieAlgebra.at(m_lieAlgebraIndexExcReverseMap.at(makeExcHash(a)));
 
-    uint32_t* intois = new uint32_t[m_dim];
-    uint32_t* intojs = new uint32_t[m_dim];
+    uint64_t* intois = new uint64_t[m_dim];
+    uint64_t* intojs = new uint64_t[m_dim];
     numType* vals = new numType[m_dim];
 
 
 
-    uint32_t activeBits =  0;
-    uint32_t createBits = 0;
-    uint32_t annihilateBits = 0;
-    uint32_t signMask = 0;
-    uint32_t permPhase = 1;
+    uint64_t activeBits =  0;
+    uint64_t createBits = 0;
+    uint64_t annihilateBits = 0;
+    uint64_t signMask = 0;
+    uint64_t permPhase = 1;
 
 
     if (a[2] > -1 && a[3] > -1)
@@ -68,22 +68,22 @@ matrixType *stateRotate::getLieAlgebraMatrix(const exc a)
         signMask = signMask & ~((1<<a[0]) | (1<<a[1]));
     }
 
-    uint32_t* intois_pos = intois;
-    uint32_t* intojs_pos = intojs;
+    uint64_t* intois_pos = intois;
+    uint64_t* intojs_pos = intojs;
     numType* vals_pos = vals;
-    uint32_t start = 0;
-    uint32_t end = m_dim;
+    uint64_t start = 0;
+    uint64_t end = m_dim;
 
 
     for (;start != end; start++)
     {
-        uint32_t basisState = start;
-        uint32_t resultState = basisState;
+        uint64_t basisState = start;
+        uint64_t resultState = basisState;
 
 
         numType phase = permPhase;
         phase *= (popcount(basisState & signMask) & 1) ? -1 : 1;
-        uint32_t maskedBasisState = basisState & activeBits;
+        uint64_t maskedBasisState = basisState & activeBits;
 
         if (createBits == annihilateBits) // number operator
         {
@@ -204,11 +204,11 @@ bool stateRotate::loadOperators(std::string filePath, std::vector<stateRotate::e
     return 1;
 }
 
-SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint32_t stateVectorSize, uint32_t spinUp, uint32_t spinDown)
+SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVectorSize, uint64_t spinUp, uint64_t spinDown)
 {//Compresses for a specific spin, It assumes that the top N/2 bits are spin up and vice versa
-    uint32_t numberOfQubits = 0;
+    uint64_t numberOfQubits = 0;
     {
-        uint32_t dummy = stateVectorSize-1;
+        uint64_t dummy = stateVectorSize-1;
         while(dummy)
         {
             numberOfQubits++;
@@ -216,17 +216,17 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint32_t stateVecto
         }
     }
     assert(numberOfQubits %2 == 0);
-    assert(numberOfQubits < 32);
+    assert(numberOfQubits < 64);
     m_numberOfQubits = numberOfQubits;
     m_spinDownBitMask = (1<<(numberOfQubits/2))-1;
     m_spinUpBitMask = ((1<<(numberOfQubits))-1) ^ m_spinDownBitMask;
 
     compressPerm.resize(stateVectorSize);
-    uint32_t activeCount = 0;
-    uint32_t allOnes = -1;
-    for (uint32_t i = 0; i < stateVectorSize; i++)
+    uint64_t activeCount = 0;
+    uint64_t allOnes = -1;
+    for (uint64_t i = 0; i < stateVectorSize; i++)
     {
-        bool spinUpActive = bitwiseDot(i>>(numberOfQubits/2),allOnes,32) == (char)spinUp;
+        bool spinUpActive = bitwiseDot(i>>(numberOfQubits/2),allOnes,64) == (char)spinUp;
         bool spinDownActive = bitwiseDot(i,allOnes,(numberOfQubits/2)) == (char)spinDown;
         if (spinUpActive && spinDownActive)
         {

@@ -55,7 +55,7 @@ inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,
     realNumType coeffReal = 0;
     realNumType coeffImag = 0;
 
-    uint32_t idxs[2] = {};
+    uint64_t idxs[2] = {};
 
     int ret = fscanf(fpCoeff, realNumTypeCode ", " realNumTypeCode " \n", &coeffReal, &coeffImag);
     int ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
@@ -104,10 +104,10 @@ inline bool s_loadMatrix(sparseMatrix<realNumType,vectorType>* me,std::string fi
     }
     realNumType coeff = 0;
 
-    uint32_t idxs[2] = {};
+    uint64_t idxs[2] = {};
 
     int ret = fscanf(fpCoeff, realNumTypeCode "\n", &coeff);
-    int ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
+    int ret2 = fscanf(fpIndex, "%zu %zu\n",&(idxs[0]),&(idxs[1]));
 
     while(EOF != ret && EOF != ret2)
     {
@@ -119,7 +119,7 @@ inline bool s_loadMatrix(sparseMatrix<realNumType,vectorType>* me,std::string fi
         me->m_data.push_back(coeff);
 
         ret = fscanf(fpCoeff, realNumTypeCode "\n", &coeff);
-        ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
+        ret2 = fscanf(fpIndex, "%zu %zu\n",&(idxs[0]),&(idxs[1]));
     }
     fclose(fpIndex);
     fclose(fpCoeff);
@@ -258,7 +258,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
         return Energy;
     };
 
-    auto getElement = [numberOfQubits,&getEnergy,&getTwoElectronEnergy,getFockMatrixElem](uint32_t iBasisState, uint32_t jBasisState)
+    auto getElement = [numberOfQubits,&getEnergy,&getTwoElectronEnergy,getFockMatrixElem](uint64_t iBasisState, uint64_t jBasisState)
     {
         std::pair<size_t,bool> idxs[4];// a^\dagger a^\dagger a a
         int8_t annihilatePos = 2;
@@ -354,7 +354,7 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
         {
         for (size_t i = starti; i < stopi; i++)
         {
-            uint32_t jBasisState;
+            uint64_t jBasisState;
             if (comp)
                 comp->deCompressIndex(i,jBasisState);
             else
@@ -381,15 +381,15 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
                             if (!(jBasisState & (1<<d)))
                                 continue;
 
-                            uint32_t iBasisState = ((1<<a) | (1<<b)) ^ ((1<<c | 1<< d) ^ jBasisState);
+                            uint64_t iBasisState = ((1<<a) | (1<<b)) ^ ((1<<c | 1<< d) ^ jBasisState);
                             if (iBasisState < jBasisState)
                                 continue;
                             assert(iBasisState != jBasisState);
                             if (comp)
                             {
-                                uint32_t temp;
+                                uint64_t temp;
                                 comp->compressIndex(iBasisState,temp);
-                                if (temp == (uint32_t)-1)
+                                if (temp == (uint64_t)-1)
                                     continue;
                             }
 
@@ -421,15 +421,15 @@ bool s_loadOneAndTwoElectronsIntegrals(sparseMatrix<dataType,vectorType>* me,std
                     if (!(jBasisState & (1<<c)))
                         continue;
 
-                    uint32_t iBasisState = ((1<<a)) ^ ((1<<c) ^ jBasisState);
+                    uint64_t iBasisState = ((1<<a)) ^ ((1<<c) ^ jBasisState);
                     if (iBasisState < jBasisState)
                         continue;
                     assert(iBasisState != jBasisState);
                     if (comp)
                     {
-                        uint32_t temp;
+                        uint64_t temp;
                         comp->compressIndex(iBasisState,temp);
-                        if (temp == (uint32_t)-1)
+                        if (temp == (uint64_t)-1)
                             continue;
                     }
 
@@ -509,7 +509,7 @@ sparseMatrix<dataType,vectorType>::sparseMatrix(const std::vector<dataType> &val
 }
 
 template<typename dataType, typename vectorType>
-sparseMatrix<dataType, vectorType>::sparseMatrix(dataType* value, uint32_t* iIndex, uint32_t* jIndex,size_t N, std::shared_ptr<compressor> compressor, bool isRotationGenerator)
+sparseMatrix<dataType, vectorType>::sparseMatrix(dataType* value, uint64_t* iIndex, uint64_t* jIndex,size_t N, std::shared_ptr<compressor> compressor, bool isRotationGenerator)
     : sparseMatrix<dataType,vectorType>(value,iIndex,jIndex,N)
 {
     m_compressor = compressor;
@@ -517,8 +517,8 @@ sparseMatrix<dataType, vectorType>::sparseMatrix(dataType* value, uint32_t* iInd
 
     m_isRotationGenerator = isRotationGenerator;
 
-    std::vector<uint32_t> iIndexes = std::move(m_iIndexes);
-    std::vector<uint32_t> jIndexes = std::move(m_jIndexes);
+    std::vector<uint64_t> iIndexes = std::move(m_iIndexes);
+    std::vector<uint64_t> jIndexes = std::move(m_jIndexes);
     std::vector<dataType> data = std::move(m_data);
 
     m_iIndexes.clear();
@@ -527,8 +527,8 @@ sparseMatrix<dataType, vectorType>::sparseMatrix(dataType* value, uint32_t* iInd
 
     for (size_t i = 0; i < N; i++)
     {
-        uint32_t compressediIndex;
-        uint32_t compressedjIndex;
+        uint64_t compressediIndex;
+        uint64_t compressedjIndex;
         if (m_compressor->compressIndex(iIndexes[i],compressediIndex) &&
             m_compressor->compressIndex(jIndexes[i],compressedjIndex))
         {
@@ -563,7 +563,7 @@ void applyPermutationAndStore(const T* vec, const std::vector<std::size_t>& perm
 }
 
 template<typename dataType, typename vectorType>
-sparseMatrix<dataType,vectorType>::sparseMatrix(dataType *value, uint32_t *iIndexes, uint32_t *jIndexes, size_t N)
+sparseMatrix<dataType,vectorType>::sparseMatrix(dataType *value, uint64_t *iIndexes, uint64_t *jIndexes, size_t N)
 {
     auto sortPerm = sortPermutation(jIndexes,N);
     applyPermutationAndStore(iIndexes,sortPerm,m_iIndexes,N);
@@ -672,7 +672,7 @@ bool sparseMatrix<dataType,vectorType>::allClose(dataType val, realNumType atol)
 }
 
 template<typename dataType, typename vectorType>
-const dataType* sparseMatrix<dataType,vectorType>::at(uint32_t i, uint32_t j, bool& success) const
+const dataType* sparseMatrix<dataType,vectorType>::at(uint64_t i, uint64_t j, bool& success) const
 {
     auto d = m_data.begin();
     auto iIdx = m_iIndexes.begin();
@@ -800,7 +800,7 @@ bool sparseMatrix<dataType, vectorType>::dumpMatrix(const std::string& filePath)
         else
             static_assert(std::is_same_v<double,dataType> || std::is_same_v<std::complex<double>,dataType>);// Some compilers dont handle this correctly. Hence the workaround
 
-        fprintf(fpIndex, "%u %u\n",*iIt+1,*jIt+1);
+        fprintf(fpIndex, "%zu %zu\n",*iIt+1,*jIt+1);
         ++iIt;
         ++jIt;
         ++dIt;
@@ -1225,10 +1225,10 @@ void sparseMatrix<dataType, vectorType>::compress(std::shared_ptr<compressor> co
     m_compressor = comp;
     m_isCompressed = true;
 
-    std::vector<uint32_t> iIndexes = std::move(m_iIndexes);
-    std::vector<uint32_t> jIndexes = std::move(m_jIndexes);
+    std::vector<uint64_t> iIndexes = std::move(m_iIndexes);
+    std::vector<uint64_t> jIndexes = std::move(m_jIndexes);
     std::vector<dataType> data = std::move(m_data);
-    uint32_t N = jIndexes.size();
+    uint64_t N = jIndexes.size();
 
     m_iIndexes.clear();
     m_jIndexes.clear();
@@ -1236,8 +1236,8 @@ void sparseMatrix<dataType, vectorType>::compress(std::shared_ptr<compressor> co
 
     for (size_t i = 0; i < N; i++)
     {
-        uint32_t compressediIndex;
-        uint32_t compressedjIndex;
+        uint64_t compressediIndex;
+        uint64_t compressedjIndex;
         if (m_compressor->compressIndex(iIndexes[i],compressediIndex) &&
             m_compressor->compressIndex(jIndexes[i],compressedjIndex))
         {
@@ -1255,10 +1255,10 @@ void sparseMatrix<dataType, vectorType>::decompress()
 {
 
 
-    std::vector<uint32_t> iIndexes = std::move(m_iIndexes);
-    std::vector<uint32_t> jIndexes = std::move(m_jIndexes);
+    std::vector<uint64_t> iIndexes = std::move(m_iIndexes);
+    std::vector<uint64_t> jIndexes = std::move(m_jIndexes);
     std::vector<dataType> data = std::move(m_data);
-    uint32_t N = jIndexes.size();
+    uint64_t N = jIndexes.size();
 
     m_iIndexes.clear();
     m_jIndexes.clear();
@@ -1266,8 +1266,8 @@ void sparseMatrix<dataType, vectorType>::decompress()
 
     for (size_t i = 0; i < N; i++)
     {
-        uint32_t decompressediIndex;
-        uint32_t decompressedjIndex;
+        uint64_t decompressediIndex;
+        uint64_t decompressedjIndex;
         if (m_compressor->deCompressIndex(iIndexes[i],decompressediIndex) &&
             m_compressor->deCompressIndex(jIndexes[i],decompressedjIndex))
         {
@@ -1393,8 +1393,8 @@ void sparseMatrix<std::complex<realNumType>, std::complex<realNumType>>::rotateD
 template<typename dataType, typename vectorType>
 sparseMatrix<dataType,vectorType>::operator sparseMatrix<dataType,vectorType>::EigenSparseMatrix() const
 {
-    uint32_t rowNumber = m_iSize;
-    uint32_t columnNumber = m_jSize;
+    uint64_t rowNumber = m_iSize;
+    uint64_t columnNumber = m_jSize;
     EigenSparseMatrix ret(rowNumber,columnNumber);
     auto iBegin = iItBegin();
     auto iEnd = iItEnd();

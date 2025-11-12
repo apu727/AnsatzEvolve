@@ -16,9 +16,9 @@
 
 
 
-constexpr char bitwiseDot(const uint32_t a, const uint32_t b, int dim)
+constexpr char bitwiseDot(const uint64_t a, const uint64_t b, int dim)
 {
-    // uint32_t prod = a&b;
+    // uint64_t prod = a&b;
     // char ret = 0; //at most 32
     // for (int i = 0; i < dim; i++)
     // {
@@ -26,13 +26,8 @@ constexpr char bitwiseDot(const uint32_t a, const uint32_t b, int dim)
     //     prod>>=1;
     // }
     // return ret;
-    //Magic code that compiles to popcnt https://stackoverflow.com/questions/109023/count-the-number-of-set-bits-in-a-32-bit-integer
-    uint32_t i = a & b & (dim < 32 ? ((1<<dim) -1) : -1);
-    i = i - ((i >> 1) & 0x55555555);        // add pairs of bits
-    i = (i & 0x33333333) + ((i >> 2) & 0x33333333);  // quads
-    i = (i + (i >> 4)) & 0x0F0F0F0F;        // groups of 8
-    i *= 0x01010101;                        // horizontal sum of bytes
-    return  i >> 24;               // return just that top byte (after truncating to 32-bit even when int is wider than uint32_t)
+    uint64_t i = a & b & (dim < 64 ? ((1<<dim) -1) : -1);
+    return popcount(i);
 }
 
 class operatorPool
@@ -49,17 +44,17 @@ public:
 class numberOperatorCompressor : public compressor
 {
 public:
-    numberOperatorCompressor(uint32_t numberOfParticles, uint32_t stateVectorSize)
+    numberOperatorCompressor(uint64_t numberOfParticles, uint64_t stateVectorSize)
     {
-        assert(numberOfParticles <= 32);
+        assert(numberOfParticles <= 64);
 
 
         compressPerm.resize(stateVectorSize);
-        uint32_t activeCount = 0;
-        uint32_t allOnes = -1;
-        for (uint32_t i = 0; i < stateVectorSize; i++)
+        uint64_t activeCount = 0;
+        uint64_t allOnes = -1;
+        for (uint64_t i = 0; i < stateVectorSize; i++)
         {
-            bool indexActive = bitwiseDot(i,allOnes,32) == (char)numberOfParticles;
+            bool indexActive = bitwiseDot(i,allOnes,64) == (char)numberOfParticles;
             if (indexActive)
             {
                 compressPerm[i] = activeCount;
@@ -78,12 +73,12 @@ public:
 
 class SZAndnumberOperatorCompressor : public compressor
 {
-    uint32_t m_numberOfQubits;
-    uint32_t m_qubitBitMask;
-    uint32_t m_spinUpBitMask;
-    uint32_t m_spinDownBitMask;
+    uint64_t m_numberOfQubits;
+    uint64_t m_qubitBitMask;
+    uint64_t m_spinUpBitMask;
+    uint64_t m_spinDownBitMask;
 public:
-    SZAndnumberOperatorCompressor(uint32_t stateVectorSize, uint32_t spinUp, uint32_t spinDown);
+    SZAndnumberOperatorCompressor(uint64_t stateVectorSize, uint64_t spinUp, uint64_t spinDown);
     virtual void dummyImplement(){}
     virtual bool opDoesSomething(excOp&);
 };
@@ -99,8 +94,8 @@ public:
         int8_t fourth;
         exc(){}
         exc(int8_t (&arr)[4]){first = arr[0]; second = arr[1]; third = arr[2]; fourth = arr[3];}
-        exc(uint32_t val){first = val >> 24; second = val >> 16; third = val >> 8; fourth = val;}
-        operator uint32_t() const {return ((uint8_t)first << 24) + ((uint8_t)second << 16) + ((uint8_t) third << 8) + (uint8_t)fourth;}
+        exc(uint64_t val){first = val >> 24; second = val >> 16; third = val >> 8; fourth = val;}
+        operator uint64_t() const {return ((uint8_t)first << 24) + ((uint8_t)second << 16) + ((uint8_t) third << 8) + (uint8_t)fourth;}
         bool isSingleExc() const {return first >= 0 && second >= 0 && third < 0 && fourth < 0;}
         bool isDoubleExc() const {return first >= 0 && second >= 0 && third >= 0 && fourth >= 0;}
         const int8_t& operator [](size_t idx) const
@@ -140,8 +135,8 @@ public:
         bool commutes(const exc& other)
         {
             bool allNonEqual = true;
-            uint32_t first = 0;
-            uint32_t second = 0;
+            uint64_t first = 0;
+            uint64_t second = 0;
             for (int8_t i = 0; i < 4; i++)
             {
                 if ((*this)[i] != -1)
@@ -188,8 +183,8 @@ public:
                 assert(fourth == -1);
                 return first == second;
             }
-            uint32_t create = (1<<first) | (1<<second);
-            uint32_t annihilate = (1<<third) | (1<<fourth);
+            uint64_t create = (1<<first) | (1<<second);
+            uint64_t annihilate = (1<<third) | (1<<fourth);
             assert(third != fourth);//Double destroy
             assert(first != second); //Double create
             //dont care about order
@@ -197,7 +192,7 @@ public:
         }
     }; // 0 indexed
 private:
-    typedef uint32_t excHash;
+    typedef uint64_t excHash;
 
     excHash makeExcHash(const exc e){return e;}
     void makeExcFromHash(exc &e,const excHash eh){ e = exc(eh);}

@@ -196,7 +196,7 @@ int readCsvState(std::vector<std::complex<realNumType>>& Coeffs, const std::stri
         }
         //fprintf(stderr,"Read: %s, " numTypeCode, str1, coeff);
         std::string bitstring(str1);
-        uint32_t bitstring_Int = 0;
+        uint64_t bitstring_Int = 0;
         for (size_t i=0; i < bitstring.length(); i++)
         {
             bitstring_Int |= ((1 << i) * (bitstring[bitstring.length()-i-1] == '1'));
@@ -251,7 +251,7 @@ int readCsvState(std::vector<realNumType>& Coeffs, const std::string& filePath)
         }
         //fprintf(stderr,"Read: %s, " numTypeCode, str1, coeff);
         std::string bitstring(str1);
-        uint32_t bitstring_Int = 0;
+        uint64_t bitstring_Int = 0;
         for (size_t i=0; i < bitstring.length(); i++)
         {
             bitstring_Int |= ((1 << i) * (bitstring[bitstring.length()-i-1] == '1'));

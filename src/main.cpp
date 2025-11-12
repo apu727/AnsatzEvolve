@@ -17,13 +17,13 @@
 bool OperatorsHaveSZSymmetry(int numberOfQubits, const std::vector<stateRotate::exc>& excs)
 {   //Ugly bodge. This has been copied from AnsatzManager.cpp. Ideally we should also use that but this breaks the build structure
     bool ret = true;
-    uint32_t spinDownBitMask = (1<<(numberOfQubits/2))-1;
-    uint32_t spinUpBitMask = ((1<<(numberOfQubits))-1) ^ spinDownBitMask;
+    uint64_t spinDownBitMask = (1<<(numberOfQubits/2))-1;
+    uint64_t spinUpBitMask = ((1<<(numberOfQubits))-1) ^ spinDownBitMask;
 
     for (const auto& e : excs)
     {
-        uint32_t create = 0;
-        uint32_t destroy = 0;
+        uint64_t create = 0;
+        uint64_t destroy = 0;
         if (e.isSingleExc())
         {
             create = (1<<e.first);
@@ -162,7 +162,7 @@ struct options
 
 int main(int argc, char *argv[])
 {
-    //std::vector<uint32_t> statevectorBasis;
+    //std::vector<uint64_t> statevectorBasis;
     std::vector<numType> statevectorCoeffs;
     options opt = options::parse(argc,argv);
     const std::string& filePath = opt.filePath;
@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    uint32_t ones = -1;
+    uint64_t ones = -1;
     char numberOfParticles = -1;
     bool allSameParticleNumber = true;
     bool SZSym = true;
@@ -207,7 +207,7 @@ int main(int argc, char *argv[])
         if (numberOfQubits %2 != 0)
             SZSym = false;
 
-        char currNumberOfParticles = bitwiseDot(i,ones,32);
+        char currNumberOfParticles = bitwiseDot(i,ones,64);
 
         if (numberOfParticles == -1 && currNumberOfParticles != -1)
         {
@@ -219,7 +219,7 @@ int main(int argc, char *argv[])
             break;
         }
 
-        int currSpinUp = bitwiseDot(i>>(numberOfQubits/2),ones,32);
+        int currSpinUp = bitwiseDot(i>>(numberOfQubits/2),ones,64);
         int currSpinDown = bitwiseDot(i,ones,numberOfQubits/2);
         if (spinUp == -1 && currSpinUp != -1)
             spinUp = currSpinUp;

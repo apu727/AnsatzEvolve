@@ -14,9 +14,9 @@ struct excOp
     // uint8_t b; //create
     // uint8_t c; //destroy
     // uint8_t d; //destroy
-    uint32_t create;
-    uint32_t destroy;
-    uint32_t signBitMask;
+    uint64_t create;
+    uint64_t destroy;
+    uint64_t signBitMask;
 };
 
 template <typename dataType,typename vectorType>

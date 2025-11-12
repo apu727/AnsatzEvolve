@@ -42,8 +42,8 @@ def diag1L(p,q,numberSpatial, order):
 
 def diag2L(p,q,numberSpatial, order):
     return [[q, q, 0, 0,],
-        [q+numberSpatial, q+numberSpatial, 0, 0,]
-        [p, p, 0, 0,]
+        [q+numberSpatial, q+numberSpatial, 0, 0,],
+        [p, p, 0, 0,],
         [p+numberSpatial, p+numberSpatial, 0, 0,]],\
         [[order,1],[order,1],[order,1],[order,1]]
 
@@ -385,7 +385,7 @@ def buildAnsatzToPython(Name,numberOfSpatialOrbitals,Layers,U3,operatorFileName=
     return operators,orders
             
 if __name__ == "__main__":
-    buildAnsatzToFile(Name = "H14",numberOfSpatialOrbitals = 14,Layers = 5,U3 = False)
+    buildAnsatzToFile(Name = "H18",numberOfSpatialOrbitals = 18,Layers = 1,U3 = False)
     
     
     

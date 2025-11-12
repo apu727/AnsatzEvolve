@@ -29,7 +29,7 @@ class FusedEvolve
     using signMapX = std::array<bool,((1<<numberToFuse)/2)*numberToFuse> ; //true means +ve
 
     template <uint16_t numberToFuse>
-    using localVectorMapX = std::array<uint32_t,1<<numberToFuse> ;
+    using localVectorMapX = std::array<uint64_t,1<<numberToFuse> ;
 
     template <uint16_t numberToFuse>
     using localVectorX  = std::vector<std::pair<localVectorMapX<numberToFuse>,signMapX<numberToFuse>>>;
@@ -38,7 +38,7 @@ class FusedEvolve
     using fusedAnsatzX = std::vector<std::array<localVectorX<numberToFuse>,1<<numberToFuse>> ; //\Sum_{k=1}^{n} n choose k = 2^n for n >=0
 
 
-    using localVectorDiagonal =  std::vector<uint32_t>;
+    using localVectorDiagonal =  std::vector<uint64_t>;
     template<uint16_t numberToFuse>
     using fusedDiagonalAnsatzX = std::vector<std::array<localVectorDiagonal,1<<numberToFuse>>;
 

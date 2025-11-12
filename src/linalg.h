@@ -35,7 +35,7 @@
 #endif
 #if defined __has_builtin
 #  if __has_builtin (__builtin_popcount)
-#    define popcount(i) __builtin_popcount(i)
+#    define popcount(i) __builtin_popcountl(i) // TODO __builtin_popcountg
 #  endif
 #endif
 #ifndef popcount
@@ -49,7 +49,7 @@ constexpr char explicitPopcount(uint32_t i)
     i = (i & 0x33333333) + ((i >> 2) & 0x33333333);  // quads
     i = (i + (i >> 4)) & 0x0F0F0F0F;        // groups of 8
     i *= 0x01010101;                        // horizontal sum of bytes
-    return  i >> 24;               // return just that top byte (after truncating to 32-bit even when int is wider than uint32_t)
+    return  i >> 24;               // return just that top byte (after truncating to 32-bit even when int is wider than uint64_t)
 }
 #endif
 
@@ -270,7 +270,7 @@ public:
 
     Matrix():Matrix(0,0){};
     Matrix(size_t iSize, size_t jSize);
-    Matrix(int value, const std::vector<uint32_t>& iIndex, const std::vector<uint32_t>& jIndex,int size);
+    Matrix(int value, const std::vector<uint64_t>& iIndex, const std::vector<uint64_t>& jIndex,int size);
     Matrix(const dataType* buffer, size_t iSize, size_t jSize);
 
 

@@ -52,6 +52,8 @@ atomString = f"N 0 0 0; N 0 0 1.1;"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ; H 0 0 12 ; H 0 0 14 ; H 0 0 16 ; H 0 0 18 ; H 0 0 20 ; H 0 0 22 ;"
 # outputName = f"H14_Linear"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ; H 0 0 12 ; H 0 0 14 ; H 0 0 16 ; H 0 0 18 ; H 0 0 20 ; H 0 0 22 ; H 0 0 24 ; H 0 0 26 ;"
+outputName = f"H18_Linear"
+atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ; H 0 0 12 ; H 0 0 14 ; H 0 0 16 ; H 0 0 18 ; H 0 0 20 ; H 0 0 22 ; H 0 0 24 ; H 0 0 26 ; H 0 0 28 ; H 0 0 30 ; H 0 0 32 ; H 0 0 34 ;"
 
 
 frozenOrbitals = set()
@@ -59,8 +61,8 @@ activeOrbitals = None
 
 # outputName = f"H4_L1"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ;"
-frozenOrbitals = {0,1}
-activeOrbitals = None
+# frozenOrbitals = {0,1}
+# activeOrbitals = None
 
 subtractNuclearEnergy = True
 perfectPairing = True
