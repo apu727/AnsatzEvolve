@@ -2452,11 +2452,10 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
     // vector<numType> psi;
     Matrix<numType> Ts;
     // Matrix<numType> HTs;
-    {
-        size_t memoryEstimate = (angles.size()+1)*(m_start.size())*(sizeof(numType));
-        // if (memoryEstimate > 10000000000/*10GB*/)
-            logger().log("Trying to allocate (GB)",(double)memoryEstimate/1e9);
-    }
+
+    size_t memoryEstimate = (angles.size()+1)*(m_start.size())*(sizeof(numType));
+    if (logTimings) logger().log("Trying to allocate Ts (GB)",(double)memoryEstimate/1e9);
+
     Ts.resize(angles.size()+1,m_start.size(),m_lieIsCompressed,m_compressor);
     //The last one is psi
     vectorView<Matrix<numType>,Eigen::RowMajor> psi = Ts.getJVectorView(angles.size());
@@ -2615,17 +2614,21 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
         Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> TMap(&Ts.at(0,0),Ts.m_iSize,Ts.m_jSize);
         if (TsCopy)
         {
+            if (logTimings) logger().log("Trying to allocate TsCopy (GB) ",(double)memoryEstimate/1e9);
             Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> TMapOnly(&Ts.at(0,0),angles.size(),Ts.m_jSize);
             *TsCopy = TMapOnly.transpose();
         }
         // Eigen::Map<Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> HTMap(&HTs.at(0,0),HTs.m_iSize,HTs.m_jSize);
         //For speed need to convert the ordering
+        if (logTimings) logger().log("Trying to allocate TMapC (GB) ",(double)memoryEstimate/1e9);
         Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> TMapC = TMap;
         Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> T_C;
+        if (logTimings) logger().log("Trying to allocate T_C (GB) ",(double)(m_compressMatrixPsi.rows())*(m_start.size())*(sizeof(numType))/1e9);
         T_C.noalias() = m_compressMatrixPsi * TMapC;
 
         Eigen::Matrix<numType,-1,-1,Eigen::ColMajor> HT_C;
         // HT_C.noalias() = T_C*m_HamEm;
+        if (logTimings) logger().log("Trying to allocate HT_C (GB) ",(double)(m_compressMatrixPsi.rows())*(m_start.size())*(sizeof(numType))/1e9);
         m_Ham->apply(T_C,HT_C);
         Eigen::Map<Eigen::Matrix<numType,1,-1,Eigen::RowMajor>,Eigen::Aligned32> hPsiMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
         //extract hPsi
