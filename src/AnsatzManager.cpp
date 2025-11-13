@@ -373,7 +373,7 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
     return success;
 }
 
-bool stateAnsatzManager::storeHamiltonian(std::vector<int> &&iIndexes, std::vector<int> &&jIndexes, std::vector<realNumType> &&Coeffs)
+bool stateAnsatzManager::storeHamiltonian(std::vector<long> &&iIndexes, std::vector<long> &&jIndexes, std::vector<realNumType> &&Coeffs)
 {
     bool success = true;
     if (m_isConstructed)
@@ -396,6 +396,7 @@ bool stateAnsatzManager::storeHamiltonian(std::vector<int> &&iIndexes, std::vect
     m_coeffs = std::move(Coeffs);
     return success;
 }
+
 
 bool stateAnsatzManager::storeNuclearEnergy(realNumType nuclearEnergy)
 {

@@ -626,7 +626,7 @@ void HamiltonianMatrix<dataType, vectorType>::postProcessOperators()
 }
 
 template<typename dataType, typename vectorType>
-HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::vector<dataType> &value, const std::vector<int> &iIndex, const std::vector<int> &jIndex, std::shared_ptr<compressor> comp)
+HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::vector<dataType> &value, const std::vector<long> &iIndex, const std::vector<long> &jIndex, std::shared_ptr<compressor> comp)
 {
     m_isCompressed = !!comp;
     m_compressor = comp;

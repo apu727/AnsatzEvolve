@@ -72,9 +72,9 @@
         ! - coeffs: matrix element values
         !----------------------------------------------------------
         function setHamiltonian(N, iIndexes, jIndexes, coeffs, ctx) result(status) bind(C, name="setHamiltonian")
-            use iso_c_binding, only: c_int, c_double, c_ptr
-            integer(c_int), value :: N
-            integer(c_int), intent(in) :: iIndexes(*), jIndexes(*)
+            use iso_c_binding, only: c_long, c_int, c_double, c_ptr
+            integer(c_long), value :: N
+            integer(c_long), intent(in) :: iIndexes(*), jIndexes(*)
             real(c_double), intent(in) :: coeffs(*)
             type(c_ptr), value :: ctx
             integer(c_int) :: status
@@ -89,10 +89,10 @@
         ! - coeffs: corresponding amplitudes
         !----------------------------------------------------------
         function setInitialState(numQubits, N, iIndexes, coeffs, ctx) result(status) bind(C, name="setInitialState")
-            use iso_c_binding, only: c_int, c_double, c_ptr
+            use iso_c_binding, only: c_int,c_long, c_double, c_ptr
             integer(c_int), value :: numQubits
-            integer(c_int), value :: N
-            integer(c_int), intent(in) :: iIndexes(*)
+            integer(c_long), value :: N
+            integer(c_long), intent(in) :: iIndexes(*)
             real(c_double), intent(in) :: coeffs(*)
             type(c_ptr), value :: ctx
             integer(c_int) :: status
@@ -107,10 +107,10 @@
         ! - coeffs: corresponding complex amplitudes
         !----------------------------------------------------------
         function setInitialStateComplex(numQubits, N, iIndexes, coeffs, ctx) result(status) bind(C, name="setInitialStateComplex")
-            use iso_c_binding, only: c_int, c_double_complex, c_ptr
+            use iso_c_binding, only: c_int, c_long, c_double_complex, c_ptr
             integer(c_int), value :: numQubits
-            integer(c_int), value :: N
-            integer(c_int), intent(in) :: iIndexes(*)
+            integer(c_long), value :: N
+            integer(c_long), intent(in) :: iIndexes(*)
             complex(c_double_complex), intent(in) :: coeffs(*)
             type(c_ptr), value :: ctx
             integer(c_int) :: status

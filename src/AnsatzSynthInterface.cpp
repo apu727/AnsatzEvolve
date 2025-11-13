@@ -140,7 +140,7 @@ int setExcitationScale(int nparams, const int *operators, const int *orderfile, 
 // - iIndexes, jIndexes: row/column indices (1-based Fortran)
 // - coeffs: matrix element values
 //----------------------------------------------------------
-int setHamiltonian(int N, const int* iIndexes, const int* jIndexes, const double* coeffs, void* ctx)
+int setHamiltonian(int N, const long* iIndexes, const long* jIndexes, const double* coeffs, void* ctx)
 {
     if (ctx == nullptr)
     {
@@ -151,9 +151,9 @@ int setHamiltonian(int N, const int* iIndexes, const int* jIndexes, const double
     {
         logger().log("setHamiltonian called with:");
         logger().log("N", N);
-        logger().log("iIndexes", std::vector<int>(iIndexes,iIndexes+N));
-        logger().log("jIndexes", std::vector<int>(jIndexes,jIndexes+N));
-        logger().log("coeffs", std::vector<int>(coeffs,coeffs+N));
+        logger().log("iIndexes", std::vector<long>(iIndexes,iIndexes+N));
+        logger().log("jIndexes", std::vector<long>(jIndexes,jIndexes+N));
+        logger().log("coeffs", std::vector<long>(coeffs,coeffs+N));
         logger().log("ctx", ctx);
     }
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
@@ -163,11 +163,11 @@ int setHamiltonian(int N, const int* iIndexes, const int* jIndexes, const double
         logger().log("N < 1");
         return 2;
     }
-    std::vector<int> iIndexesV(iIndexes,iIndexes+N);
-    std::vector<int> jIndexesV(jIndexes,jIndexes+N);
-    for (int& iIndex : iIndexesV)
+    std::vector<long> iIndexesV(iIndexes,iIndexes+N);
+    std::vector<long> jIndexesV(jIndexes,jIndexes+N);
+    for (long& iIndex : iIndexesV)
         iIndex--;
-    for (int& jIndex : jIndexesV)
+    for (long& jIndex : jIndexesV)
         jIndex--;
     std::vector<realNumType> CoeffsV(coeffs,coeffs+N);
     bool success = thisPtr->storeHamiltonian(std::move(iIndexesV),std::move(jIndexesV),std::move(CoeffsV));
@@ -175,6 +175,32 @@ int setHamiltonian(int N, const int* iIndexes, const int* jIndexes, const double
         return 3;
     return 0;
 }
+
+int setHamiltonianFile(char* filepath, int filepathLength, void* ctx)
+{
+    if (ctx == nullptr)
+    {
+        logger().log("nullptr ctx passed");
+        return 1;
+    }
+    if (traceInterfaceCalls)
+    {
+        logger().log("setHamiltonianFile called with:");
+        logger().log("filepathLength", filepathLength);
+        logger().log("filepath", std::string(filepath,filepathLength));
+        logger().log("ctx", ctx);
+    }
+    stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
+    std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
+
+    std::string filepathStr(filepath,filepathLength);
+
+    bool success = thisPtr->storeRunPath(filepathStr);
+    if (!success)
+        return 2;
+    return 0;
+}
+
 
 //----------------------------------------------------------
 // Sets the initial quantum state vector (sparse form).
@@ -184,7 +210,7 @@ int setHamiltonian(int N, const int* iIndexes, const int* jIndexes, const double
 // - iIndexes: basis indices. the |XXX> qubit corresponds to the number 0bXXX + 1. E.g |100> => 9
 // - coeffs: corresponding amplitudes
 //----------------------------------------------------------
-int setInitialState(int numQubits, int N, const int* iIndexes, const double* coeffs, void* ctx)
+int setInitialState(int numQubits, long N, const long* iIndexes, const double* coeffs, void* ctx)
 {
     if (ctx == nullptr)
     {
@@ -231,7 +257,7 @@ int setInitialState(int numQubits, int N, const int* iIndexes, const double* coe
 // - coeffs: corresponding complex amplitudes
 //----------------------------------------------------------
 #ifdef useComplex
-int setInitialStateComplex (int numQubits, int N, const int *iIndexes, const __GFORTRAN_DOUBLE_COMPLEX *coeffs, void *ctx)
+int setInitialStateComplex (int numQubits, long N, const long *iIndexes, const __GFORTRAN_DOUBLE_COMPLEX *coeffs, void *ctx)
 {
     if (ctx == nullptr)
     {
@@ -269,7 +295,7 @@ int setInitialStateComplex (int numQubits, int N, const int *iIndexes, const __G
     return 0;
 }
 #else
-int setInitialStateComplex (int, int, const int *, const __GFORTRAN_DOUBLE_COMPLEX *, void *)
+int setInitialStateComplex (int, long, const long *, const __GFORTRAN_DOUBLE_COMPLEX *, void *)
 {
     logger().log("Cannot set a complex initial state without building in complex mode");
     return 4;
