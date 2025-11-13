@@ -592,7 +592,7 @@ void TUPSQuantities::asyncHij(const sparseMatrix<realNumType,numType> &Ham, cons
         }
         std::atomic_fetch_add_explicit(&finishCount,1,std::memory_order_release);
     };
-    const size_t stepSize = 2;std::max((size_t)iSize/NUM_CORES,1ul);
+    const size_t stepSize = 2;//std::max((size_t)iSize/NUM_CORES,1ul);
     std::vector<std::future<void>> futures;
     auto& pool = threadpool::getInstance(NUM_CORES);
 

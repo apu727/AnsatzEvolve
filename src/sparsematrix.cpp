@@ -58,7 +58,7 @@ inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,
     uint64_t idxs[2] = {};
 
     int ret = fscanf(fpCoeff, realNumTypeCode ", " realNumTypeCode " \n", &coeffReal, &coeffImag);
-    int ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
+    int ret2 = fscanf(fpIndex, "%zu %zu\n",&(idxs[0]),&(idxs[1]));
 
     while(EOF != ret && EOF != ret2)
     {
@@ -70,7 +70,7 @@ inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,
         me->m_data.push_back(std::complex<double>(coeffReal,coeffImag));
 
         ret = fscanf(fpCoeff, realNumTypeCode ", " realNumTypeCode " \n", &coeffReal, &coeffImag);
-        ret2 = fscanf(fpIndex, "%u %u\n",&(idxs[0]),&(idxs[1]));
+        ret2 = fscanf(fpIndex, "%zu %zu\n",&(idxs[0]),&(idxs[1]));
     }
     fclose(fpIndex);
     fclose(fpCoeff);
