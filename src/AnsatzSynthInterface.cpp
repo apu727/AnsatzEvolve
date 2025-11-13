@@ -222,7 +222,7 @@ int setInitialState(int numQubits, long N, const long* iIndexes, const double* c
         logger().log("setInitialState called with:");
         logger().log("numQubits", numQubits);
         logger().log("N", N);
-        logger().log("iIndexes", std::vector<int>(iIndexes,iIndexes+N));
+        logger().log("iIndexes", std::vector<long>(iIndexes,iIndexes+N));
         logger().log("coeffs", std::vector<double>(coeffs,coeffs+N));
         logger().log("ctx", ctx);
     }
@@ -238,8 +238,8 @@ int setInitialState(int numQubits, long N, const long* iIndexes, const double* c
         logger().log("numQubits < 1");
         return 2;
     }
-    std::vector<int> iIndexesV(iIndexes,iIndexes+N);
-    for (int& iIndex : iIndexesV)
+    std::vector<long> iIndexesV(iIndexes,iIndexes+N);
+    for (long& iIndex : iIndexesV)
         iIndex--;
     std::vector<numType> CoeffsV(coeffs,coeffs+N);
     bool success = thisPtr->storeInitial(numQubits,iIndexesV,CoeffsV);

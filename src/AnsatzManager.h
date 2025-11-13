@@ -86,7 +86,7 @@ public:
     ~stateAnsatzManager();
     //Setup functions, These just store and wait until the last one is completed before setting anything up
     bool storeOperators(const std::vector<stateRotate::exc>& excs);
-    bool storeInitial(int numberOfQubits, const std::vector<int>& indexes,const std::vector<numType>& coeffs);
+    bool storeInitial(int numberOfQubits, const std::vector<long>& indexes,const std::vector<numType>& coeffs);
     bool storeHamiltonian(std::vector<long>&& iIndexes, std::vector<long>&& jIndexes, std::vector<realNumType>&& Coeffs);
     bool storeNuclearEnergy(realNumType nuclearEnergy);
     //Expresses the mapping from free parameters to actual angles. parameterDependency[0].first gives the free parameter than angle 0 depends on.

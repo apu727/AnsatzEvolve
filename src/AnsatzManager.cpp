@@ -261,7 +261,7 @@ bool stateAnsatzManager::storeOperators(const std::vector<stateRotate::exc> &exc
     return success;
 }
 
-bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>& indexes,const std::vector<numType>& coeffs)
+bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<long>& indexes,const std::vector<numType>& coeffs)
 {
     bool success = true;
     if (m_isConstructed)
