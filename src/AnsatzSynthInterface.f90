@@ -81,6 +81,21 @@
         end function setHamiltonian
 
         !----------------------------------------------------------
+        ! Sets the Hamiltonian matrix (binary form) in the backend.
+        ! Inputs:
+        ! - filepath: stub to search for the oneEInts and twoEInts
+        ! - N: Length of the string. Not including the null termination (if present)
+        ! - coeffs: matrix element values
+        !----------------------------------------------------------
+        function setHamiltonianFile(filepath,N,ctx) result(status) bind(C, name="setHamiltonianFile")
+            use iso_c_binding, only: c_char, c_int, c_double, c_ptr
+            character(kind=c_char) :: filepath
+            integer(c_int), value :: N
+            type(c_ptr), value :: ctx
+            integer(c_int) :: status
+        end function setHamiltonianFile
+
+        !----------------------------------------------------------
         ! Sets the initial quantum state vector (sparse form).
         ! Inputs:
         ! - numQubits: total number of qubits

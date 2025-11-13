@@ -38,6 +38,8 @@ program myfortran
     real(c_double),dimension(256) :: state
     complex(c_double_complex),dimension(256) :: stateComplex
 
+    CHARACTER(len=255) :: cwd
+
 !    call setTraceInterfaceCalls(1)
     ctx = init()
 
@@ -50,7 +52,11 @@ program myfortran
 
     ! Setup Hamiltonian
 
-    status = setHamiltonian(size(HamiIndexes,1,8),HamiIndexes,HamjIndexes,HamCoeffs,ctx)
+    CALL getcwd(cwd)
+    print *, len_trim(cwd)
+    cwd = TRIM(cwd)//"/"
+    status = setHamiltonianFile(cwd,len_trim(cwd),ctx)
+!    status = setHamiltonian(size(HamiIndexes,1,8),HamiIndexes,HamjIndexes,HamCoeffs,ctx)
     call checkStatus(status)
 
     ! set operators
