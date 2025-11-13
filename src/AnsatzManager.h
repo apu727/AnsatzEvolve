@@ -29,6 +29,8 @@ private:
     sparseMatrix<numType,numType> m_target; //dummy, todo remove
     std::vector<realNumType> m_angles; // To compare and only recalculate when it changes
     std::vector<stateAnsatz::rotationElement> m_rotationPath; // keeps track of the operators too
+    realNumType m_cachedEnergy;
+    bool m_cachedEnergyValid = false;
 
 
     bool m_isConstructed = false;
@@ -46,7 +48,8 @@ private:
 
     //Things needed to construct
     std::vector<stateRotate::exc> m_excitations;
-    vector<numType> m_start; // Size != 0
+    std::vector<uint64_t> m_stateVectorIndexes;
+    std::vector<numType> m_stateVectorCoeffs;
     std::shared_ptr<HamiltonianMatrix<realNumType,numType>> m_Ham; // Size != 0
     int m_numberOfParticles = -1;
     int m_spinUp = -1;
@@ -56,6 +59,9 @@ private:
     bool m_particleSym = false;
     int m_numberOfQubits = -1;
     std::vector<std::pair<int,realNumType>> m_parameterDependency;
+
+    //Created once a compressor exists
+    vector<numType> m_start; // Size != 0
 
 
     bool setHamiltonian();

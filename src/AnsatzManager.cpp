@@ -62,15 +62,10 @@ bool stateAnsatzManager::construct()
     {
         logger().log("Number of particles is not set. Make sure the initial state has been provided, has elements and these are all of the same particle number. This may result in slow calculations");
     }
-    if (m_start.size() == 0)
+    if (!(m_stateVectorIndexes.size() > 0 && m_stateVectorCoeffs.size() > 0 && m_stateVectorIndexes.size() == m_stateVectorCoeffs.size()))
     {
         success = false;
         logger().log("Make sure the initial state has been provided");
-    }
-    if (m_start.size() == 0)
-    {
-        success = false;
-        logger().log("Initial state has no elements");
     }
     if (m_excitations.size() == 0)
     {
@@ -110,9 +105,7 @@ bool stateAnsatzManager::construct()
         {
             if (m_compressStateVectors)
             {
-                vector<numType> compStart;
-                compressor::compressVector<numType>(m_start,compStart,m_compressor);
-                static_cast<Matrix<numType>&>(m_start) = std::move(compStart);
+                compressor::compressVector<numType>(m_stateVectorCoeffs,m_stateVectorIndexes,m_start,m_compressor);
             }
             m_TUPSQuantities = std::make_shared<TUPSQuantities>(m_Ham,m_parameterDependency,m_numberOfUniqueParameters, m_nuclearEnergy,m_runPath); //TODO allow for a output file path
             m_compressMatrix = m_TUPSQuantities->m_compressMatrix;
@@ -293,12 +286,11 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
     }
     if (success)
     {
-        m_start.resize(1ul<<numberOfQubits,false,nullptr);
-        for (size_t i = 0; i < indexes.size(); i++)
-        {
-            m_start[indexes[i]] = coeffs[i];
-        }
-        realNumType mag = std::sqrt(m_start.dot(m_start));
+
+        realNumType mag = 0;
+        for (auto& c : coeffs)
+            mag += c*c;
+        mag = std::sqrt(mag);
         if (abs(mag-1) > 1e-14)
         {
             logger().log("Warning: Initial vector is not normalised, the error is", abs(mag-1));
@@ -368,6 +360,15 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
                 m_spinUp = spinUp;
                 m_spinDown = spinDown;
             }
+        }
+        m_stateVectorCoeffs = coeffs;
+        m_stateVectorIndexes.clear();
+        m_stateVectorIndexes.reserve(indexes.size());
+        for (long i : indexes)
+        {
+            if (i < 0)
+                __builtin_trap();
+            m_stateVectorIndexes.push_back(i);
         }
     }
     return success;
@@ -502,6 +503,7 @@ bool stateAnsatzManager::setAngles(std::vector<realNumType> angles)
         m_angles = angles;
         setRotationPathFromAngles();
         evolve();
+        m_cachedEnergyValid = false;
     }
     return success;
 }
@@ -531,15 +533,23 @@ bool stateAnsatzManager::getExpectationValue(realNumType &exptValue)
         success = false;
         return success;
     }
-    if constexpr(useFused)
-    {
-        exptValue = m_FA->getEnergy(m_current);
-    }
+    if (m_cachedEnergyValid)
+        exptValue = m_cachedEnergy;
     else
     {
-        exptValue = m_Ham->apply(m_ansatz->getVec(),tempNumType).dot(m_ansatz->getVec());
+        if constexpr(useFused)
+        {
+            exptValue = m_FA->getEnergy(m_current);
+        }
+        else
+        {
+            exptValue = m_Ham->apply(m_ansatz->getVec(),tempNumType).dot(m_ansatz->getVec());
+        }
+        exptValue += m_nuclearEnergy;
+        m_cachedEnergy = exptValue;
+        m_cachedEnergyValid = true;
     }
-    exptValue += m_nuclearEnergy;
+
     return success;
 }
 
@@ -589,7 +599,13 @@ bool stateAnsatzManager::getGradientComp(vector<realNumType> &gradient)
             success = false;
             return success;
         }
-        m_FA->evolveDerivative(m_current,gradient,m_angles);
+        if (!m_cachedEnergyValid)
+        {
+            m_FA->evolveDerivative(m_current,gradient,m_angles,&m_cachedEnergy);
+            m_cachedEnergyValid = true;
+        }
+        else
+            m_FA->evolveDerivative(m_current,gradient,m_angles);
     }
     else
     {
