@@ -445,7 +445,7 @@ inline void BENCHMARK_rotate(realNumType* scratchSpace,const bool* signs, const 
     {
         constexpr indexType pseudoVectorSize = 1<<numberToFuse;
         constexpr uint64_t signsStride = (pseudoVectorSize/2)*numberToFuse;
-        static_assert((pseudoVectorSize/2)*numberToFuse < 1<<16);
+        static_assert((pseudoVectorSize/2)*numberToFuse < 1u<<31);
         constexpr indexType rotCount = 1<<numberToFuse;
 
         for (size_t i = 0; i < numberToRepeat; i++)
@@ -655,6 +655,7 @@ void RunFuseNDiagonal(fusedDiagonalAnsatz* const myFusedAnsatz, realNumType* sta
               realNumType* hPsi = nullptr, realNumType** result = nullptr/*result is array of pointers to storage places. The array has length nAngles. IT IS NOT ZEROED BY THIS FUNCTION!*/,
               realNumType** tangentStore = nullptr/* tangents are stored before the evolution of each fused gate in myFusedAnsatz*/)
 {
+    static_assert(numberToFuse < sizeof(indexType)*8);
     for (size_t i = 0; i < nAngles; i+= numberToFuse)
     {
         fusedDiagonalAnsatz& currAnsatz = myFusedAnsatz[i/numberToFuse];
@@ -926,6 +927,7 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                           realNumType* hPsi = nullptr, realNumType** result = nullptr/*result is array of pointers to storage places. The array has length nAngles. IT IS NOT ZEROED BY THIS FUNCTION!*/,
               realNumType** tangentStore = nullptr/* tangents are stored before the evolution of each fused gate in myFusedAnsatz*/)
 {
+    static_assert(numberToFuse < sizeof(indexType)*8);
     realNumType scratchSpace[localVectorSize];
     realNumType scratchSpacehPsi[localVectorSize];
     auto startTime = std::chrono::high_resolution_clock::now();
@@ -1740,7 +1742,58 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
                                 scratchSpace,currentSigns.begin(),S,C,filledSize/32768,scratchSpacehPsi,resultArr);
                             break;
                         }
-                        static_assert(numberToFuse < 16, "Only up to 16 handled");
+                    case 16:
+                        if constexpr (numberToFuse >= 16)
+                        {
+                            realNumType S[16]; realNumType C[16]; realNumType* resultArr[16]; realNumType* tangentStoreArr[16];
+                            for (indexType x = 0; x < 16; x++)
+                            {
+                                S[x] = sines[activeRots[x]];
+                                C[x] = cosines[activeRots[x]];
+                                resultArr[x] = result[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                            }
+                            if constexpr(storeTangent)
+                                storeTangents<indexType,16>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/8192);
+                            BENCHMARK_rotate<indexType,16,localVectorSize,BraketWithTangentOfResult>(
+                                scratchSpace,currentSigns.begin(),S,C,filledSize/65536,scratchSpacehPsi,resultArr);
+                            break;
+                        }
+                    case 17:
+                        if constexpr (numberToFuse >= 17)
+                        {
+                            realNumType S[17]; realNumType C[17]; realNumType* resultArr[17]; realNumType* tangentStoreArr[17];
+                            for (indexType x = 0; x < 17; x++)
+                            {
+                                S[x] = sines[activeRots[x]];
+                                C[x] = cosines[activeRots[x]];
+                                resultArr[x] = result[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                            }
+                            if constexpr(storeTangent)
+                                storeTangents<indexType,17>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/16384);
+                            BENCHMARK_rotate<indexType,17,localVectorSize,BraketWithTangentOfResult>(
+                                scratchSpace,currentSigns.begin(),S,C,filledSize/131072,scratchSpacehPsi,resultArr);
+                            break;
+                        }
+                    case 18:
+                        if constexpr (numberToFuse >= 18)
+                        {
+                            realNumType S[18]; realNumType C[18]; realNumType* resultArr[18]; realNumType* tangentStoreArr[18];
+                            for (indexType x = 0; x < 18; x++)
+                            {
+                                S[x] = sines[activeRots[x]];
+                                C[x] = cosines[activeRots[x]];
+                                resultArr[x] = result[activeRots[x]+i];
+                                if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                            }
+                            if constexpr(storeTangent)
+                                storeTangents<indexType,18>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/32768);
+                            BENCHMARK_rotate<indexType,18,localVectorSize,BraketWithTangentOfResult>(
+                                scratchSpace,currentSigns.begin(),S,C,filledSize/262144,scratchSpacehPsi,resultArr);
+                            break;
+                        }
+                    static_assert(numberToFuse < 19, "Only up to 18(inc) handled");
                     default:
                         logger().log("Unreachable!");
                         __builtin_trap();
@@ -1942,6 +1995,12 @@ void FusedEvolve::regenCache()
             SetupFuseNDiagonalMacro(10,uint16_t);
             SetupFuseNDiagonalMacro(11,uint16_t);
             SetupFuseNDiagonalMacro(12,uint16_t);
+            SetupFuseNDiagonalMacro(13,uint16_t);
+            SetupFuseNDiagonalMacro(14,uint16_t);
+            SetupFuseNDiagonalMacro(15,uint16_t);
+            SetupFuseNDiagonalMacro(16,uint32_t);
+            SetupFuseNDiagonalMacro(17,uint32_t);
+            SetupFuseNDiagonalMacro(18,uint32_t);
         case 0:
             releaseAssert(false,"Unhandled case 0");
             break;
@@ -1957,9 +2016,15 @@ void FusedEvolve::regenCache()
             SetupFuseN(10,uint16_t);
             SetupFuseN(11,uint16_t);
             SetupFuseN(12,uint16_t);
+            SetupFuseN(13,uint16_t);
+            SetupFuseN(14,uint16_t);
+            SetupFuseN(15,uint16_t);
+            SetupFuseN(16,uint32_t);
+            SetupFuseN(17,uint32_t);
+            SetupFuseN(18,uint32_t);
         default:
             releaseAssert(false,"Unhandled case default");
-            static_assert(maxFuse <=12);
+            static_assert(maxFuse <=18);
         }
     }
     m_excsCached = true;
@@ -2008,6 +2073,24 @@ void FusedEvolve::cleanup()
         case -12:
             delete static_cast<fusedDiagonalAnsatzX<12>*>(m_fusedAnsatzes[i]);
             break;
+        case -13:
+            delete static_cast<fusedDiagonalAnsatzX<13>*>(m_fusedAnsatzes[i]);
+            break;
+        case -14:
+            delete static_cast<fusedDiagonalAnsatzX<14>*>(m_fusedAnsatzes[i]);
+            break;
+        case -15:
+            delete static_cast<fusedDiagonalAnsatzX<15>*>(m_fusedAnsatzes[i]);
+            break;
+        case -16:
+            delete static_cast<fusedDiagonalAnsatzX<16>*>(m_fusedAnsatzes[i]);
+            break;
+        case -17:
+            delete static_cast<fusedDiagonalAnsatzX<17>*>(m_fusedAnsatzes[i]);
+            break;
+        case -18:
+            delete static_cast<fusedDiagonalAnsatzX<18>*>(m_fusedAnsatzes[i]);
+            break;
         case 0:
             releaseAssert(false,"Unhandled case 0 - delete");
             break;
@@ -2046,6 +2129,24 @@ void FusedEvolve::cleanup()
             break;
         case 12:
             delete static_cast<fusedAnsatzX<12>*>(m_fusedAnsatzes[i]);
+            break;
+        case 13:
+            delete static_cast<fusedAnsatzX<13>*>(m_fusedAnsatzes[i]);
+            break;
+        case 14:
+            delete static_cast<fusedAnsatzX<14>*>(m_fusedAnsatzes[i]);
+            break;
+        case 15:
+            delete static_cast<fusedAnsatzX<15>*>(m_fusedAnsatzes[i]);
+            break;
+        case 16:
+            delete static_cast<fusedAnsatzX<16>*>(m_fusedAnsatzes[i]);
+            break;
+        case 17:
+            delete static_cast<fusedAnsatzX<17>*>(m_fusedAnsatzes[i]);
+            break;
+        case 18:
+            delete static_cast<fusedAnsatzX<18>*>(m_fusedAnsatzes[i]);
             break;
         default:
             releaseAssert(false,"Unhandled case default - delete");
@@ -2132,6 +2233,12 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
         EvolveDiagonal(10,uint16_t)
         EvolveDiagonal(11,uint16_t)
         EvolveDiagonal(12,uint16_t)
+        EvolveDiagonal(13,uint16_t)
+        EvolveDiagonal(14,uint16_t)
+        EvolveDiagonal(15,uint16_t)
+        EvolveDiagonal(16,uint32_t)
+        EvolveDiagonal(17,uint32_t)
+        EvolveDiagonal(18,uint32_t)
         case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
@@ -2148,6 +2255,12 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
         Evolve(10,uint16_t)
         Evolve(11,uint16_t)
         Evolve(12,uint16_t)
+        Evolve(13,uint16_t)
+        Evolve(14,uint16_t)
+        Evolve(15,uint16_t)
+        Evolve(16,uint32_t)
+        Evolve(17,uint32_t)
+        Evolve(18,uint32_t)
 
         default:
             __builtin_trap();
@@ -2210,6 +2323,12 @@ void FusedEvolve::evolveMultiple(Matrix<numType> &destMatrix, const Matrix<realN
                             EvolveDiagonal(10,uint16_t)
                             EvolveDiagonal(11,uint16_t)
                             EvolveDiagonal(12,uint16_t)
+                            EvolveDiagonal(13,uint16_t)
+                            EvolveDiagonal(14,uint16_t)
+                            EvolveDiagonal(15,uint16_t)
+                            EvolveDiagonal(16,uint32_t)
+                            EvolveDiagonal(17,uint32_t)
+                            EvolveDiagonal(18,uint32_t)
                         case 0:
                             logger().log("Unhandled case 0");
                             __builtin_trap();
@@ -2227,6 +2346,12 @@ void FusedEvolve::evolveMultiple(Matrix<numType> &destMatrix, const Matrix<realN
                             Evolve(10,uint16_t)
                             Evolve(11,uint16_t)
                             Evolve(12,uint16_t)
+                            Evolve(13,uint16_t)
+                            Evolve(14,uint16_t)
+                            Evolve(15,uint16_t)
+                            Evolve(16,uint32_t)
+                            Evolve(17,uint32_t)
+                            Evolve(18,uint32_t)
 
                         default:
                             __builtin_trap();
@@ -2313,6 +2438,12 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
             EvolveDerDiag(10,uint16_t);
             EvolveDerDiag(11,uint16_t);
             EvolveDerDiag(12,uint16_t);
+            EvolveDerDiag(13,uint16_t);
+            EvolveDerDiag(14,uint16_t);
+            EvolveDerDiag(15,uint16_t);
+            EvolveDerDiag(16,uint32_t);
+            EvolveDerDiag(17,uint32_t);
+            EvolveDerDiag(18,uint32_t);
         case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
@@ -2329,6 +2460,12 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
             EvolveDer(10,uint16_t);
             EvolveDer(11,uint16_t);
             EvolveDer(12,uint16_t);
+            EvolveDer(13,uint16_t);
+            EvolveDer(14,uint16_t);
+            EvolveDer(15,uint16_t);
+            EvolveDer(16,uint32_t);
+            EvolveDer(17,uint32_t);
+            EvolveDer(18,uint32_t);
         default:
             __builtin_trap();
         }
@@ -2497,6 +2634,12 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
         GenerateTangentsDiag(10,uint16_t)
         GenerateTangentsDiag(11,uint16_t)
         GenerateTangentsDiag(12,uint16_t)
+        GenerateTangentsDiag(13,uint16_t)
+        GenerateTangentsDiag(14,uint16_t)
+        GenerateTangentsDiag(15,uint16_t)
+        GenerateTangentsDiag(16,uint32_t)
+        GenerateTangentsDiag(17,uint32_t)
+        GenerateTangentsDiag(18,uint32_t)
         case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
@@ -2514,6 +2657,12 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
         GenerateTangents(10,uint16_t)
         GenerateTangents(11,uint16_t)
         GenerateTangents(12,uint16_t)
+        GenerateTangents(13,uint16_t)
+        GenerateTangents(14,uint16_t)
+        GenerateTangents(15,uint16_t)
+        GenerateTangents(16,uint32_t)
+        GenerateTangents(17,uint32_t)
+        GenerateTangents(18,uint32_t)
         default:
             __builtin_trap();
         }
@@ -2569,6 +2718,12 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
                   EvolveTangentsDiag(10,uint16_t)
                   EvolveTangentsDiag(11,uint16_t)
                   EvolveTangentsDiag(12,uint16_t)
+                  EvolveTangentsDiag(13,uint16_t)
+                  EvolveTangentsDiag(14,uint16_t)
+                  EvolveTangentsDiag(15,uint16_t)
+                  EvolveTangentsDiag(16,uint32_t)
+                  EvolveTangentsDiag(17,uint32_t)
+                  EvolveTangentsDiag(18,uint32_t)
                   case 0:
                       logger().log("Unhandled case 0");
                       __builtin_trap();
@@ -2585,6 +2740,12 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
                   EvolveTangents(10,uint16_t)
                   EvolveTangents(11,uint16_t)
                   EvolveTangents(12,uint16_t)
+                  EvolveTangents(13,uint16_t)
+                  EvolveTangents(14,uint16_t)
+                  EvolveTangents(15,uint16_t)
+                  EvolveTangents(16,uint32_t)
+                  EvolveTangents(17,uint32_t)
+                  EvolveTangents(18,uint32_t)
                   default:
                       __builtin_trap();
                   }
@@ -2725,6 +2886,12 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
                       GenerateHPsiTDiagonal(10,uint16_t)
                       GenerateHPsiTDiagonal(11,uint16_t)
                       GenerateHPsiTDiagonal(12,uint16_t)
+                      GenerateHPsiTDiagonal(13,uint16_t)
+                      GenerateHPsiTDiagonal(14,uint16_t)
+                      GenerateHPsiTDiagonal(15,uint16_t)
+                      GenerateHPsiTDiagonal(16,uint32_t)
+                      GenerateHPsiTDiagonal(17,uint32_t)
+                      GenerateHPsiTDiagonal(18,uint32_t)
                       case 0:
                       {
                           logger().log("Unhandled case 0");
@@ -2743,6 +2910,12 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
                       GenerateHPsiT(10,uint16_t)
                       GenerateHPsiT(11,uint16_t)
                       GenerateHPsiT(12,uint16_t)
+                      GenerateHPsiT(13,uint16_t)
+                      GenerateHPsiT(14,uint16_t)
+                      GenerateHPsiT(15,uint16_t)
+                      GenerateHPsiT(16,uint32_t)
+                      GenerateHPsiT(17,uint32_t)
+                      GenerateHPsiT(18,uint32_t)
 
 
                       default:
@@ -2866,6 +3039,12 @@ void FusedEvolve::evolveDerivativeProj(const vector<numType> &finalVector, vecto
             EvolveDerDiag(10,uint16_t);
             EvolveDerDiag(11,uint16_t);
             EvolveDerDiag(12,uint16_t);
+            EvolveDerDiag(13,uint16_t);
+            EvolveDerDiag(14,uint16_t);
+            EvolveDerDiag(15,uint16_t);
+            EvolveDerDiag(16,uint32_t);
+            EvolveDerDiag(17,uint32_t);
+            EvolveDerDiag(18,uint32_t);
         case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
@@ -2882,6 +3061,12 @@ void FusedEvolve::evolveDerivativeProj(const vector<numType> &finalVector, vecto
             EvolveDer(10,uint16_t);
             EvolveDer(11,uint16_t);
             EvolveDer(12,uint16_t);
+            EvolveDer(13,uint16_t);
+            EvolveDer(14,uint16_t);
+            EvolveDer(15,uint16_t);
+            EvolveDer(16,uint32_t);
+            EvolveDer(17,uint32_t);
+            EvolveDer(18,uint32_t);
         default:
             __builtin_trap();
         }
@@ -2956,25 +3141,37 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
             GenerateTangentsDiag(10,uint16_t)
             GenerateTangentsDiag(11,uint16_t)
             GenerateTangentsDiag(12,uint16_t)
+            GenerateTangentsDiag(13,uint16_t)
+            GenerateTangentsDiag(14,uint16_t)
+            GenerateTangentsDiag(15,uint16_t)
+            GenerateTangentsDiag(16,uint32_t)
+            GenerateTangentsDiag(17,uint32_t)
+            GenerateTangentsDiag(18,uint32_t)
             case 0:
             logger().log("Unhandled case 0");
             __builtin_trap();
             break;
 
             GenerateTangents(1,uint8_t)
-                GenerateTangents(2,uint8_t)
-                GenerateTangents(3,uint8_t)
-                GenerateTangents(4,uint8_t)
-                GenerateTangents(5,uint8_t)
-                GenerateTangents(6,uint8_t)
-                GenerateTangents(7,uint8_t)
-                GenerateTangents(8,uint16_t)
-                GenerateTangents(9,uint16_t)
-                GenerateTangents(10,uint16_t)
-                GenerateTangents(11,uint16_t)
-                GenerateTangents(12,uint16_t)
-                default:
-                          __builtin_trap();
+            GenerateTangents(2,uint8_t)
+            GenerateTangents(3,uint8_t)
+            GenerateTangents(4,uint8_t)
+            GenerateTangents(5,uint8_t)
+            GenerateTangents(6,uint8_t)
+            GenerateTangents(7,uint8_t)
+            GenerateTangents(8,uint16_t)
+            GenerateTangents(9,uint16_t)
+            GenerateTangents(10,uint16_t)
+            GenerateTangents(11,uint16_t)
+            GenerateTangents(12,uint16_t)
+            GenerateTangents(13,uint16_t)
+            GenerateTangents(14,uint16_t)
+            GenerateTangents(15,uint16_t)
+            GenerateTangents(16,uint32_t)
+            GenerateTangents(17,uint32_t)
+            GenerateTangents(18,uint32_t)
+            default:
+                      __builtin_trap();
         }
 
     }
@@ -3017,7 +3214,7 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
                                                   }
                                                   break;
                                               }
-                                              EvolveTangentsDiag(2,uint8_t)
+                                                  EvolveTangentsDiag(2,uint8_t)
                                                   EvolveTangentsDiag(3,uint8_t)
                                                   EvolveTangentsDiag(4,uint8_t)
                                                   EvolveTangentsDiag(5,uint8_t)
@@ -3028,24 +3225,36 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
                                                   EvolveTangentsDiag(10,uint16_t)
                                                   EvolveTangentsDiag(11,uint16_t)
                                                   EvolveTangentsDiag(12,uint16_t)
+                                                  EvolveTangentsDiag(13,uint16_t)
+                                                  EvolveTangentsDiag(14,uint16_t)
+                                                  EvolveTangentsDiag(15,uint16_t)
+                                                  EvolveTangentsDiag(16,uint32_t)
+                                                  EvolveTangentsDiag(17,uint32_t)
+                                                  EvolveTangentsDiag(18,uint32_t)
                                                   case 0:
                                                   logger().log("Unhandled case 0");
                                                   __builtin_trap();
                                                   break;
                                                   EvolveTangents(1,uint8_t)
-                                                      EvolveTangents(2,uint8_t)
-                                                      EvolveTangents(3,uint8_t)
-                                                      EvolveTangents(4,uint8_t)
-                                                      EvolveTangents(5,uint8_t)
-                                                      EvolveTangents(6,uint8_t)
-                                                      EvolveTangents(7,uint8_t)
-                                                      EvolveTangents(8,uint16_t)
-                                                      EvolveTangents(9,uint16_t)
-                                                      EvolveTangents(10,uint16_t)
-                                                      EvolveTangents(11,uint16_t)
-                                                      EvolveTangents(12,uint16_t)
-                                                      default:
-                                                                __builtin_trap();
+                                                  EvolveTangents(2,uint8_t)
+                                                  EvolveTangents(3,uint8_t)
+                                                  EvolveTangents(4,uint8_t)
+                                                  EvolveTangents(5,uint8_t)
+                                                  EvolveTangents(6,uint8_t)
+                                                  EvolveTangents(7,uint8_t)
+                                                  EvolveTangents(8,uint16_t)
+                                                  EvolveTangents(9,uint16_t)
+                                                  EvolveTangents(10,uint16_t)
+                                                  EvolveTangents(11,uint16_t)
+                                                  EvolveTangents(12,uint16_t)
+                                                  EvolveTangents(13,uint16_t)
+                                                  EvolveTangents(14,uint16_t)
+                                                  EvolveTangents(15,uint16_t)
+                                                  EvolveTangents(16,uint32_t)
+                                                  EvolveTangents(17,uint32_t)
+                                                  EvolveTangents(18,uint32_t)
+                                                  default:
+                                                            __builtin_trap();
                                               }
 
                                           }
@@ -3124,7 +3333,7 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
                                                   switch (m_fusedSizes[i-1])
                                                   {
                                                       GenerateHPsiTDiagonal(1,uint8_t)
-                                                  GenerateHPsiTDiagonal(2,uint8_t)
+                                                      GenerateHPsiTDiagonal(2,uint8_t)
                                                       GenerateHPsiTDiagonal(3,uint8_t)
                                                       GenerateHPsiTDiagonal(4,uint8_t)
                                                       GenerateHPsiTDiagonal(5,uint8_t)
@@ -3135,6 +3344,12 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
                                                       GenerateHPsiTDiagonal(10,uint16_t)
                                                       GenerateHPsiTDiagonal(11,uint16_t)
                                                       GenerateHPsiTDiagonal(12,uint16_t)
+                                                      GenerateHPsiTDiagonal(13,uint16_t)
+                                                      GenerateHPsiTDiagonal(14,uint16_t)
+                                                      GenerateHPsiTDiagonal(15,uint16_t)
+                                                      GenerateHPsiTDiagonal(16,uint32_t)
+                                                      GenerateHPsiTDiagonal(17,uint32_t)
+                                                      GenerateHPsiTDiagonal(18,uint32_t)
                                                       case 0:
                                                   {
                                                       logger().log("Unhandled case 0");
@@ -3153,6 +3368,12 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
                                                           GenerateHPsiT(10,uint16_t)
                                                           GenerateHPsiT(11,uint16_t)
                                                           GenerateHPsiT(12,uint16_t)
+                                                          GenerateHPsiT(13,uint16_t)
+                                                          GenerateHPsiT(14,uint16_t)
+                                                          GenerateHPsiT(15,uint16_t)
+                                                          GenerateHPsiT(16,uint32_t)
+                                                          GenerateHPsiT(17,uint32_t)
+                                                          GenerateHPsiT(18,uint32_t)
 
 
                                                           default:

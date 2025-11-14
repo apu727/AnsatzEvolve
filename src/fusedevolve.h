@@ -23,7 +23,7 @@ class FusedEvolve
 #ifdef MakeParallelEvolveCode
         4;
 #else
-        12;
+        18;
 #endif
     template <uint16_t numberToFuse>
     using signMapX = std::array<bool,((1<<numberToFuse)/2)*numberToFuse> ; //true means +ve
