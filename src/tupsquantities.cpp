@@ -130,6 +130,27 @@ void writeMatrix(std::string filename, Matrix<std::complex<long double>>::EigenM
     fclose(fp);
 }
 
+void writeVector(std::string filename, std::vector<double> &vec)
+{
+    FILE* fp = fopen((filename + ".Vecbin").c_str(),"wb");
+    if (!fp)
+        return;
+    for (size_t i = 0; i < vec.size(); i++)
+    {
+        fwrite(&(vec[i]),sizeof(vec[0]),1,fp);
+    }
+    fclose(fp);
+    fp = fopen((filename + ".Veccsv").c_str(),"w");
+    if (!fp)
+        return;
+    for (size_t i = 0; i < vec.size(); i++)
+    {
+        fprintf(fp,"%.16lg,",vec[i]);
+    }
+    fprintf(fp,"\n");
+    fclose(fp);
+}
+
 TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::vector<std::pair<int,realNumType>> order,
                                int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile)
 {
@@ -327,9 +348,9 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
             gradVector = gradVectorCalc;
 
 
-        writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Hessian",Hmunu);
-        if (!useFusedEvolve)
-            writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric",metricTensor);
+        // writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Hessian",Hmunu);
+        // if (!useFusedEvolve)
+        //     writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric",metricTensor);
 
         Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> esH(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
         vector<std::complex<realNumType>>::EigenVector hessianEigVal = esH.eigenvalues();
@@ -468,6 +489,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     printOutputLine(NormOfGradVector,"NormOfGradVector");
     printOutputLine(OverlapWithGroundState,"OverlapWithGroundState");
     printOutputLine(MagOfOverlapWithGroundState,"MagOfOverlapWithGroundState");
+    writeVector(m_runPath + "_MagOfOverlapWithGroundState",MagOfOverlapWithGroundState);
 
 }
 
