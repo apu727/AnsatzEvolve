@@ -48,7 +48,7 @@ class FusedEvolve
     std::vector<int8_t> m_fusedSizes;
     void cleanup();
 
-    vector<numType> m_start;
+    vector<numType> m_start; // this could be sparse and reduce the footprint.
     std::shared_ptr<HamiltonianMatrix<realNumType,numType>> m_Ham;
     bool m_lieIsCompressed;
     std::shared_ptr<compressor> m_compressor;

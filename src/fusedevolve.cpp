@@ -1958,7 +1958,7 @@ void FusedEvolve::regenCache()
     if constexpr (logTimings) logger().log("With boundaries",m_commuteBoundaries);
 
 
-
+    //This can be parallelised quite easily. Alternatively if this is too big to store this can be computed on the fly in runFuseN(Diagonal).
     for (long i = 0; i < (long)m_commuteBoundaries.size()-1;i++)
     {
         size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
@@ -2405,7 +2405,7 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
     //Both <Psi|H and Psi> are evolved backwards and the dot product calculated on the fly
     //Note that we go backwards in the fusedAnsatzes. but each fusion is still evolved forwards. This is fine because its commutes.
     vector<numType> dest;
-    dest.copy(finalVector);
+    dest.copy(finalVector); // if finalVector is not important we can avoid this copy
     // logger().log("dest.dot start Before deriv", dest.dot(m_start)); // this should not be 1
 
     vector<numType> hPsi;

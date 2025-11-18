@@ -50,6 +50,7 @@ public:
     {
         if (popcount(index) == m_numberOfParticles)
         {
+            //The binary search can be avoided same as in SZAndnumberOperatorCompressor using Colexical ordering.
             auto elem = std::lower_bound(decompressPerm.begin(),decompressPerm.end(),index); // binary search.
             if (elem == decompressPerm.end())
             {
@@ -102,7 +103,7 @@ class SZAndnumberOperatorCompressor : public compressor
     uint64_t m_spinDownSize = 0;
     int m_spinUp;
     int m_spinDown;
-    size_t m_decompressedSize = 0;
+    size_t m_decompressedSize = 0; // If necessary this can also me compressed in the same way as the m_compressedSpinUpLookup.
     static constexpr uint8_t chooseCacheSize = 33; // because of the + 1 later.
     size_t m_chooseLookup[chooseCacheSize][chooseCacheSize]; // 8712 bytes. Well within L1 cache for most processors. Could be constexpr but why.
     std::vector<uint32_t> m_compressedSpinUpLookup;
