@@ -119,6 +119,22 @@ class SZAndnumberOperatorCompressor : public compressor
         return (n * choose(n - 1, k - 1)) / k;
     }
     void setupChooseCache();
+    /* Colexicographic ordering. Kinda magic. As an example:
+     *  01 = 00011 = 0C1 + 1C2 = 0+0 = 0
+     *  02 = 00101 = 0C1 + 2C2 = 0+1 = 1
+     *  12 = 00110 = 1C1 + 2C2 = 1+1 = 2
+     *  03 = 01001 = 0C1 + 3C2 = 0+3 = 3
+     *  13 = 01010 = 1C1 + 3C2 = 1+3 = 4
+     *  23 = 01100 = 2C1 + 3C2 = 2+3 = 5
+     *  04 = 10001 = 0C1 + 4C2 = 0+6 = 6
+     *  14 = 10010 = 1C1 + 4C2 = 1+6 = 7
+     *  24 = 10100 = 2C1 + 4C2 = 2+6 = 8
+     *  34 = 11000 = 3C1 + 4C2 = 3+6 = 9
+     *
+     *  This predicts orders the N choose k spins in each spin block.
+     *  One could use this directly for compression/decompression but instead we cache it in m_compressedSpinUpLookup and m_compressedSpinDownLookup
+     *  for 64 bit statevector this is a max storage of 70GB. A doable number. ~ 3x Speed boost, very similar to the previous single lookup version.
+     */
     uint32_t ColexicoOrder(uint32_t index, uint32_t k)
     {
         uint64_t spinDownRank = 0;
@@ -136,27 +152,16 @@ class SZAndnumberOperatorCompressor : public compressor
         return spinDownRank;
     }
 public:
-    /* Colexicographic ordering. Kinda magic. As an example:
-     *  01 = 00011 = 0C1 + 1C2 = 0+0 = 0
-     *  02 = 00101 = 0C1 + 2C2 = 0+1 = 1
-     *  12 = 00110 = 1C1 + 2C2 = 1+1 = 2
-     *  03 = 01001 = 0C1 + 3C2 = 0+3 = 3
-     *  13 = 01010 = 1C1 + 3C2 = 1+3 = 4
-     *  23 = 01100 = 2C1 + 3C2 = 2+3 = 5
-     *  04 = 10001 = 0C1 + 4C2 = 0+6 = 6
-     *  14 = 10010 = 1C1 + 4C2 = 1+6 = 7
-     *  24 = 10100 = 2C1 + 4C2 = 2+6 = 8
-     *  34 = 11000 = 3C1 + 4C2 = 3+6 = 9
-     */
+
 
     bool compressIndex(uint64_t index, uint64_t& compressedIdx) override
     {
-        bool spinUpActive = popcount(index & m_spinUpBitMask) == (char)m_spinUp;
-        bool spinDownActive = popcount(index & m_spinDownBitMask) == (char)m_spinDown;
+        uint32_t spinUpBlock = index >> m_numberOfQubits/2;
+        uint32_t spinDownBlock = index & m_spinDownBitMask;
+        bool spinUpActive = popcount(spinUpBlock) == (char)m_spinUp;
+        bool spinDownActive = popcount(spinDownBlock) == (char)m_spinDown;
         if (spinUpActive && spinDownActive)
         {
-            uint32_t spinUpBlock = index >> m_numberOfQubits/2;
-            uint32_t spinDownBlock = index & m_spinDownBitMask;
             uint64_t spinUpIndex = m_compressedSpinUpLookup[spinUpBlock];
             assert((uint32_t)spinUpIndex != (uint32_t)-1);
             uint64_t spinDownIndex = m_compressedSpinDownLookup[spinDownBlock];
