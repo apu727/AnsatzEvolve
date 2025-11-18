@@ -98,23 +98,69 @@ class SZAndnumberOperatorCompressor : public compressor
     uint64_t m_qubitBitMask;
     uint64_t m_spinUpBitMask;
     uint64_t m_spinDownBitMask;
+    uint64_t m_spinUpSize = 0;
+    uint64_t m_spinDownSize = 0;
     int m_spinUp;
     int m_spinDown;
     size_t m_decompressedSize = 0;
+    static constexpr uint8_t chooseCacheSize = 33; // because of the + 1 later.
+    size_t m_chooseLookup[chooseCacheSize][chooseCacheSize]; // 8712 bytes. Well within L1 cache for most processors. Could be constexpr but why.
+    static size_t choose(size_t n, size_t k)
+    {
+        if (n < k)
+            return 0;
+        if (n == k)
+            return 1;
+        if (k == 0)
+            return 1;
+        return (n * choose(n - 1, k - 1)) / k;
+    }
+    void setupChooseCache();
 public:
+    /* Colexicographic ordering. Kinda magic. As an example:
+     *  01 = 00011 = 0C1 + 1C2 = 0+0 = 0
+     *  02 = 00101 = 0C1 + 2C2 = 0+1 = 1
+     *  12 = 00110 = 1C1 + 2C2 = 1+1 = 2
+     *  03 = 01001 = 0C1 + 3C2 = 0+3 = 3
+     *  13 = 01010 = 1C1 + 3C2 = 1+3 = 4
+     *  23 = 01100 = 2C1 + 3C2 = 2+3 = 5
+     *  04 = 10001 = 0C1 + 4C2 = 0+6 = 6
+     *  14 = 10010 = 1C1 + 4C2 = 1+6 = 7
+     *  24 = 10100 = 2C1 + 4C2 = 2+6 = 8
+     *  34 = 11000 = 3C1 + 4C2 = 3+6 = 9
+     */
+
     bool compressIndex(uint64_t index, uint64_t& compressedIdx) override
     {
         bool spinUpActive = popcount(index & m_spinUpBitMask) == (char)m_spinUp;
         bool spinDownActive = popcount(index & m_spinDownBitMask) == (char)m_spinDown;
         if (spinUpActive && spinDownActive)
         {
-            auto elem = std::lower_bound(decompressPerm.begin(),decompressPerm.end(),index); // binary search.
-            if (elem == decompressPerm.end())
+            uint64_t spinUpRank = 0;
+            uint64_t spinDownRank = 0;
+            int spinDownNumberActiveSoFar = 0;
+            int spinUpNumberActiveSoFar = 0;
+
+            //spinDown
+            for (uint32_t qubit = 0; qubit < m_numberOfQubits/2 && spinDownNumberActiveSoFar < m_spinDown; qubit++)
             {
-                fprintf(stderr,"compressed index not found. SZ\n");
-                __builtin_trap();
+                if (index & (1<<qubit))
+                {
+                    spinDownRank += m_chooseLookup[qubit][spinDownNumberActiveSoFar+1];
+                    spinDownNumberActiveSoFar++;
+                }
             }
-            compressedIdx = elem - decompressPerm.begin();
+            //SpinUp
+            for (uint32_t qubit = m_numberOfQubits/2; qubit < m_numberOfQubits && spinUpNumberActiveSoFar < m_spinUp; qubit++)
+            {
+                if (index & (1<<qubit))
+                {
+                    spinUpRank += m_chooseLookup[qubit-m_numberOfQubits/2][spinUpNumberActiveSoFar+1];
+                    spinUpNumberActiveSoFar++;
+                }
+            }
+            compressedIdx = spinUpRank*m_spinDownSize + spinDownRank;
+            assert(compressedIdx < getCompressedSize());
             return true;
         }
         else

@@ -9,6 +9,8 @@
 
 #include <cassert>
 
+
+
 stateRotate::stateRotate(int nQubits, std::shared_ptr<compressor> comp)
 {
     m_nQubits = nQubits;
@@ -204,6 +206,18 @@ bool stateRotate::loadOperators(std::string filePath, std::vector<stateRotate::e
     return 1;
 }
 
+void SZAndnumberOperatorCompressor::setupChooseCache()
+{
+    releaseAssert(m_numberOfQubits/2 < chooseCacheSize,"chooseCache only computed up to 32 of a certain spin ");
+    for (uint8_t i = 0; i < chooseCacheSize; i++)
+    {
+        for (uint8_t j = 0; j < chooseCacheSize; j++)
+        {
+            m_chooseLookup[i][j] = choose(i,j);
+        }
+    }
+}
+
 SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVectorSize, int spinUp, int spinDown)
 {//Compresses for a specific spin, It assumes that the top N/2 bits are spin up and vice versa
     uint64_t numberOfQubits = 0;
@@ -218,6 +232,8 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
     assert(numberOfQubits %2 == 0);
     assert(numberOfQubits < 64);
     m_numberOfQubits = numberOfQubits;
+    setupChooseCache();
+
     m_spinDownBitMask = (1ul<<(numberOfQubits/2))-1;
     m_spinUpBitMask = ((1ul<<(numberOfQubits))-1) ^ m_spinDownBitMask;
     m_decompressedSize = stateVectorSize;
@@ -226,20 +242,15 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
 
     // compressPerm.resize(stateVectorSize);
     // uint64_t activeCount = 0;
+    m_spinUpSize = choose(numberOfQubits/2,m_spinUp);
+    m_spinDownSize = choose(numberOfQubits/2,m_spinDown);
+    size_t compressSize = m_spinUpSize*m_spinDownSize;
+    decompressPerm.resize(compressSize,-1);
     for (uint64_t i = 0; i < stateVectorSize; i++)
     {
-        bool spinUpActive = popcount(i & m_spinUpBitMask) == (char)m_spinUp;
-        bool spinDownActive = popcount(i & m_spinDownBitMask) == (char)m_spinDown;
-        if (spinUpActive && spinDownActive)
-        {
-            // compressPerm[i] = activeCount;
-            decompressPerm.push_back(i);
-            // activeCount++;
-        }
-        else
-        {
-            // compressPerm[i] = -1;
-        }
+        uint64_t compressedIndex;
+        if (SZAndnumberOperatorCompressor::compressIndex(i,compressedIndex))
+            decompressPerm[compressedIndex] = i;
     }
     logger().log("Compressed statevector size (elements)",decompressPerm.size());
 }
