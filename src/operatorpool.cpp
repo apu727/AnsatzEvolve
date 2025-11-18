@@ -244,14 +244,37 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
     // uint64_t activeCount = 0;
     m_spinUpSize = choose(numberOfQubits/2,m_spinUp);
     m_spinDownSize = choose(numberOfQubits/2,m_spinDown);
+
     size_t compressSize = m_spinUpSize*m_spinDownSize;
     decompressPerm.resize(compressSize,-1);
+    m_compressedSpinUpLookup.resize((1u <<(numberOfQubits/2)),-1);
+    m_compressedSpinDownLookup.resize((1u <<(numberOfQubits/2)),-1);
+
+
+    for (uint32_t i = 0; i < (1u <<(numberOfQubits/2)); i++)
+    {
+        bool spinUpActive = popcount(i) == (char)m_spinUp;
+        bool spinDownActive = popcount(i) == (char)m_spinDown;
+        uint32_t spinUpIndex;
+        uint32_t spinDownIndex;
+        if (spinUpActive)
+        {
+            spinUpIndex = ColexicoOrder(i,m_spinUp);
+            m_compressedSpinUpLookup[i] = spinUpIndex;
+        }
+        if (spinDownActive)
+        {
+            spinDownIndex = ColexicoOrder(i,m_spinDown);
+            m_compressedSpinDownLookup[i] = spinDownIndex;
+        }
+    }
     for (uint64_t i = 0; i < stateVectorSize; i++)
     {
         uint64_t compressedIndex;
         if (SZAndnumberOperatorCompressor::compressIndex(i,compressedIndex))
             decompressPerm[compressedIndex] = i;
     }
+
     logger().log("Compressed statevector size (elements)",decompressPerm.size());
 }
 

@@ -105,6 +105,9 @@ class SZAndnumberOperatorCompressor : public compressor
     size_t m_decompressedSize = 0;
     static constexpr uint8_t chooseCacheSize = 33; // because of the + 1 later.
     size_t m_chooseLookup[chooseCacheSize][chooseCacheSize]; // 8712 bytes. Well within L1 cache for most processors. Could be constexpr but why.
+    std::vector<uint32_t> m_compressedSpinUpLookup;
+    std::vector<uint32_t> m_compressedSpinDownLookup;
+
     static size_t choose(size_t n, size_t k)
     {
         if (n < k)
@@ -116,6 +119,22 @@ class SZAndnumberOperatorCompressor : public compressor
         return (n * choose(n - 1, k - 1)) / k;
     }
     void setupChooseCache();
+    uint32_t ColexicoOrder(uint32_t index, uint32_t k)
+    {
+        uint64_t spinDownRank = 0;
+        uint32_t spinDownNumberActiveSoFar = 0;
+
+        //spinDown
+        for (uint32_t qubit = 0; qubit < m_numberOfQubits/2 && spinDownNumberActiveSoFar < k; qubit++)
+        {
+            if (index & (1<<qubit))
+            {
+                spinDownRank += m_chooseLookup[qubit][spinDownNumberActiveSoFar+1];
+                spinDownNumberActiveSoFar++;
+            }
+        }
+        return spinDownRank;
+    }
 public:
     /* Colexicographic ordering. Kinda magic. As an example:
      *  01 = 00011 = 0C1 + 1C2 = 0+0 = 0
@@ -136,31 +155,14 @@ public:
         bool spinDownActive = popcount(index & m_spinDownBitMask) == (char)m_spinDown;
         if (spinUpActive && spinDownActive)
         {
-            uint64_t spinUpRank = 0;
-            uint64_t spinDownRank = 0;
-            int spinDownNumberActiveSoFar = 0;
-            int spinUpNumberActiveSoFar = 0;
+            uint32_t spinUpBlock = index >> m_numberOfQubits/2;
+            uint32_t spinDownBlock = index & m_spinDownBitMask;
+            uint64_t spinUpIndex = m_compressedSpinUpLookup[spinUpBlock];
+            assert((uint32_t)spinUpIndex != (uint32_t)-1);
+            uint64_t spinDownIndex = m_compressedSpinDownLookup[spinDownBlock];
+            assert((uint32_t)spinDownIndex != (uint32_t)-1);
+            compressedIdx = spinUpIndex*m_spinDownSize + spinDownIndex;
 
-            //spinDown
-            for (uint32_t qubit = 0; qubit < m_numberOfQubits/2 && spinDownNumberActiveSoFar < m_spinDown; qubit++)
-            {
-                if (index & (1<<qubit))
-                {
-                    spinDownRank += m_chooseLookup[qubit][spinDownNumberActiveSoFar+1];
-                    spinDownNumberActiveSoFar++;
-                }
-            }
-            //SpinUp
-            for (uint32_t qubit = m_numberOfQubits/2; qubit < m_numberOfQubits && spinUpNumberActiveSoFar < m_spinUp; qubit++)
-            {
-                if (index & (1<<qubit))
-                {
-                    spinUpRank += m_chooseLookup[qubit-m_numberOfQubits/2][spinUpNumberActiveSoFar+1];
-                    spinUpNumberActiveSoFar++;
-                }
-            }
-            compressedIdx = spinUpRank*m_spinDownSize + spinDownRank;
-            assert(compressedIdx < getCompressedSize());
             return true;
         }
         else
