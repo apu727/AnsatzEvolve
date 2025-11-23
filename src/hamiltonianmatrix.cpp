@@ -688,7 +688,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
         sizeEstimate = 0.3*comp->getCompressedSize() * choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2);
         //This is an overestimate but we can always add more complicated estimate functions later
     }
-    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction)
+    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction && false)
     {
         //Construct Fully
         logger().log("Constructing fully, size estimate", sizeEstimate);
@@ -932,18 +932,144 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         {
             long endj = std::min(startj + stepSize,numberOfCols);
             futs.push_back(pool.queueWork([this,&src,&dest,startj,endj](){
-                for (long j = startj; j < endj; j++)
+                long endJ4 = (endj/4)*4;
+                for (long j = startj; j < endJ4; j+=4)
                 {//across
-                    uint32_t jBasisState = j;
+                    uint32_t jBasisStates[4];
+                    jBasisStates[0] = j;
+                    jBasisStates[1] = j+1;
+                    jBasisStates[2] = j+2;
+                    jBasisStates[3] = j+3;
+
                     if (m_isCompressed)
-                        m_compressor->deCompressIndex(jBasisState,jBasisState);
+                    {
+                        for (uint_fast8_t idx = 0; idx < 4; idx++)
+                            m_compressor->deCompressIndex(jBasisStates[idx],jBasisStates[idx]);
+                    }
 
                     auto opIt = m_operators.cbegin();
                     auto valIt = m_vals.cbegin();
                     const auto valItEnd = m_vals.cend();
                     uint32_t badCreate = 0;
                     uint32_t goodCreate = 0;
+
+                    uint32_t destroys[4];
+
+                    bool canDestroys[4];
+                    if (valIt != valItEnd)
+                    {
+                        //Yes yes these are backwards to the way it was defined however for real hamiltonians it doesnt matter because theyre Hermitian. see comments on a,b,c,d
+                        goodCreate = opIt->create;
+#pragma GCC unroll 4
+#pragma GCC ivdep
+                        for (uint_fast8_t idx = 0; idx < 4; idx++)
+                        {
+                            destroys[idx] = jBasisStates[idx] ^ opIt->create;
+                            canDestroys[idx] = (destroys[idx] & opIt->create) == 0;
+                        }
+                        if (!(canDestroys[0] || canDestroys[1]||canDestroys[2]||canDestroys[3]))
+                        {
+                            badCreate = opIt->create;
+                        }
+                    }
+                    //The j loop
+                    for (;valIt != valItEnd; ++valIt,++opIt)
+                    {
+                        if (opIt->create == badCreate)
+                            continue;
+                        badCreate = 0;
+
+                        uint32_t is[4];
+                        bool signs[4];
+
+
+                        if (opIt->create != goodCreate)
+                        {
+                            goodCreate = opIt->create;
+#pragma GCC unroll 4
+#pragma GCC ivdep
+                            for (uint_fast8_t idx = 0; idx < 4; idx++)
+                            {
+                                destroys[idx] = jBasisStates[idx] ^ opIt->create;
+                                canDestroys[idx] = (destroys[idx] & opIt->create) == 0;
+                            }
+                            if (!(canDestroys[0] || canDestroys[1]||canDestroys[2]||canDestroys[3]))
+                            {
+                                badCreate = opIt->create;
+                                continue;
+                            }
+                        }
+
+                        bool canCreates[4];
+#pragma GCC unroll 4
+#pragma GCC ivdep
+                        for (uint_fast8_t idx = 0; idx < 4; idx++)
+                        {
+                            canCreates[idx] =  (destroys[idx] & opIt->destroy) == 0;
+                        }
+                        if (!(canCreates[0] || canCreates[1] || canCreates[2] || canCreates[3]))
+                        {
+                            continue;
+                        }
+#pragma GCC unroll 4
+#pragma GCC ivdep
+                        for (uint_fast8_t idx = 0; idx < 4; idx++)
+                        {
+                            is[idx]  = destroys[idx] | opIt->destroy;
+                            signs[idx] = popcount(jBasisStates[idx] & opIt->signBitMask) & 1;
+                        }
+
+
+
+                        bool OutOfSpace[4] = {false,false,false,false};
+                        if (m_isCompressed)
+                        {
+#pragma GCC unroll 4
+#pragma GCC ivdep
+                            for (uint_fast8_t idx = 0; idx < 4; idx++)
+                            {
+                                OutOfSpace[idx] = !m_compressor->compressIndex(is[idx],is[idx]);
+                            }
+                        }
+                        if (OutOfSpace[0] && OutOfSpace[1] && OutOfSpace[2] && OutOfSpace[3])
+                            continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
+
+                        dataType vs[4];
+#pragma GCC unroll 4
+#pragma GCC ivdep
+                        for (uint_fast8_t idx = 0; idx < 4; idx++)
+                        {
+                            vs[idx] = (signs[idx] ? -*valIt : *valIt);
+                        }
+#pragma GCC unroll 4
+#pragma GCC ivdep
+                        for (uint_fast8_t idx = 0; idx < 4; idx++)
+                        {
+                            if (OutOfSpace[idx])
+                                continue;
+                            dest(0,j+idx) += src(0,is[idx]) * vs[idx];
+                        }
+
+
+
+                    }
+                }
+                for (long j = endJ4; j < endj; j++)
+                {//across
+                    uint32_t jBasisState = j;
+                    if (m_isCompressed)
+                    {
+                        m_compressor->deCompressIndex(jBasisState,jBasisState);
+                    }
+
+                    auto opIt = m_operators.cbegin();
+                    auto valIt = m_vals.cbegin();
+                    const auto valItEnd = m_vals.cend();
+                    uint32_t badCreate = 0;
+                    uint32_t goodCreate = 0;
+
                     uint32_t destroy;
+
                     bool canDestroy;
                     if (valIt != valItEnd)
                     {
@@ -979,24 +1105,28 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                             }
                         }
 
-                        bool canCreate =  (destroy & opIt->destroy) == 0;
+                        bool canCreate;
+                        for (uint_fast8_t idx = 0; idx < 4; idx++)
+                        {
+                            canCreate =  (destroy & opIt->destroy) == 0;
+                        }
                         if (!canCreate)
+                        {
                             continue;
+                        }
                         i  = destroy | opIt->destroy;
-
                         sign = popcount(jBasisState & opIt->signBitMask) & 1;
+
+                        bool OutOfSpace = false;
                         if (m_isCompressed)
-                            m_compressor->compressIndex(i,i);
-                        if (i == (uint32_t)-1)
+                        {
+                            OutOfSpace = !m_compressor->compressIndex(i,i);
+                        }
+                        if (m_isCompressed && OutOfSpace)
                             continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
-                        // for (long i = 0; i < numberOfRows; i++)
-                        // {//down
-                        //     HT_C(i,j) += T_C(i,k) * valIt;
-                        // }
-                        // dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt);
-                        dataType v = (sign ? -*valIt : *valIt);
-
+                        dataType v;
+                        v = (sign ? -*valIt : *valIt);
                         dest(0,j) += src(0,i) * v;
 
                     }
