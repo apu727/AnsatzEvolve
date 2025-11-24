@@ -1047,6 +1047,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         {
                             if (OutOfSpace[idx])
                                 continue;
+                            //ideally we want to check if these are in order or not. 1 load vs multiple. usually they will be in order but dont know how to guarantee that.
                             dest(0,j+idx) += src(0,is[idx]) * vs[idx];
                         }
 
