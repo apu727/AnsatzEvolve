@@ -66,6 +66,7 @@ struct options
     bool noCompress = false;
     bool onlyEvolve = false;
     bool noLowestEigenValue = false;
+    bool makeRDM = false;
     static void printHelp()
     {
         logger().log("Help:");
@@ -78,6 +79,7 @@ struct options
         logger().log("'filepath XX/YY' ----------- Set the file path to search for resources. filepath should be the complete prefix. E.g. for Hams/H10_Paramaters.dat supply 'filepath Hams/H10'");
         logger().log("'benchmark' ---------------- Benchmarks various operations. Used for development and subject to change");
         logger().log("'NoLowestEigenValue'-------- Don't compute the lowest eigenvalue of the Hamiltonian");
+        logger().log("'makeRDM'------------------- Computes the 1RDM, 2RDM, 1NCORR,2NCORR");
         logger().log("'help' --------------------- Print this");
     }
     static options parse(int argc, char* argv[])
@@ -145,6 +147,10 @@ struct options
             else if (!strcmp(arg,"NoLowestEigenValue"))
             {
                 o.noLowestEigenValue = true;
+            }
+            else if (!strcmp(arg,"makeRDM"))
+            {
+                o.makeRDM = true;
             }
             else if (!strcmp(arg,"help"))
             {
@@ -307,12 +313,15 @@ int main(int argc, char *argv[])
             return 1;
     }
     // Ham.dumpMatrix(filePath);
+    std::shared_ptr<RDM<realNumType,numType>> myRDM = nullptr;
+    if (opt.makeRDM)
+        myRDM = std::make_shared<RDM<realNumType,numType>>(numberOfQubits,comp);
 
 
     realNumType NuclearEnergy = 0;
     LoadNuclearEnergy(NuclearEnergy, filePath);
 
-    TUPSQuantities quantityCalc(Ham,order,numberOfUniqueParameters, NuclearEnergy,filePath); // Can also optimise
+    TUPSQuantities quantityCalc(Ham,myRDM,order,numberOfUniqueParameters, NuclearEnergy,filePath); // Can also optimise
     if (!opt.makeLie)
     {
         FE = std::make_shared<FusedEvolve>(start,Ham,quantityCalc.m_compressMatrix,quantityCalc.m_deCompressMatrix);

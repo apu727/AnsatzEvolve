@@ -68,12 +68,68 @@ public:
 
 };
 
+template <typename dataType,typename vectorType>
+class RDM;
+//dest must be appropriately resized and zeroed
+template<typename dataType, typename vectorType, bool compressed>
+void opKernel(Eigen::Matrix<vectorType,-1,-1> &ret, const vectorType* src, std::vector<typename RDM<dataType, vectorType>::RDMOp> ops, std::shared_ptr<compressor> comp, size_t numQubits);
+
+template <typename dataType,typename vectorType>
+class RDM
+{
+public:
+    struct RDMOp
+    {
+        excOp exc;
+        std::pair<long, long> idxs; // stores where this goes. either 2rdm, 1rdm etc.
+    };
+private:
+    //not adapted for Hermitian Sym!
+    std::vector<RDMOp> m_twoRDMOps;  // a^\dagger_i a^\dagger_k a_j a_l, i > k && j < l
+    std::vector<RDMOp> m_oneRDMOps;  // a^\dagger_i  a_j no restriction
+    std::vector<RDMOp> m_numberCorr2RDMOps; // n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j = -a^\dagger_i a^\dagger_j a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum) No restriction
+    std::vector<RDMOp> m_numberCorr1RDMOps; // n_i = a^\dagger_i  a_i no restriction
+
+    std::shared_ptr<compressor> m_comp;
+    bool m_isCompressed;
+    size_t m_numQubits;
+public:
+    RDM(size_t numberOfQubits, std::shared_ptr<compressor> comp);
+    // std::pair<long,long> get2RDMSymAdaptedIndexFrom4Index(const long i, const long k, const long j, const long l)
+    // {
+    //     bool iGj = i >= j; // i Greater j
+    //     bool kLl = k <= l; // k Less l
+    //     if (iGj && kLl)
+    //         return std::make_pair<long,long>(i*m_numQubits+j,k*m_numQubits+l);
+    //     if (!iGj && kLl)
+    //         return std::make_pair<long,long>(j*m_numQubits+i,k*m_numQubits+l);
+    //     if (iGj && !kLl)
+    //         return std::make_pair<long,long>(i*m_numQubits+j,l*m_numQubits+k);
+    //     if (!iGj && !kLl)
+    //         return std::make_pair<long,long>(j*m_numQubits+i,l*m_numQubits+k);
+    //     __builtin_unreachable();
+    //     return {};
+    // }
+    Eigen::Matrix<vectorType,-1,-1> get2RDM(const vector<vectorType> &src); // ret_{(ik)(jl)} = <a^\dagger_i a^\dagger_k a_j a_l> at (k*m_numQubits+i,j*m_numQubits+l)
+    Eigen::Matrix<vectorType,-1,-1> get1RDM(const vector<vectorType> &src); // ret_{ik} = <a^\dagger_i a_k>
+    Eigen::Matrix<vectorType,-1,-1> getNumberCorr2RDM(const vector<vectorType> &src); // ret_{ik} = n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j
+    Eigen::Matrix<vectorType, -1, 1> getNumberCorr1RDM(const vector<vectorType> &src); // ret_{ik} = n_i = a^\dagger_i  a_i
+};
+
 #ifdef useComplex
 extern template class HamiltonianMatrix<realNumType,realNumType>;
 extern template class HamiltonianMatrix<realNumType,numType>;
 extern template class HamiltonianMatrix<numType,numType>;
+
+extern template class RDM<realNumType,realNumType>;
+extern template class RDM<realNumType,numType>;
+extern template class RDM<numType,numType>;
+
 #else
 extern template class HamiltonianMatrix<numType,numType>;
+extern template class RDM<numType,numType>;
 #endif
+
+
 
 #endif // HAMILTONIANMATRIX_H

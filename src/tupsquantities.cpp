@@ -130,7 +130,7 @@ void writeMatrix(std::string filename, Matrix<std::complex<long double>>::EigenM
     fclose(fp);
 }
 
-TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::vector<std::pair<int,realNumType>> order,
+TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::shared_ptr<RDM<realNumType,numType>> RDM, std::vector<std::pair<int,realNumType>> order,
                                int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile)
 {
     m_file = logfile;
@@ -138,6 +138,8 @@ TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,num
         m_file = stdout;
 
     m_Ham = Ham;
+    m_RDM = RDM;
+
     // m_Ham.copy(Ham);
     // m_HamEm = Ham;
     m_NuclearEnergy = NuclearEnergy;
@@ -307,8 +309,23 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
         writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Hessian",Hmunu);
-        if (!useFusedEvolve)
-            writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric",metricTensor);
+        writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric",metricTensor);
+        if (m_RDM)
+        {
+            Eigen::Matrix<numType,-1,-1> RDM1 = m_RDM->get1RDM(dest);
+            logger().log("RDM1Trace",RDM1.trace());
+            Eigen::Matrix<numType,-1,-1> RDM2 = m_RDM->get2RDM(dest);
+            logger().log("RDM2Trace",RDM2.trace());
+            Eigen::Matrix<numType,-1,-1>  NCORR1 = m_RDM->getNumberCorr1RDM(dest); // Actually a vector (Nx1)
+            Eigen::Matrix<numType,-1,-1> NCORR2 = m_RDM->getNumberCorr2RDM(dest);
+            Eigen::Matrix<numType,-1,-1> VarN = NCORR2;
+            VarN.noalias() += NCORR1 * NCORR1.adjoint();
+            writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_RDM1",RDM1);
+            writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_RDM2",RDM2);
+            writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_NCORR1",NCORR1);
+            writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_NCORR2",NCORR2);
+            writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_VarN",VarN);
+        }
 
         Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> esH(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
         vector<std::complex<realNumType>>::EigenVector hessianEigVal = esH.eigenvalues();

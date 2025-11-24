@@ -26,6 +26,7 @@ class TUPSQuantities
     FILE* m_file = nullptr;
     // sparseMatrix<realNumType,numType> m_Ham;
     std::shared_ptr<HamiltonianMatrix<realNumType,numType>> m_Ham = nullptr;
+    std::shared_ptr<RDM<realNumType,numType>> m_RDM = nullptr;
     // sparseMatrix<realNumType,numType>::EigenSparseMatrix m_HamEm;
     realNumType m_NuclearEnergy = 0;
 
@@ -57,7 +58,7 @@ public:
     sparseMatrix<realNumType,numType>::EigenSparseMatrix m_deCompressMatrix;
     sparseMatrix<realNumType,numType>::EigenSparseMatrix m_normCompressMatrix;
     sparseMatrix<realNumType,numType>::EigenSparseMatrix m_compressMatrix;
-    TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::vector<std::pair<int,realNumType>> order,
+    TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::shared_ptr<RDM<realNumType,numType>> RDM, std::vector<std::pair<int,realNumType>> order,
                    int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile = nullptr);
 
     void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, bool computeLowestEigenValue = true);

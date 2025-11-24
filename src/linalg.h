@@ -44,6 +44,7 @@
 constexpr char explicitPopcount(uint32_t i)
 {
 #warning NOT USING BUILTIN POPCOUNT
+    static_assert(false,"Explicit popcount not 64bit");
     //Magic code that compiles to popcnt https://stackoverflow.com/questions/109023/count-the-number-of-set-bits-in-a-32-bit-integer
     i = i - ((i >> 1) & 0x55555555);        // add pairs of bits
     i = (i & 0x33333333) + ((i >> 2) & 0x33333333);  // quads
@@ -88,12 +89,12 @@ public:
     typedef Eigen::Vector<dataType,Eigen::Dynamic> EigenVector;
 
     template <typename d=derived, std::enable_if_t<!std::is_const_v<d>,bool> = 1>
-    dataType& operator[](int size)
+    dataType& operator[](size_t size)
     {
         static_assert(std::is_same_v<d,derived>, "Dont overwrite the default tempalte parameter in sfinae");
         return at(size);
     }
-    dataType operator[](int size)const{return at(size);}
+    dataType operator[](size_t size)const{return at(size);}
     operator EigenVector () const
     {
         size_t mySize = size();
@@ -270,7 +271,7 @@ public:
 
     Matrix():Matrix(0,0){};
     Matrix(size_t iSize, size_t jSize);
-    Matrix(int value, const std::vector<uint64_t>& iIndex, const std::vector<uint64_t>& jIndex,int size);
+    Matrix(int value, const std::vector<uint64_t>& iIndex, const std::vector<uint64_t>& jIndex,size_t size);
     Matrix(const dataType* buffer, size_t iSize, size_t jSize);
 
 
@@ -327,12 +328,12 @@ public:
 
         dest.resize(lhs.m_iSize,other.m_jSize,true);
 
-        for (int i = 0; i < lhs.m_iSize; i++)
+        for (size_t i = 0; i < lhs.m_iSize; i++)
         {
-            for (int j = 0; j < other.m_jSize; j++)
+            for (size_t j = 0; j < other.m_jSize; j++)
             {
                 dest.m_data[i*dest.m_jSize + j] = 0;
-                for (int k = 0; k < lhs.m_jSize; k++)
+                for (size_t k = 0; k < lhs.m_jSize; k++)
                     dest.m_data[i*dest.m_jSize + j] += lhs.m_data[i*lhs.m_jSize + k]*other.m_data[k*other.m_jSize + j];
             }
         }
@@ -405,7 +406,7 @@ class vector : public Matrix<dataType>
 public:
     typedef Eigen::Vector<dataType,Eigen::Dynamic> EigenVector;
     vector():vector(0){}
-    vector(int size):Matrix<dataType>(1,size){}
+    vector(size_t size):Matrix<dataType>(1,size){}
     vector(const EigenVector& vec);
     vector(const std::vector<dataType>& data);
 
@@ -426,8 +427,8 @@ public:
 
 
 
-    dataType& operator[](int size){assert(this->m_iSize == 1 && this->at(0,size) == this->m_data[size]); return this->m_data[size];}
-    const dataType& operator[](int size)const{assert(this->m_iSize == 1 && this->at(0,size) == this->m_data[size]); return this->m_data[size];}
+    dataType& operator[](size_t size){assert(this->m_iSize == 1 && this->at(0,size) == this->m_data[size]); return this->m_data[size];}
+    const dataType& operator[](size_t size)const{assert(this->m_iSize == 1 && this->at(0,size) == this->m_data[size]); return this->m_data[size];}
     operator EigenVector () const;
 
     realNumType dot(const vector &other) const;

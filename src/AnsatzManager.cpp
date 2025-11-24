@@ -107,7 +107,8 @@ bool stateAnsatzManager::construct()
             {
                 compressor::compressVector<numType>(m_stateVectorCoeffs,m_stateVectorIndexes,m_start,m_compressor);
             }
-            m_TUPSQuantities = std::make_shared<TUPSQuantities>(m_Ham,m_parameterDependency,m_numberOfUniqueParameters, m_nuclearEnergy,m_runPath); //TODO allow for a output file path
+            //TODO RDM implement
+            m_TUPSQuantities = std::make_shared<TUPSQuantities>(m_Ham,nullptr,m_parameterDependency,m_numberOfUniqueParameters, m_nuclearEnergy,m_runPath); //TODO allow for a output file path
             m_compressMatrix = m_TUPSQuantities->m_compressMatrix;
             m_deCompressMatrix = m_TUPSQuantities->m_deCompressMatrix;
             m_FA = std::make_shared<FusedEvolve>(m_start,m_Ham,m_compressMatrix,m_deCompressMatrix);
