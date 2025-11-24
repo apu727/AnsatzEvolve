@@ -87,7 +87,9 @@ private:
     //not adapted for Hermitian Sym!
     std::vector<RDMOp> m_twoRDMOps;  // a^\dagger_i a^\dagger_k a_j a_l, i > k && j < l
     std::vector<RDMOp> m_oneRDMOps;  // a^\dagger_i  a_j no restriction
-    std::vector<RDMOp> m_numberCorr2RDMOps; // n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j = -a^\dagger_i a^\dagger_j a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum) No restriction
+    // n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j = -a^\dagger_i a^\dagger_j a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum) No restriction
+    //Note the sign is fixed up in getNumberCorr2RDM
+    std::vector<RDMOp> m_numberCorr2RDMOps;
     std::vector<RDMOp> m_numberCorr1RDMOps; // n_i = a^\dagger_i  a_i no restriction
 
     std::shared_ptr<compressor> m_comp;

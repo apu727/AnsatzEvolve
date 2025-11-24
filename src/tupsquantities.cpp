@@ -319,7 +319,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
             Eigen::Matrix<numType,-1,-1>  NCORR1 = m_RDM->getNumberCorr1RDM(dest); // Actually a vector (Nx1)
             Eigen::Matrix<numType,-1,-1> NCORR2 = m_RDM->getNumberCorr2RDM(dest);
             Eigen::Matrix<numType,-1,-1> VarN = NCORR2;
-            VarN.noalias() += NCORR1 * NCORR1.adjoint();
+            VarN.noalias() -= NCORR1 * NCORR1.adjoint();
             writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_RDM1",RDM1);
             writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_RDM2",RDM2);
             writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_NCORR1",NCORR1);

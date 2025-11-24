@@ -1358,6 +1358,19 @@ Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::getNumberCorr2RDM(c
         opKernel<dataType,vectorType,true>(ret,src.begin(),m_numberCorr2RDMOps,m_comp,m_numQubits);
     else
         opKernel<dataType,vectorType,false>(ret,src.begin(),m_numberCorr2RDMOps,m_comp,m_numQubits);
+
+    //Need to fix up the signs.
+    for (size_t i = 0; i < m_numQubits; i++)
+    {
+        for (size_t j = 0; j < m_numQubits; j++)
+        {
+            if (i != j)
+            {
+                // std::pair<long,long> idxs = std::make_pair(i,j);
+                ret(i,j) *= -1;
+            }
+        }
+    }
     return ret;
 }
 
