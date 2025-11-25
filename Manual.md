@@ -346,7 +346,7 @@ Possible outputs are:
 
   This is the object: ```<\psi|a^+_i a_i|\psi>```
   
-  It is a Nx1 matrix. 
+  It is a NSOx1 matrix. 
 
 * ```NCORR2```
 
@@ -359,6 +359,8 @@ Possible outputs are:
 TODO complex mode check these objects. 
 
 From the RDM1 and RDM2 the energy can be computed at a later date. See ```Test2RDM.py```
+
+Note that all of these matrices are 'Number of spin orbitals' ```(NSO)``` in each direction. The first Number of Molecular orbital ```(NMO)``` are the down spin electrons. The upper ```NMO``` are the up spin electrons. 
 
 
 
