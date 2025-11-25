@@ -76,6 +76,16 @@ The possible command line options can be listed with ```./cppAnsatzSynth help```
   
   Specifying this means that the lowest eigenvalue is not calculated if ```writeproperties``` is specified. The Lowest eigenvalue is also not calculated if the Hamiltonian has more rows than 100000. The Hamiltonian size is logged as:  ```Matrix linear size: XXXX``` to stderr.
 
+* ```makeRDM``` 
+
+  Computes the 1RDM, 2RDM, 1NCORR,2NCORR. See Lower in manual
+  
+* ```noHess``` 
+  Dont compute the Hessian when writing properties. This can be slow for very large systems. This also disables the Metric and associated properties. Gradient is always computed
+
+* ```noRDM2```
+  Dont compute the RDM2 when writing properties, makeRDM must be set for this to have any effect. The RDM2 can be slow for very large systems if youre not interested in this set this. 
+  
 * ```help```
   
   Prints the help
@@ -296,6 +306,62 @@ Note the spin requirement that ```Spin p == Spin q``` and ```Spin i == Spin l &&
 Note also that there is **no** permutational symmetry in the saved binary files. The dimension of ```oneEInts``` is therefore ```N^2```.
 ```twoEInts``` is ```N^4```
 If you're working on computers with differing endianness, make sure the binary format is saved correctly for the target architecture.
+
+# Generated Files
+Each output generated two files. One with ```.Matbin``` This is a dump of the relevant matrix in binary format. ```.Matcsv``` is also generated. This is a dump of the relevant matrix as a CSV. 
+Normally ```.Matbin``` can be read in to python using:
+
+```np.fromfile("FILEPATH",np.float64,qubits*qubits).reshape(qubits,qubits)```
+
+Take care with endianess if that is relevant to you.
+Other outputs are: 
+* ```.LMatbin``` This is the data in ```long double``` format. See exact compiler for this datatype.
+* ```.CMatbin``` This is the data in ```std::complex<double>``` format. This is equivalent to ```np.complex128```
+
+Possible outputs are:
+
+* ```Hessian```
+
+  This is the Hessian. ```dE^2/d\theta_i \theta_j```
+
+* ```Metric```
+  
+  This is the Metric tensor. ```<d\psi/d\theta_i | <d\psi/d\theta_j>```
+
+* ```RDM1```
+  
+  This is the one particle reduced density matrix ```<\psi | a^+_i a_j| \psi>```
+
+* ```RDM2```
+  
+  This is the two particle reduced density matrix ```<\psi | a^+_i a^+_j a_k a_l| \psi>```
+
+  It is combined into a single matrix instead of a four index tensor via:
+  
+  ```<\psi | a^+_i a^+_j a_k a_l| \psi> = RDM2[j*N +i][k*N + l]```
+  
+  Where ```N``` is the number of spinorbitals. The weird ordering is such that the diagonal has no signs associated with it. 
+
+* ```NCORR1```
+
+  This is the object: ```<\psi|a^+_i a_i|\psi>```
+  
+  It is a Nx1 matrix. 
+
+* ```NCORR2```
+
+  This is the object: ```<\psi|a^+_i a_i a^+_j a_j|\psi>```
+  
+* ```VarN```
+ 
+  This is the object: ```VarN_{ij} = NCORR2_{ij} - NCORR1_{i} NCORR1_{j}```
+  
+TODO complex mode check these objects. 
+
+From the RDM1 and RDM2 the energy can be computed at a later date. See ```Test2RDM.py```
+
+
+
 
 
 
