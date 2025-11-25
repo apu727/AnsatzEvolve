@@ -529,6 +529,8 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
         for (std::uint_fast8_t c = 0; c < numberOfQubits; c++)
         {
             // uint64_t jBasisState = (1ul<<c);
+            if ((a < (numberOfQubits/2)) != (c < (numberOfQubits/2)))
+                continue;
 
             realNumType Energy = oneEInts(a % (numberOfQubits/2), c % (numberOfQubits/2));
             if (abs(Energy) > tol)//TODO threshold
@@ -618,6 +620,10 @@ void HamiltonianMatrix<dataType, vectorType>::postProcessOperators()
         {
             newOps.push_back(m_operators[i]);
             newVals.push_back(m_vals[i]);
+        }
+        else
+        {
+            fprintf(stderr,"Op does nothing: c: %zu, d: %zu\n",m_operators[i].create,m_operators[i].destroy);
         }
     }
     logger().log("Ops after", newOps.size());
