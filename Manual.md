@@ -81,9 +81,11 @@ The possible command line options can be listed with ```./cppAnsatzSynth help```
   Computes the 1RDM, 2RDM, 1NCORR,2NCORR. See Lower in manual
   
 * ```noHess``` 
+
   Dont compute the Hessian when writing properties. This can be slow for very large systems. This also disables the Metric and associated properties. Gradient is always computed
 
 * ```noRDM2```
+
   Dont compute the RDM2 when writing properties, makeRDM must be set for this to have any effect. The RDM2 can be slow for very large systems if youre not interested in this set this. 
   
 * ```help```
