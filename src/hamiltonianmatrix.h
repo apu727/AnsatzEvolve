@@ -87,8 +87,12 @@ private:
     //not adapted for Hermitian Sym!
     std::vector<RDMOp> m_twoRDMOps;  // a^\dagger_i a^\dagger_k a_j a_l, i > k && j < l
     std::vector<RDMOp> m_oneRDMOps;  // a^\dagger_i  a_j no restriction
-    // n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j = -a^\dagger_i a^\dagger_j a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum) No restriction
-    //Note the sign is fixed up in getNumberCorr2RDM
+    //m_numberCorr2RDMOps = n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j = -a^\dagger_i a^\dagger_j a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum)
+    //                                                                 = a^\dagger_j a^\dagger_i a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum)
+    //Note that we require j>i or j<i in the two electron term. For it to be normal ordered (and therefore have the correct phase when applied to a basis state) the second swap must be performed.
+    // This gives two cases: a^\dagger_2 a^\dagger_1 a_1 a_2 - Correct normal ordered
+    //                       a^\dagger_1 a^\dagger_2 a_2 a_1 -- Wrong normal ordered but double error cancels.
+    // Therefore there are no extra signs to take care of.
     std::vector<RDMOp> m_numberCorr2RDMOps;
     std::vector<RDMOp> m_numberCorr1RDMOps; // n_i = a^\dagger_i  a_i no restriction
 
@@ -97,22 +101,10 @@ private:
     size_t m_numQubits;
 public:
     RDM(size_t numberOfQubits, std::shared_ptr<compressor> comp);
-    // std::pair<long,long> get2RDMSymAdaptedIndexFrom4Index(const long i, const long k, const long j, const long l)
-    // {
-    //     bool iGj = i >= j; // i Greater j
-    //     bool kLl = k <= l; // k Less l
-    //     if (iGj && kLl)
-    //         return std::make_pair<long,long>(i*m_numQubits+j,k*m_numQubits+l);
-    //     if (!iGj && kLl)
-    //         return std::make_pair<long,long>(j*m_numQubits+i,k*m_numQubits+l);
-    //     if (iGj && !kLl)
-    //         return std::make_pair<long,long>(i*m_numQubits+j,l*m_numQubits+k);
-    //     if (!iGj && !kLl)
-    //         return std::make_pair<long,long>(j*m_numQubits+i,l*m_numQubits+k);
-    //     __builtin_unreachable();
-    //     return {};
-    // }
-    Eigen::Matrix<vectorType,-1,-1> get2RDM(const vector<vectorType> &src); // ret_{(ik)(jl)} = <a^\dagger_i a^\dagger_k a_j a_l> at (k*m_numQubits+i,j*m_numQubits+l)
+
+    // ret_{(ji)(kl)} = <a^\dagger_i a^\dagger_j a_k a_l> at (j*m_numQubits+i,k*m_numQubits+l)
+    // The (ji) ordering is such that when (kl) == (ji) there are no phases.
+    Eigen::Matrix<vectorType,-1,-1> get2RDM(const vector<vectorType> &src);
     Eigen::Matrix<vectorType,-1,-1> get1RDM(const vector<vectorType> &src); // ret_{ik} = <a^\dagger_i a_k>
     Eigen::Matrix<vectorType,-1,-1> getNumberCorr2RDM(const vector<vectorType> &src); // ret_{ik} = n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j
     Eigen::Matrix<vectorType, -1, 1> getNumberCorr1RDM(const vector<vectorType> &src); // ret_{ik} = n_i = a^\dagger_i  a_i

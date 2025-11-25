@@ -1197,6 +1197,12 @@ RDM<dataType, vectorType>::RDM(size_t numberOfQubits, std::shared_ptr<compressor
     }
     m_oneRDMOps.shrink_to_fit();
     //m_numberCorr2RDMOps = n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j = -a^\dagger_i a^\dagger_j a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum)
+    //                                                                 = a^\dagger_j a^\dagger_i a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum)
+    //Note that we require j>i or j<i in the two electron term. For it to be normal ordered (and therefore have the correct phase when applied to a basis state) the second swap must be performed.
+    // This gives two cases: a^\dagger_2 a^\dagger_1 a_1 a_2 - Correct normal ordered
+    //                       a^\dagger_1 a^\dagger_2 a_2 a_1 -- Wrong normal ordered but double error cancels.
+    // Therefore there are no extra signs to take care of.
+
     m_numberCorr2RDMOps.clear();
     m_numberCorr2RDMOps.reserve(m_numQubits*m_numQubits);
     for (size_t i = 0; i < m_numQubits; i++)
@@ -1209,6 +1215,7 @@ RDM<dataType, vectorType>::RDM(size_t numberOfQubits, std::shared_ptr<compressor
                 uint64_t destroy = (1ul<<i) | (1ul<<j);
                 uint64_t signMask = ((1ul<<i)-1) ^ ((1ul<<j)-1) ^((1ul<<i)-1) ^((1ul<<j)-1);
                 signMask = signMask & ~((1ul<<i) | (1ul<<j) | (1ul<<i) | (1ul<<j));
+                assert(signMask == 0);
                 std::pair<long,long> idxs = std::make_pair(i,j);
                 RDMOp op =
                     {
@@ -1296,7 +1303,7 @@ Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::get2RDM(const vecto
             {
                 for (size_t l = j+1; l < m_numQubits; l++)
                 {
-                    std::pair<long,long> idxs =  std::make_pair(k*m_numQubits + i,j*m_numQubits + l); //   a^+_i a^+_k a_j a_l
+                    std::pair<long,long> idxs =  std::make_pair(k*m_numQubits + i,j*m_numQubits + l); //  a^+_i a^+_k a_j a_l
                     std::pair<long,long> idxs2 = std::make_pair(k*m_numQubits + i,l*m_numQubits + j); // -a^+_i a^+_k a_l a_j
                     std::pair<long,long> idxs3 = std::make_pair(i*m_numQubits + k,j*m_numQubits + l); // -a^+_k a^+_i a_j a_l
                     std::pair<long,long> idxs4 = std::make_pair(i*m_numQubits + k,l*m_numQubits + j); //  a^+_k a^+_i a_l a_j
@@ -1307,6 +1314,7 @@ Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::get2RDM(const vecto
             }
         }
     }
+    // ret is now stored as ret_{(ji)(kl)} = <a^\dagger_i a^\dagger_j a_k a_l> at (j*m_numQubits+i,k*m_numQubits+l)
     return ret;
 }
 
@@ -1359,18 +1367,18 @@ Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::getNumberCorr2RDM(c
     else
         opKernel<dataType,vectorType,false>(ret,src.begin(),m_numberCorr2RDMOps,m_comp,m_numQubits);
 
-    //Need to fix up the signs.
-    for (size_t i = 0; i < m_numQubits; i++)
-    {
-        for (size_t j = 0; j < m_numQubits; j++)
-        {
-            if (i != j)
-            {
-                // std::pair<long,long> idxs = std::make_pair(i,j);
-                ret(i,j) *= -1;
-            }
-        }
-    }
+    // //Need to fix up the signs.
+    // for (size_t i = 0; i < m_numQubits; i++)
+    // {
+    //     for (size_t j = 0; j < m_numQubits; j++)
+    //     {
+    //         if (i != j)
+    //         {
+    //             // std::pair<long,long> idxs = std::make_pair(i,j);
+    //             ret(i,j) *= -1;
+    //         }
+    //     }
+    // }
     return ret;
 }
 
