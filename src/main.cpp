@@ -67,6 +67,8 @@ struct options
     bool onlyEvolve = false;
     bool noLowestEigenValue = false;
     bool makeRDM = false;
+    bool hessian = true;
+    bool RDM2 = true;
     static void printHelp()
     {
         logger().log("Help:");
@@ -80,6 +82,8 @@ struct options
         logger().log("'benchmark' ---------------- Benchmarks various operations. Used for development and subject to change");
         logger().log("'NoLowestEigenValue'-------- Don't compute the lowest eigenvalue of the Hamiltonian");
         logger().log("'makeRDM'------------------- Computes the 1RDM, 2RDM, 1NCORR,2NCORR");
+        logger().log("'noHess'-------------------- Dont compute the Hessian when writing properties");
+        logger().log("'noRDM2'-------------------- Dont compute the RDM2 when writing properties, makeRDM must be set for this to have any effect");
         logger().log("'help' --------------------- Print this");
     }
     static options parse(int argc, char* argv[])
@@ -151,6 +155,14 @@ struct options
             else if (!strcmp(arg,"makeRDM"))
             {
                 o.makeRDM = true;
+            }
+            else if (!strcmp(arg,"noHess"))
+            {
+                o.hessian = false;
+            }
+            else if (!strcmp(arg,"noRDM2"))
+            {
+                o.RDM2 = false;
             }
             else if (!strcmp(arg,"help"))
             {
@@ -430,6 +442,14 @@ int main(int argc, char *argv[])
 
 
     if (opt.writeProperties)
-        quantityCalc.writeProperties(myAnsatz,FE,rotationPaths, !opt.noLowestEigenValue);
+    {
+        TUPSQuantitiesOptions TUPSOPT;
+        TUPSOPT.RDM2 = opt.RDM2;
+        TUPSOPT.hessian = opt.hessian;
+        TUPSOPT.makeRDM = opt.makeRDM;
+        TUPSOPT.noLowestEigenValue = opt.noLowestEigenValue;
+
+        quantityCalc.writeProperties(myAnsatz,FE,rotationPaths, TUPSOPT);
+    }
     return 0;
 }

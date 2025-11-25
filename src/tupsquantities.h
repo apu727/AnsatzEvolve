@@ -16,6 +16,13 @@
 #include <vector>
 #include <string>
 
+struct TUPSQuantitiesOptions
+{
+    bool noLowestEigenValue = false;
+    bool makeRDM = false; // if m_RDM != nullptr then this has an effect
+    bool hessian = true;
+    bool RDM2 = true;
+};
 
 class TUPSQuantities
 {
@@ -61,7 +68,7 @@ public:
     TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::shared_ptr<RDM<realNumType,numType>> RDM, std::vector<std::pair<int,realNumType>> order,
                    int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile = nullptr);
 
-    void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, bool computeLowestEigenValue = true);
+    void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, TUPSQuantitiesOptions opts);
     void OptimiseTupsLBFGS(sparseMatrix<realNumType,numType> &Ham, std::vector<ansatz::rotationElement> &rotationPath,
                       stateAnsatz& myAnsatz, bool blanking = false);
 
