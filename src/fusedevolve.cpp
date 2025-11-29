@@ -2102,6 +2102,8 @@ void RunFuseNOnTheFly(realNumType* startVec, const realNumType* angles, size_t n
             indexType rotIdx = 0;
             while(rotIdx < numberToFuse && (activeRotIdx & (1<<rotIdx)) == 0)
                 ++rotIdx;
+            if (rotIdx >= numberToFuse)
+                __builtin_unreachable();
             currentMap[0] = currentBasisState;
 
             uint64_t currentSignsStep = 0;
