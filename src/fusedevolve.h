@@ -9,16 +9,19 @@
 #include "operatorpool.h"
 #include <vector>
 // #define MakeParallelEvolveCode
+constexpr bool fuseOnTheFly = true; // Makes the localVector on the fly.
+
 class baseAnsatz;
 
 class FusedEvolve
 {
     std::vector<size_t> m_commuteBoundaries;
-    std::vector<stateRotate::exc> m_excs;
+    std::vector<stateRotate::exc> m_excs; // the normal excs
+    std::vector<stateRotate::exc> m_permExcs; // permuted excs.
     std::vector<size_t> m_excPerm; // m_excPerm[i] = j means that the jth canonical ordered excitation is at position i
     std::vector<size_t> m_excInversePerm; // m_excInversePerm[j] = i means that the jth canonical ordered excitation is at position i
     bool m_excsCached;
-    void regenCache();
+
     static constexpr int8_t maxFuse =
 #ifdef MakeParallelEvolveCode
         4;
@@ -46,7 +49,7 @@ class FusedEvolve
 
     std::vector<void*> m_fusedAnsatzes; // void* to avoid all the template horribleness
     std::vector<int8_t> m_fusedSizes;
-    void cleanup();
+
 
     vector<numType> m_start; // this could be sparse and reduce the footprint.
     std::shared_ptr<HamiltonianMatrix<realNumType,numType>> m_Ham;
@@ -56,6 +59,9 @@ class FusedEvolve
     Eigen::SparseMatrix<realNumType, Eigen::RowMajor> m_compressMatrix; //Stores equivalent parameters
     Eigen::SparseMatrix<realNumType, Eigen::RowMajor> m_compressMatrixPsi; //Stores equivalent parameters and also an extra row for psi to calculate hpsi easily
     Eigen::SparseMatrix<realNumType, Eigen::RowMajor> m_deCompressMatrix; //Stores equivalent parameters
+
+    void regenCache();
+    void cleanup();
 
 public:
     FusedEvolve(const vector<numType> &start, std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham,

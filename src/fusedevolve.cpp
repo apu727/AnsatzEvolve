@@ -620,7 +620,28 @@ auto setupFuseNDiagonal(const std::vector<stateRotate::exc>& excPath, const vect
     return myFusedAnsatz;
 }
 
-#define DiagonalEvolve(offset)
+#define RunFuseNKernel(indexInUnroll)\
+    scratchSpace[2*indexInUnroll + 0] = startVec[currLocalVector[indexInUnroll + doneCount]];\
+    scratchSpace[2*indexInUnroll + 1] = startVec[currLocalVector[indexInUnroll + doneCount]+1];\
+    startVec[currLocalVector[indexInUnroll + doneCount]] = -S*(scratchSpace[2*indexInUnroll + 1]) + C*scratchSpace[2*indexInUnroll + 0];\
+    startVec[currLocalVector[indexInUnroll + doneCount]+1] = S*(scratchSpace[2*indexInUnroll + 0]) + C*scratchSpace[2*indexInUnroll + 1];\
+    if constexpr(BraketWithTangentOfResult)\
+    {\
+        scratchSpacehPsi[2*indexInUnroll + 0] = hPsi[currLocalVector[indexInUnroll + doneCount]];\
+        scratchSpacehPsi[2*indexInUnroll + 1] = hPsi[currLocalVector[indexInUnroll + doneCount]+1];\
+        hPsi[currLocalVector[indexInUnroll + doneCount]] = -S*(scratchSpacehPsi[2*indexInUnroll + 1]) + C*scratchSpacehPsi[2*indexInUnroll + 0];\
+        hPsi[currLocalVector[indexInUnroll + doneCount]+1] = S*(scratchSpacehPsi[2*indexInUnroll + 0]) + C*scratchSpacehPsi[2*indexInUnroll + 1];\
+        accumulatedDot -= scratchSpacehPsi[2*indexInUnroll + 0] * scratchSpace[2*indexInUnroll + 1];\
+        accumulatedDot += scratchSpacehPsi[2*indexInUnroll + 1] * scratchSpace[2*indexInUnroll + 0];\
+    }\
+    if constexpr(storeTangent)\
+    {\
+        for (uint8_t r = 0; r < numberOfActiveRots; r++)\
+        {\
+            tangentStore[activeRots[r]+i][currLocalVector[indexInUnroll + doneCount]] = -scratchSpace[2*indexInUnroll + 1];\
+            tangentStore[activeRots[r]+i][currLocalVector[indexInUnroll + doneCount]+1] = scratchSpace[2*indexInUnroll + 0];\
+        }\
+    }
 
 template<typename indexType, indexType numberToFuse, bool BraketWithTangentOfResult, bool storeTangent, bool parallelise = false,
          //Various expressions that are needed to get the types right
@@ -628,32 +649,9 @@ template<typename indexType, indexType numberToFuse, bool BraketWithTangentOfRes
          typename localVector = std::vector<uint64_t>,
          typename fusedDiagonalAnsatz = std::array<localVector,numberOfPairsOfRotations>>
 
-#define RunFuseNKernel(indexInUnroll)\
-scratchSpace[2*indexInUnroll + 0] = startVec[currLocalVector[indexInUnroll + doneCount]];\
-scratchSpace[2*indexInUnroll + 1] = startVec[currLocalVector[indexInUnroll + doneCount]+1];\
-startVec[currLocalVector[indexInUnroll + doneCount]] = -S*(scratchSpace[2*indexInUnroll + 1]) + C*scratchSpace[2*indexInUnroll + 0];\
-startVec[currLocalVector[indexInUnroll + doneCount]+1] = S*(scratchSpace[2*indexInUnroll + 0]) + C*scratchSpace[2*indexInUnroll + 1];\
-if constexpr(BraketWithTangentOfResult)\
-{\
-    scratchSpacehPsi[2*indexInUnroll + 0] = hPsi[currLocalVector[indexInUnroll + doneCount]];\
-    scratchSpacehPsi[2*indexInUnroll + 1] = hPsi[currLocalVector[indexInUnroll + doneCount]+1];\
-    hPsi[currLocalVector[indexInUnroll + doneCount]] = -S*(scratchSpacehPsi[2*indexInUnroll + 1]) + C*scratchSpacehPsi[2*indexInUnroll + 0];\
-    hPsi[currLocalVector[indexInUnroll + doneCount]+1] = S*(scratchSpacehPsi[2*indexInUnroll + 0]) + C*scratchSpacehPsi[2*indexInUnroll + 1];\
-    accumulatedDot -= scratchSpacehPsi[2*indexInUnroll + 0] * scratchSpace[2*indexInUnroll + 1];\
-    accumulatedDot += scratchSpacehPsi[2*indexInUnroll + 1] * scratchSpace[2*indexInUnroll + 0];\
-}\
-if constexpr(storeTangent)\
-{\
-    for (uint8_t r = 0; r < numberOfActiveRots; r++)\
-    {\
-        tangentStore[activeRots[r]+i][currLocalVector[indexInUnroll + doneCount]] = -scratchSpace[2*indexInUnroll + 1];\
-        tangentStore[activeRots[r]+i][currLocalVector[indexInUnroll + doneCount]+1] = scratchSpace[2*indexInUnroll + 0];\
-    }\
-}
-
 void RunFuseNDiagonal(fusedDiagonalAnsatz* const myFusedAnsatz, realNumType* startVec, const realNumType* angles, size_t nAngles,
-              realNumType* hPsi = nullptr, realNumType** result = nullptr/*result is array of pointers to storage places. The array has length nAngles. IT IS NOT ZEROED BY THIS FUNCTION!*/,
-              realNumType** tangentStore = nullptr/* tangents are stored before the evolution of each fused gate in myFusedAnsatz*/)
+                      realNumType* hPsi = nullptr, realNumType** result = nullptr/*result is array of pointers to storage places. The array has length nAngles. IT IS NOT ZEROED BY THIS FUNCTION!*/,
+                      realNumType** tangentStore = nullptr/* tangents are stored before the evolution of each fused gate in myFusedAnsatz*/)
 {
     static_assert(numberToFuse < sizeof(indexType)*8);
     for (size_t i = 0; i < nAngles; i+= numberToFuse)
@@ -716,6 +714,206 @@ void RunFuseNDiagonal(fusedDiagonalAnsatz* const myFusedAnsatz, realNumType* sta
         }
     }
 }
+
+template<bool isComplex>
+class compressedIterator
+{
+    //Helper class for iterating over the basis states in sampleVec. Each call to next provided the next bitstring.
+    //valid() used to check for end of iteration
+    //next() get next basis state
+    //count() get how many basis states have been provided
+    //reset() reset to start.
+    size_t vecSize = 0;
+    size_t currPos = 0;
+    bool complexIter = false; // the two to one nature of the complex iterations
+
+    std::shared_ptr<compressor> comp;
+    bool isCompressed = false;
+public:
+    compressedIterator(size_t vecSize, std::shared_ptr<compressor> comp)
+    {
+        this->vecSize = vecSize;
+        this->comp = comp;
+        if (comp) isCompressed = true;
+    }
+    bool valid(){return currPos < vecSize;}
+    uint64_t get()
+    {
+        if (currPos < vecSize)
+        {
+            uint64_t basisState = currPos;
+            if constexpr(isComplex)
+            {
+                if (isCompressed)
+                    comp->deCompressIndex(currPos,basisState);
+                if (complexIter)
+                    return (basisState<<1) +1;
+                else
+                    return basisState<<1;
+            }
+            else
+            {
+                if (isCompressed)
+                    comp->deCompressIndex(currPos,basisState);
+                return basisState;
+            }
+        }
+        return -1;
+    }
+    uint64_t next()
+    {
+        if constexpr (isComplex)
+        {
+            if (complexIter)
+            {
+                currPos++;
+                complexIter = false;
+            }
+            else
+                complexIter = true;
+        }
+        else
+            currPos++;
+
+        return get();
+    }
+    size_t count()
+    {
+        if constexpr (isComplex)
+            return currPos*2 + (complexIter? 1 : 0);
+        else
+            return currPos;
+    }
+    void reset()
+    {
+        currPos = 0;
+        complexIter = 0;
+    }
+};
+
+template<typename indexType, indexType numberToFuse, bool BraketWithTangentOfResult, bool storeTangent, bool parallelise = false,
+         //Various expressions that are needed to get the types right
+         indexType numberOfPairsOfRotations = 1<<numberToFuse,
+         typename localVector = std::vector<uint64_t>,
+         typename fusedDiagonalAnsatz = std::array<localVector,numberOfPairsOfRotations>>
+
+void RunFuseNDiagonalOnTheFly(realNumType* startVec, const realNumType* angles, size_t nAngles,
+                      const stateRotate::exc* excPath, const vector<numType>& sampleVec,
+                      realNumType* hPsi = nullptr, realNumType** result = nullptr/*result is array of pointers to storage places. The array has length nAngles. IT IS NOT ZEROED BY THIS FUNCTION!*/,
+                      realNumType** tangentStore = nullptr/* tangents are stored before the evolution of each fused gate in myFusedAnsatz*/)
+{
+    static_assert(numberToFuse < sizeof(indexType)*8);
+
+    //Diagonal elements always commute. Theyre diagonal...
+    //Further they act as scalars on each given basis state. Therefore trivially they commute. Further the angles can be added
+    constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
+    if (!isComplex)
+        releaseAssert(false,"only complex exc can be diagonal and antihermitian");
+
+    //Each element of the array is a specific set of rotations active. Each element of the vector is a repetition
+    std::shared_ptr<compressor> comp;
+    bool isCompressed = sampleVec.getIsCompressed(comp);
+
+
+    compressedIterator<isComplex> basisStateIterator(sampleVec.size(),comp);
+
+    for (size_t i = 0; i < nAngles; i+= numberToFuse)
+    {
+        std::array<stateRotate::exc,numberToFuse> rots;
+        for (indexType idx = 0; idx < numberToFuse; idx++)
+        {
+            rots[idx] = excPath[i+idx];
+            releaseAssert(rots[idx].isDiagonal(),"rots[idx].isDiagonal()");
+        }
+
+        //If rot0 and rot2 are active then the index is 0b101. Note that 0b000 is always empty
+        basisStateIterator.reset();
+        for(uint64_t currentBasisState = basisStateIterator.get(); basisStateIterator.valid(); currentBasisState = basisStateIterator.next())
+        {
+            //TODO check the fermionic signs for the complex rotations!!!
+            if (currentBasisState & 1)
+                continue;//These are already the complex element and will lead to a negative phase
+
+            std::array<std::pair<uint64_t,bool>,numberToFuse> initialLinks;
+            indexType numberOfActiveRots = 0;
+            uint8_t activeRots[numberToFuse];
+
+            for (uint8_t idx = 0; idx < numberToFuse; idx++)
+            {
+                initialLinks[idx] = applyExcToBasisState_(currentBasisState,rots[idx]);
+                if (initialLinks[idx].first != currentBasisState)
+                {
+                    releaseAssert(initialLinks[idx].second,"initialLinks[idx].second");
+                    activeRots[idx] = idx;
+                    ++numberOfActiveRots;
+                    releaseAssert(currentBasisState == (initialLinks[idx].first & -2),"currentBasisState == (initialLinks[idx].first & -2)");
+                }
+            }
+            //All not active
+            if (numberOfActiveRots == 0)
+                continue;
+
+            //currentBasisState is active on activeRotIdx, We have lost the ability to unroll as only one basis state is supplied at a time.
+            if (isCompressed)
+            {
+                bool __attribute__ ((unused))complexOffset = currentBasisState & 1;
+                releaseAssert(complexOffset == false,"complexOffset == false");
+                comp->compressIndex(currentBasisState>>1,currentBasisState);
+                currentBasisState = currentBasisState << 1;
+            }
+
+            //Do the evolution
+            realNumType totalAngle = 0;
+
+            for (indexType idx = 0; idx < numberOfActiveRots; idx++)
+            {
+                totalAngle += angles[i+activeRots[idx]];
+            }
+            realNumType S;
+            realNumType C;
+            mysincos(totalAngle,&S,&C); // Its unclear whether this is faster or by expanding (cos + sin)(cos + sin). Unlikely to be bottleneck?
+
+
+
+            realNumType scratchSpace[2];
+            realNumType scratchSpacehPsi[2];
+            realNumType accumulatedDot = 0;
+            //Modified RunFuseNKernel(0), replaced currLocalVector[0 + doneCount] -> currentBasisState
+
+            scratchSpace[2*0 + 0] = startVec[currentBasisState];
+            scratchSpace[2*0 + 1] = startVec[currentBasisState+1];
+            startVec[currentBasisState] = -S*(scratchSpace[2*0 + 1]) + C*scratchSpace[2*0 + 0];
+            startVec[currentBasisState+1] = S*(scratchSpace[2*0 + 0]) + C*scratchSpace[2*0 + 1];
+            if constexpr(BraketWithTangentOfResult)
+            {
+                scratchSpacehPsi[2*0 + 0] = hPsi[currentBasisState];
+                scratchSpacehPsi[2*0 + 1] = hPsi[currentBasisState+1];
+                hPsi[currentBasisState] = -S*(scratchSpacehPsi[2*0 + 1]) + C*scratchSpacehPsi[2*0 + 0];
+                hPsi[currentBasisState+1] = S*(scratchSpacehPsi[2*0 + 0]) + C*scratchSpacehPsi[2*0 + 1];
+                accumulatedDot -= scratchSpacehPsi[2*0 + 0] * scratchSpace[2*0 + 1];
+                accumulatedDot += scratchSpacehPsi[2*0 + 1] * scratchSpace[2*0 + 0];
+            }
+            if constexpr(storeTangent)
+            {
+                for (uint8_t r = 0; r < numberOfActiveRots; r++)
+                {
+                    tangentStore[activeRots[r]+i][currentBasisState] = -scratchSpace[2*0 + 1];
+                    tangentStore[activeRots[r]+i][currentBasisState+1] = scratchSpace[2*0 + 0];
+                }
+            }
+
+            if constexpr(BraketWithTangentOfResult)
+            {
+                for (uint8_t r = 0; r < numberOfActiveRots; r++)
+                {
+                    (*result[activeRots[r]+i]) += accumulatedDot;
+                }
+            }
+        }
+    }
+}
+
+
 template<typename indexType, indexType numberToFuse>
 auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numType>& startVec)
 {//Note it is assumed that all Excs commute in ExcPath
@@ -1826,12 +2024,732 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
     }
 }
 
+
+
+//An amalgamation of setupFuseN and runFuseN. See those functions aswell.
+
+template<typename indexType, indexType numberToFuse, bool BraketWithTangentOfResult, bool storeTangent, bool parallelise = false,
+         //Various expressions that are needed to get the types right
+         indexType localVectorSize = 1<<numberToFuse,
+         typename signMap = std::array<bool,(localVectorSize/2)*numberToFuse>, //true means +ve
+         typename localVectorMap = std::array<uint64_t,localVectorSize>,
+         typename localVector = std::vector<std::pair<localVectorMap,signMap>>,
+         typename fusedAnsatz = /*std::vector<*/std::array<localVector,localVectorSize>>/*>*/
+
+void RunFuseNOnTheFly(realNumType* startVec, const realNumType* angles, size_t nAngles,
+                      const stateRotate::exc* excPath, const vector<numType>& sampleVec,
+                      realNumType* hPsi = nullptr, realNumType** result = nullptr/*result is array of pointers to storage places. The array has length nAngles. IT IS NOT ZEROED BY THIS FUNCTION!*/,
+                      realNumType** tangentStore = nullptr/* tangents are stored before the evolution of each fused gate in myFusedAnsatz*/)
+{
+    static_assert(numberToFuse < sizeof(indexType)*8);
+    releaseAssert(nAngles % numberToFuse == 0,"nAngles % numberToFuse == 0");
+    constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
+
+    std::shared_ptr<compressor> comp;
+    bool isCompressed = sampleVec.getIsCompressed(comp);
+
+    compressedIterator<isComplex> basisStateIterator(sampleVec.size(),comp);
+
+    realNumType scratchSpace[localVectorSize];
+    realNumType scratchSpacehPsi[localVectorSize];
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    if constexpr (BraketWithTangentOfResult)
+    {
+        if (hPsi == nullptr || result == nullptr)
+            releaseAssert(false,"(hPsi == nullptr || result == nullptr) == true when BraketWithTangentOfResult == true");
+    }
+    else
+    {
+        //These are dereferenced but their results are not used
+        result = new realNumType*[nAngles];
+        // toBraKet = new Matrix<numType>(1,rotationPath.size());
+    }
+    if constexpr(storeTangent)
+    {
+        releaseAssert(tangentStore != nullptr,"tangentStore != nullptr when storeTangent == true");
+    }
+
+    // if constexpr (BraketWithTangentOfResult)
+    // {
+    //     for (indexType i = 0; i < nAngles; i++)
+    //         *(result[i]) = 0;
+
+    // }
+    assert(nAngles % numberToFuse == 0);
+    for (size_t i = 0; i < nAngles; i+=numberToFuse)
+    {
+        std::array<realNumType,numberToFuse> sines;
+        std::array<realNumType,numberToFuse> cosines;
+        for (indexType idx = 0; idx < numberToFuse; idx++)
+        {
+            mysincos(angles[i+idx],&sines[idx],&cosines[idx]);
+        }
+        std::array<stateRotate::exc,numberToFuse> rots;
+        for (indexType idx = 0; idx < numberToFuse; idx++)
+            rots[idx] = excPath[i+idx];
+
+        std::pair<localVectorMap,signMap> currentLocalVector;
+
+
+        basisStateIterator.reset();
+        for(uint64_t currentBasisState = basisStateIterator.get(); basisStateIterator.valid(); currentBasisState = basisStateIterator.next())
+        {
+            uint32_t currentMapFilledSize = 0;
+
+            std::array<std::pair<uint64_t,bool>,numberToFuse> initialLinks;
+            indexType activeRotIdx = 0;
+            indexType numberOfActiveRots = 0;
+            std::array<indexType,numberToFuse> activeRots;
+
+            bool allPositive = true;
+            for (uint8_t idx = 0; idx < numberToFuse; idx++)
+            {
+                initialLinks[idx] = applyExcToBasisState_(currentBasisState,rots[idx]);
+                if (initialLinks[idx].first != currentBasisState)
+                {
+                    if (initialLinks[idx].first < currentBasisState) // Deduplication via forcing an increasing sequence. Signs arent reliable when using fermionic, consider 4,2 3,1 applied to |0011>
+                    {
+                        allPositive = false; // deduplication of basis states
+                        break;
+                    }
+                    activeRotIdx |= 1<<idx;
+                    activeRots[numberOfActiveRots] = idx;
+                    ++numberOfActiveRots;
+                }
+            }
+            //All not active
+            if (numberOfActiveRots == 0 || allPositive == false)
+                continue;
+
+            localVectorMap& currentMap = currentLocalVector.first;
+            signMap& currentSigns = currentLocalVector.second;
+            indexType rotIdx = 0;
+            while(rotIdx < numberToFuse && (activeRotIdx & (1<<rotIdx)) == 0)
+                ++rotIdx;
+            currentMap[0] = currentBasisState;
+
+            uint64_t currentSignsStep = 0;
+            fillCurrentMap<indexType,numberToFuse>(activeRotIdx,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
+
+            currentMapFilledSize = 1<<numberOfActiveRots;
+            //compress indices
+            if (isCompressed)
+            {
+                for (uint64_t idx = 0; idx < currentMapFilledSize; idx++)
+                {
+                    if (isComplex)
+                    {
+                        bool complexOffset = currentMap[idx] & 1;
+                        // assert(complexOffset == false);
+                        bool compSucc = comp->compressIndex(currentMap[idx]>>1,currentMap[idx]);
+                        releaseAssert(compSucc,"compSucc");
+                        currentMap[idx] = (currentMap[idx] << 1) + (complexOffset ? 1 : 0);
+                    }
+                    else
+                    {
+                        bool compSucc = comp->compressIndex(currentMap[idx],currentMap[idx]);
+                        releaseAssert(compSucc,"compSucc");
+                    }
+                }
+            }
+            //do the evolution
+            if constexpr(numberToFuse == 2)
+            {
+                if (activeRotIdx == 1)
+                {
+                    const localVectorMap& currentMap = currentLocalVector.first;
+                    const signMap& currentSigns = currentLocalVector.second;
+
+                    for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                    {
+                        scratchSpace[idx] = startVec[currentMap[idx]];
+                        if constexpr(BraketWithTangentOfResult)
+                                scratchSpacehPsi[idx] = hPsi[currentMap[idx]];
+
+                    }
+
+                    if (!((currentMapFilledSize == 4) || (currentMapFilledSize == 2))) __builtin_unreachable();
+
+
+                    if constexpr(storeTangent)
+                            storeTangents<indexType,1>(scratchSpace,currentMap.begin(),currentSigns.begin(),{tangentStore[i]},currentMapFilledSize/2);
+                    if (currentMapFilledSize == 4)
+                    {
+                        BENCHMARK_rotate<indexType,1,localVectorSize,BraketWithTangentOfResult>(scratchSpace,&currentSigns[0],&sines[0],&cosines[0],2,scratchSpacehPsi,{result[i]});
+                    }
+                    else
+                        BENCHMARK_rotate<indexType,1,localVectorSize,BraketWithTangentOfResult>(scratchSpace,&currentSigns[0],&sines[0],&cosines[0],1,scratchSpacehPsi,{result[i]});
+
+                    //Restore scratch space
+                    for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                    {
+                        startVec[currentMap[idx]] = scratchSpace[idx];
+                        if constexpr(BraketWithTangentOfResult)
+                                hPsi[currentMap[idx]] = scratchSpacehPsi[idx];
+                    }
+
+                }
+
+                if (activeRotIdx == 2)
+                {
+                    const localVectorMap& currentMap = currentLocalVector.first;
+                    const signMap& currentSigns = currentLocalVector.second;
+
+                    for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                    {
+                        scratchSpace[idx] = startVec[currentMap[idx]];
+                        if constexpr(BraketWithTangentOfResult)
+                                scratchSpacehPsi[idx] = hPsi[currentMap[idx]];
+
+                    }
+
+                    if (!((currentMapFilledSize == 4) || (currentMapFilledSize == 2))) __builtin_unreachable();
+
+                    if constexpr(storeTangent)
+                            storeTangents<indexType,1>(scratchSpace,currentMap.begin(),currentSigns.begin(),{tangentStore[i+1]},currentMapFilledSize/2);
+
+                    if (currentMapFilledSize == 4)
+                    {
+                        BENCHMARK_rotate<indexType,1,localVectorSize,BraketWithTangentOfResult>(scratchSpace,&currentSigns[0],&sines[1],&cosines[1],2,scratchSpacehPsi,{result[1+i]});
+                    }
+                    else
+                        BENCHMARK_rotate<indexType,1,localVectorSize,BraketWithTangentOfResult>(scratchSpace,&currentSigns[0],&sines[1],&cosines[1],1,scratchSpacehPsi,{result[1+i]});
+                    //Restore scratch space
+                    for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                    {
+                        startVec[currentMap[idx]] = scratchSpace[idx];
+                        if constexpr(BraketWithTangentOfResult)
+                                hPsi[currentMap[idx]] = scratchSpacehPsi[idx];
+                    }
+                }
+                if (activeRotIdx == 3)
+                {
+                    const localVectorMap& currentMap = currentLocalVector.first;
+                    const signMap& currentSigns = currentLocalVector.second;
+
+                    for (indexType idx = 0; idx < localVectorSize; idx++)
+                    {
+                        scratchSpace[idx] = startVec[currentMap[idx]];
+                        if constexpr(BraketWithTangentOfResult)
+                                scratchSpacehPsi[idx] = hPsi[currentMap[idx]];
+                    }
+                    if constexpr(storeTangent)
+                            storeTangents<indexType,2>(scratchSpace,currentMap.begin(),currentSigns.begin(),{tangentStore[i],tangentStore[i+1]},1);
+                    BENCHMARK_rotate<indexType,2,localVectorSize,BraketWithTangentOfResult>(scratchSpace,&currentSigns[0],&sines[0],&cosines[0],1,scratchSpacehPsi,{result[i],result[i+1]});
+
+                    //Restore scratch space
+                    for (indexType idx = 0; idx < localVectorSize; idx++)
+                    {
+                        startVec[currentMap[idx]] = scratchSpace[idx];
+                        if constexpr(BraketWithTangentOfResult)
+                                hPsi[currentMap[idx]] = scratchSpacehPsi[idx];
+                    }
+                }
+
+            }
+            else if constexpr((numberToFuse == 3 || numberToFuse == 4 ) && !BraketWithTangentOfResult)
+            {
+                for (indexType abc = 0; abc < 4; abc++)
+                {
+
+                    {
+                        constexpr indexType theOnes[4] =  {0b0001,0b0010,0b0100,0b1000};
+                        constexpr indexType theOnesOffset[4] = {0,1,2,3};
+                        if constexpr (numberToFuse == 3) if (theOnes[abc] & 0b1000)
+                                continue;
+                        const indexType rotIdx = theOnes[abc];
+                        const indexType activeRot = theOnesOffset[abc];
+
+                        if (activeRotIdx == rotIdx)
+                        {
+                            const localVectorMap& currentMap = currentLocalVector.first;
+                            const signMap& currentSigns = currentLocalVector.second;
+
+                            for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                            {
+                                scratchSpace[idx] = startVec[currentMap[idx]];
+                                if constexpr(BraketWithTangentOfResult)
+                                        scratchSpacehPsi[idx] = hPsi[currentMap[idx]];
+                            }
+                            if constexpr(storeTangent)
+                                    storeTangents<indexType,1>(scratchSpace,currentMap.begin(),currentSigns.begin(),{tangentStore[i+activeRot]},currentMapFilledSize/2);
+                            BENCHMARK_rotate<indexType,1,localVectorSize,BraketWithTangentOfResult>(scratchSpace,&currentSigns[0],&sines[activeRot],&cosines[activeRot],currentMapFilledSize/2,scratchSpacehPsi,{result[i+activeRot]});
+                            for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                            {
+                                startVec[currentMap[idx]] = scratchSpace[idx];
+                                if constexpr(BraketWithTangentOfResult)
+                                        hPsi[currentMap[idx]] = scratchSpacehPsi[idx];
+                            }
+                        }}
+                }
+
+                for (indexType abc = 0; abc < 6; abc++)
+                {
+                    {
+                        constexpr indexType theTwos[6] =          {0b0011,0b1100,0b0101,0b1010,0b0110,0b1001};
+                        constexpr indexType theTwosOffset[6][2] = {{0,1}, {2,3}, {0,2}, {1,3}, {1,2}, {0,3}};
+                        if constexpr (numberToFuse == 3) if (theTwos[abc] & 0b1000)
+                                continue;
+
+                        const indexType rotIdx = theTwos[abc];
+                        const indexType activeRot0 = theTwosOffset[abc][0];
+                        const indexType activeRot1 = theTwosOffset[abc][1];
+                        const realNumType S[2] = {sines[activeRot0],sines[activeRot1]};
+                        const realNumType C[2] = {cosines[activeRot0],cosines[activeRot1]};
+                        realNumType* resultArr[2] = {result[activeRot0+i], result[activeRot1+i]}; // This could be a const array
+
+                        if (activeRotIdx == rotIdx)
+                        {
+                            const localVectorMap& currentMap = currentLocalVector.first;
+                            const signMap& currentSigns = currentLocalVector.second;
+
+
+                            for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                            {
+                                scratchSpace[idx] = startVec[currentMap[idx]];
+                                if constexpr(BraketWithTangentOfResult)
+                                        scratchSpacehPsi[idx] = hPsi[currentMap[idx]];
+                            }
+                            if constexpr(storeTangent)
+                                    storeTangents<indexType,2>(scratchSpace,currentMap.begin(),currentSigns.begin(),{tangentStore[activeRot0+i], tangentStore[activeRot1+i]},currentMapFilledSize/4);
+                            BENCHMARK_rotate<indexType,2,localVectorSize,BraketWithTangentOfResult>(scratchSpace,&currentSigns[0],S,C,currentMapFilledSize/4,scratchSpacehPsi,resultArr);
+                            for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                            {
+                                startVec[currentMap[idx]] = scratchSpace[idx];
+                                if constexpr(BraketWithTangentOfResult)
+                                        hPsi[currentMap[idx]] = scratchSpacehPsi[idx];
+                            }
+                        }
+                    }
+                }
+
+                for (indexType abc = 0; abc < 4; abc++)
+                {
+                    {
+                        constexpr indexType theThrees[4] =          {0b0111,0b1011,0b1101,0b1110};
+                        constexpr indexType theThreesOffset[6][3] = {{0,1,2},{0,1,3},{0,2,3},{1,2,3}};
+                        if constexpr (numberToFuse == 3) if (theThrees[abc] & 0b1000)
+                                continue;
+                        const indexType rotIdx = theThrees[abc];
+                        const indexType activeRot0 = theThreesOffset[abc][0];
+                        const indexType activeRot1 = theThreesOffset[abc][1];
+                        const indexType activeRot2 = theThreesOffset[abc][2];
+
+                        const realNumType S[3] = {sines[activeRot0],sines[activeRot1],sines[activeRot2]};
+                        const realNumType C[3] = {cosines[activeRot0],cosines[activeRot1],cosines[activeRot2]};
+                        realNumType* resultArr[3] = {result[activeRot0+i], result[activeRot1+i],result[activeRot2+i]}; // This could be a const array
+
+                        if (activeRotIdx == rotIdx)
+                        {
+                            const localVectorMap& currentMap = currentLocalVector.first;
+                            const signMap& currentSigns = currentLocalVector.second;
+
+
+                            for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                            {
+                                scratchSpace[idx] = startVec[currentMap[idx]];
+                                if constexpr(BraketWithTangentOfResult)
+                                        scratchSpacehPsi[idx] = hPsi[currentMap[idx]];
+                            }
+                            if constexpr(storeTangent)
+                                    storeTangents<indexType,3>(scratchSpace,currentMap.begin(),currentSigns.begin(),{tangentStore[activeRot0+i], tangentStore[activeRot1+i],tangentStore[activeRot2+i]},currentMapFilledSize/8);
+                            BENCHMARK_rotate<indexType,3,localVectorSize,BraketWithTangentOfResult>(scratchSpace,&currentSigns[0],S,C,currentMapFilledSize/8,scratchSpacehPsi,resultArr);
+                            for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                            {
+                                startVec[currentMap[idx]] = scratchSpace[idx];
+                                if constexpr(BraketWithTangentOfResult)
+                                        hPsi[currentMap[idx]] = scratchSpacehPsi[idx];
+                            }
+                        }
+                    }
+                }
+
+                if constexpr(numberToFuse == 4)
+                {
+                    if (activeRotIdx == 0b1111)
+                    {
+                        const realNumType* S = &sines[0];
+                        const realNumType* C = &cosines[0];
+
+                        const localVectorMap& currentMap = currentLocalVector.first;
+                        const signMap& currentSigns = currentLocalVector.second;
+
+
+                        for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                        {
+                            scratchSpace[idx] = startVec[currentMap[idx]];
+                            if constexpr(BraketWithTangentOfResult)
+                                    scratchSpacehPsi[idx] = hPsi[currentMap[idx]];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,4>(scratchSpace,currentMap.begin(),currentSigns.begin(),{tangentStore[i], tangentStore[i+1],tangentStore[i+2],tangentStore[i+3]},1);
+                        BENCHMARK_rotate<indexType,4,localVectorSize,BraketWithTangentOfResult>(scratchSpace,&currentSigns[0],S,C,1,scratchSpacehPsi,{result[i], result[i+1],result[i+2],result[i+3]});
+                        for (indexType idx = 0; idx < localVectorSize; idx++)
+                        {
+                            startVec[currentMap[idx]] = scratchSpace[idx];
+                            if constexpr(BraketWithTangentOfResult)
+                                    hPsi[currentMap[idx]] = scratchSpacehPsi[idx];
+                        }
+                    }
+                }
+            }
+            else
+            {
+
+                const localVectorMap& currentMap = currentLocalVector.first;
+                const signMap& currentSigns = currentLocalVector.second;
+                const indexType &filledSize = currentMapFilledSize;
+                const indexType& numberOfActiveRotations = numberOfActiveRots;
+
+                for (indexType idx = 0; idx < currentMapFilledSize; idx++)
+                {
+                    scratchSpace[idx] = startVec[currentMap[idx]];
+                    if constexpr(BraketWithTangentOfResult)
+                            scratchSpacehPsi[idx] = hPsi[currentMap[idx]];
+                }
+                assert(filledSize != 0);
+                assert(filledSize <= 1<<numberToFuse);
+                if (filledSize == 0) __builtin_unreachable();
+                if (filledSize > 1<<numberToFuse) __builtin_unreachable();
+
+                assert(numberOfActiveRotations != 0);
+                assert(numberOfActiveRotations <= numberToFuse);
+                if (numberOfActiveRotations == 0) __builtin_unreachable();
+                if (numberOfActiveRotations > numberToFuse) __builtin_unreachable();
+
+                switch (numberOfActiveRotations)
+                {
+                case 1:
+                    if constexpr (numberToFuse >= 1)
+                    {
+                        const realNumType S[1] = {sines[activeRots[0]]};
+                        const realNumType C[1] = {cosines[activeRots[0]]};
+                        realNumType* resultArr[1] = {result[activeRots[0]+i]};
+                        if constexpr(storeTangent)
+                        {
+                            realNumType* const tangentStoreArr[1] = {tangentStore[activeRots[0]+i]};
+                            storeTangents<indexType,1>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/2);
+                        }
+                        BENCHMARK_rotate<indexType,1,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/2,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 2:
+                    if constexpr (numberToFuse >= 2)
+                    {
+                        const realNumType S[2] = {sines[activeRots[0]],sines[activeRots[1]]};
+                        const realNumType C[2] = {cosines[activeRots[0]],cosines[activeRots[1]]};
+                        realNumType* resultArr[2] = {result[activeRots[0]+i], result[activeRots[1]+i]}; // This could be a const array
+                        if constexpr(storeTangent)
+                        {
+                            realNumType* const tangentStoreArr[2] = {tangentStore[activeRots[0]+i],tangentStore[activeRots[1]+i]};
+                            storeTangents<indexType,2>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/4);
+                        }
+                        BENCHMARK_rotate<indexType,2,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/4,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 3:
+                    if constexpr (numberToFuse >= 3)
+                    {
+                        const realNumType S[3] = {sines[activeRots[0]],sines[activeRots[1]],sines[activeRots[2]]};
+                        const realNumType C[3] = {cosines[activeRots[0]],cosines[activeRots[1]],cosines[activeRots[2]]};
+                        realNumType* resultArr[3] = {result[activeRots[0]+i], result[activeRots[1]+i],result[activeRots[2]+i]}; // This could be a const array
+                        if constexpr(storeTangent)
+                        {
+                            realNumType* const tangentStoreArr[3] = {tangentStore[activeRots[0]+i],tangentStore[activeRots[1]+i],tangentStore[activeRots[2]+i]};
+                            storeTangents<indexType,3>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/8);
+                        }
+                        BENCHMARK_rotate<indexType,3,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/8,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 4:
+                    if constexpr (numberToFuse >= 4)
+                    {
+                        const realNumType S[4] = {sines[activeRots[0]],sines[activeRots[1]],sines[activeRots[2]],sines[activeRots[3]]};
+                        const realNumType C[4] = {cosines[activeRots[0]],cosines[activeRots[1]],cosines[activeRots[2]],cosines[activeRots[3]]};
+                        realNumType* resultArr[4] = {result[activeRots[0]+i], result[activeRots[1]+i],result[activeRots[2]+i],result[activeRots[3]+i]}; // This could be a const array
+                        if constexpr(storeTangent)
+                        {
+                            realNumType* const tangentStoreArr[4] = {tangentStore[activeRots[0]+i],tangentStore[activeRots[1]+i],tangentStore[activeRots[2]+i],tangentStore[activeRots[3]+i]};
+                            storeTangents<indexType,4>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/16);
+                        }
+                        BENCHMARK_rotate<indexType,4,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/16,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 5:
+                    if constexpr (numberToFuse >= 5)
+                    {
+                        const realNumType S[5] = {sines[activeRots[0]],sines[activeRots[1]],sines[activeRots[2]],sines[activeRots[3]],sines[activeRots[4]]};
+                        const realNumType C[5] = {cosines[activeRots[0]],cosines[activeRots[1]],cosines[activeRots[2]],cosines[activeRots[3]],cosines[activeRots[4]]};
+                        realNumType* resultArr[5] = {result[activeRots[0]+i], result[activeRots[1]+i],result[activeRots[2]+i],result[activeRots[3]+i],result[activeRots[4]+i]}; // This could be a const array
+                        if constexpr(storeTangent)
+                        {
+                            realNumType* const tangentStoreArr[5] = {tangentStore[activeRots[0]+i],tangentStore[activeRots[1]+i],tangentStore[activeRots[2]+i],tangentStore[activeRots[3]+i],tangentStore[activeRots[4]+i]};
+                            storeTangents<indexType,5>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/32);
+                        }
+                        BENCHMARK_rotate<indexType,5,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/32,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 6:
+                    if constexpr (numberToFuse >= 6)
+                    {
+                        const realNumType S[6] = {sines[activeRots[0]],sines[activeRots[1]],sines[activeRots[2]],sines[activeRots[3]],sines[activeRots[4]],sines[activeRots[5]]};
+                        const realNumType C[6] = {cosines[activeRots[0]],cosines[activeRots[1]],cosines[activeRots[2]],cosines[activeRots[3]],cosines[activeRots[4]],cosines[activeRots[5]]};
+                        realNumType* resultArr[6] = {result[activeRots[0]+i], result[activeRots[1]+i],result[activeRots[2]+i],result[activeRots[3]+i],result[activeRots[4]+i],result[activeRots[5]+i]}; // This could be a const array
+                        if constexpr(storeTangent)
+                        {
+                            realNumType* const tangentStoreArr[6] = {tangentStore[activeRots[0]+i],tangentStore[activeRots[1]+i],tangentStore[activeRots[2]+i],tangentStore[activeRots[3]+i],tangentStore[activeRots[4]+i],tangentStore[activeRots[5]+i]};
+                            storeTangents<indexType,6>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/64);
+                        }
+                        BENCHMARK_rotate<indexType,6,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/64,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 7:
+                    if constexpr (numberToFuse >= 7)
+                    {
+                        const realNumType S[7] = {sines[activeRots[0]],sines[activeRots[1]],sines[activeRots[2]],sines[activeRots[3]],sines[activeRots[4]],sines[activeRots[5]],sines[activeRots[6]]};
+                        const realNumType C[7] = {cosines[activeRots[0]],cosines[activeRots[1]],cosines[activeRots[2]],cosines[activeRots[3]],cosines[activeRots[4]],cosines[activeRots[5]],cosines[activeRots[6]]};
+                        realNumType* resultArr[7] = {result[activeRots[0]+i], result[activeRots[1]+i],result[activeRots[2]+i],result[activeRots[3]+i],result[activeRots[4]+i],result[activeRots[5]+i],result[activeRots[6]+i]}; // This could be a const array
+                        if constexpr(storeTangent)
+                        {
+                            realNumType* const tangentStoreArr[7] = {tangentStore[activeRots[0]+i],tangentStore[activeRots[1]+i],tangentStore[activeRots[2]+i],tangentStore[activeRots[3]+i],tangentStore[activeRots[4]+i],tangentStore[activeRots[5]+i],tangentStore[activeRots[6]+i]};
+                            storeTangents<indexType,7>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/128);
+                        }
+                        BENCHMARK_rotate<indexType,7,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/128,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 8:
+                    if constexpr (numberToFuse >= 8)
+                    {
+                        realNumType S[8]; realNumType C[8]; realNumType* resultArr[8]; realNumType* tangentStoreArr[8];
+                        for (indexType x = 0; x < 8; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,8>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/256);
+                        BENCHMARK_rotate<indexType,8,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/256,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 9:
+                    if constexpr (numberToFuse >= 9)
+                    {
+                        realNumType S[9]; realNumType C[9]; realNumType* resultArr[9]; realNumType* tangentStoreArr[9];
+                        for (indexType x = 0; x < 9; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,9>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/512);
+                        BENCHMARK_rotate<indexType,9,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/512,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 10:
+                    if constexpr (numberToFuse >= 10)
+                    {
+                        realNumType S[10]; realNumType C[10]; realNumType* resultArr[10]; realNumType* tangentStoreArr[10];
+                        for (indexType x = 0; x < 10; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,10>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/1024);
+                        BENCHMARK_rotate<indexType,10,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/1024,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 11:
+                    if constexpr (numberToFuse >= 11)
+                    {
+                        realNumType S[11]; realNumType C[11]; realNumType* resultArr[11]; realNumType* tangentStoreArr[11];
+                        for (indexType x = 0; x < 11; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,11>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/2048);
+                        BENCHMARK_rotate<indexType,11,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/2048,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 12:
+                    if constexpr (numberToFuse >= 12)
+                    {
+                        realNumType S[12]; realNumType C[12]; realNumType* resultArr[12]; realNumType* tangentStoreArr[12];
+                        for (indexType x = 0; x < 12; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,12>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/4096);
+                        BENCHMARK_rotate<indexType,12,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/4096,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 13:
+                    if constexpr (numberToFuse >= 13)
+                    {
+                        realNumType S[13]; realNumType C[13]; realNumType* resultArr[13]; realNumType* tangentStoreArr[13];
+                        for (indexType x = 0; x < 13; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,13>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/8192);
+                        BENCHMARK_rotate<indexType,13,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/8192,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 14:
+                    if constexpr (numberToFuse >= 14)
+                    {
+                        realNumType S[14]; realNumType C[14]; realNumType* resultArr[14]; realNumType* tangentStoreArr[14];
+                        for (indexType x = 0; x < 14; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,14>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/16384);
+                        BENCHMARK_rotate<indexType,14,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/16384,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 15:
+                    if constexpr (numberToFuse >= 15)
+                    {
+                        realNumType S[15]; realNumType C[15]; realNumType* resultArr[15]; realNumType* tangentStoreArr[15];
+                        for (indexType x = 0; x < 15; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,15>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/32768);
+                        BENCHMARK_rotate<indexType,15,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/32768,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 16:
+                    if constexpr (numberToFuse >= 16)
+                    {
+                        realNumType S[16]; realNumType C[16]; realNumType* resultArr[16]; realNumType* tangentStoreArr[16];
+                        for (indexType x = 0; x < 16; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,16>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/8192);
+                        BENCHMARK_rotate<indexType,16,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/65536,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 17:
+                    if constexpr (numberToFuse >= 17)
+                    {
+                        realNumType S[17]; realNumType C[17]; realNumType* resultArr[17]; realNumType* tangentStoreArr[17];
+                        for (indexType x = 0; x < 17; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,17>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/16384);
+                        BENCHMARK_rotate<indexType,17,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/131072,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                case 18:
+                    if constexpr (numberToFuse >= 18)
+                    {
+                        realNumType S[18]; realNumType C[18]; realNumType* resultArr[18]; realNumType* tangentStoreArr[18];
+                        for (indexType x = 0; x < 18; x++)
+                        {
+                            S[x] = sines[activeRots[x]];
+                            C[x] = cosines[activeRots[x]];
+                            resultArr[x] = result[activeRots[x]+i];
+                            if constexpr(storeTangent) tangentStoreArr[x] = tangentStore[activeRots[x]+i];
+                        }
+                        if constexpr(storeTangent)
+                                storeTangents<indexType,18>(scratchSpace,currentMap.begin(),currentSigns.begin(),tangentStoreArr,filledSize/32768);
+                        BENCHMARK_rotate<indexType,18,localVectorSize,BraketWithTangentOfResult>(
+                                    scratchSpace,currentSigns.begin(),S,C,filledSize/262144,scratchSpacehPsi,resultArr);
+                        break;
+                    }
+                    static_assert(numberToFuse < 19, "Only up to 18(inc) handled");
+                default:
+                    logger().log("Unreachable!");
+                    __builtin_trap();
+                    break;
+                }
+
+                //Restore scratch space
+                for (indexType idx = 0; idx < filledSize; idx++)
+                {
+                    startVec[currentMap[idx]] = scratchSpace[idx];
+                    if constexpr(BraketWithTangentOfResult)
+                            hPsi[currentMap[idx]] = scratchSpacehPsi[idx];
+                }
+
+            }
+        }
+    }
+    //Start now contains the full evolution
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto __attribute__ ((unused))duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
+    // logger().log("FusedRotate" + std::to_string(numberToFuse) +" Time taken:",duration);
+    if constexpr (!BraketWithTangentOfResult)
+    {
+        delete[] result;
+        // delete toBraKet;
+    }
+}
+
 #define SetupFuseN(N,dataType)\
 case N:\
 {\
     constexpr int8_t num = N;\
+    if constexpr(!fuseOnTheFly)\
+    {\
     void* FAVoid = new fusedAnsatzX<num>(setupFuseN<dataType,num>(v,m_start));\
     m_fusedAnsatzes.push_back(FAVoid);\
+    }\
     m_fusedSizes.push_back(num);\
     break;\
 }
@@ -1840,8 +2758,11 @@ case N:\
 case -N:\
 {\
     constexpr int8_t num = N;\
+    if constexpr(!fuseOnTheFly)\
+    {\
     void* FAVoid = new fusedDiagonalAnsatzX<num>(setupFuseNDiagonal<dataType,num>(v,m_start));\
     m_fusedAnsatzes.push_back(FAVoid);\
+    }\
     m_fusedSizes.push_back(-num);\
     break;\
 }
@@ -1945,14 +2866,14 @@ void FusedEvolve::regenCache()
     }
     m_commuteBoundaries.push_back(m_excPerm.size());
 
-    std::vector<stateRotate::exc> excs(m_excs.size());
-    std::transform(m_excPerm.begin(),m_excPerm.end(),excs.begin(),[this](size_t i){return m_excs[i];});
+    m_permExcs.resize(m_excs.size());
+    std::transform(m_excPerm.begin(),m_excPerm.end(),m_permExcs.begin(),[this](size_t i){return m_excs[i];});
 
     if constexpr (logTimings)logger().log("Permuted to:");
 
-    for (size_t i = 0; i < excs.size(); i++)
+    for (size_t i = 0; i < m_permExcs.size(); i++)
     {
-        const auto& e = excs[i];
+        const auto& e = m_permExcs[i];
         if constexpr (logTimings)fprintf(stderr,"%2.1zu: %3.1hhd, %3.1hhd, %3.1hhd, %3.1hhd\n",i,e[0],e[1],e[2],e[3]);
     }
     if constexpr (logTimings) logger().log("With boundaries",m_commuteBoundaries);
@@ -1964,7 +2885,7 @@ void FusedEvolve::regenCache()
         size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
 
 
-        std::vector<stateRotate::exc> v(excs.begin() + m_commuteBoundaries[i],excs.begin()+m_commuteBoundaries[i+1]);
+        std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i],m_permExcs.begin()+m_commuteBoundaries[i+1]);
         int8_t fuseSize = diff;
         if (diff > maxFuse)
         {
@@ -2033,129 +2954,133 @@ void FusedEvolve::regenCache()
 
 void FusedEvolve::cleanup()
 {
-    for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+    if constexpr (!fuseOnTheFly)
     {
-        switch (m_fusedSizes[i])
+        for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
         {
-        case -1:
-            delete static_cast<fusedDiagonalAnsatzX<1>*>(m_fusedAnsatzes[i]);
-            break;
-        case -2:
-            delete static_cast<fusedDiagonalAnsatzX<2>*>(m_fusedAnsatzes[i]);
-            break;
-        case -3:
-            delete static_cast<fusedDiagonalAnsatzX<3>*>(m_fusedAnsatzes[i]);
-            break;
-        case -4:
-            delete static_cast<fusedDiagonalAnsatzX<4>*>(m_fusedAnsatzes[i]);
-            break;
-        case -5:
-            delete static_cast<fusedDiagonalAnsatzX<5>*>(m_fusedAnsatzes[i]);
-            break;
-        case -6:
-            delete static_cast<fusedDiagonalAnsatzX<6>*>(m_fusedAnsatzes[i]);
-            break;
-        case -7:
-            delete static_cast<fusedDiagonalAnsatzX<7>*>(m_fusedAnsatzes[i]);
-            break;
-        case -8:
-            delete static_cast<fusedDiagonalAnsatzX<8>*>(m_fusedAnsatzes[i]);
-            break;
-        case -9:
-            delete static_cast<fusedDiagonalAnsatzX<9>*>(m_fusedAnsatzes[i]);
-            break;
-        case -10:
-            delete static_cast<fusedDiagonalAnsatzX<10>*>(m_fusedAnsatzes[i]);
-            break;
-        case -11:
-            delete static_cast<fusedDiagonalAnsatzX<11>*>(m_fusedAnsatzes[i]);
-            break;
-        case -12:
-            delete static_cast<fusedDiagonalAnsatzX<12>*>(m_fusedAnsatzes[i]);
-            break;
-        case -13:
-            delete static_cast<fusedDiagonalAnsatzX<13>*>(m_fusedAnsatzes[i]);
-            break;
-        case -14:
-            delete static_cast<fusedDiagonalAnsatzX<14>*>(m_fusedAnsatzes[i]);
-            break;
-        case -15:
-            delete static_cast<fusedDiagonalAnsatzX<15>*>(m_fusedAnsatzes[i]);
-            break;
-        case -16:
-            delete static_cast<fusedDiagonalAnsatzX<16>*>(m_fusedAnsatzes[i]);
-            break;
-        case -17:
-            delete static_cast<fusedDiagonalAnsatzX<17>*>(m_fusedAnsatzes[i]);
-            break;
-        case -18:
-            delete static_cast<fusedDiagonalAnsatzX<18>*>(m_fusedAnsatzes[i]);
-            break;
-        case 0:
-            releaseAssert(false,"Unhandled case 0 - delete");
-            break;
-        case 1:
-            delete static_cast<fusedAnsatzX<1>*>(m_fusedAnsatzes[i]);
-            break;
-        case 2:
-            delete static_cast<fusedAnsatzX<2>*>(m_fusedAnsatzes[i]);
-            break;
-        case 3:
-            delete static_cast<fusedAnsatzX<3>*>(m_fusedAnsatzes[i]);
-            break;
-        case 4:
-            delete static_cast<fusedAnsatzX<4>*>(m_fusedAnsatzes[i]);
-            break;
-        case 5:
-            delete static_cast<fusedAnsatzX<5>*>(m_fusedAnsatzes[i]);
-            break;
-        case 6:
-            delete static_cast<fusedAnsatzX<6>*>(m_fusedAnsatzes[i]);
-            break;
-        case 7:
-            delete static_cast<fusedAnsatzX<7>*>(m_fusedAnsatzes[i]);
-            break;
-        case 8:
-            delete static_cast<fusedAnsatzX<8>*>(m_fusedAnsatzes[i]);
-            break;
-        case 9:
-            delete static_cast<fusedAnsatzX<9>*>(m_fusedAnsatzes[i]);
-            break;
-        case 10:
-            delete static_cast<fusedAnsatzX<10>*>(m_fusedAnsatzes[i]);
-            break;
-        case 11:
-            delete static_cast<fusedAnsatzX<11>*>(m_fusedAnsatzes[i]);
-            break;
-        case 12:
-            delete static_cast<fusedAnsatzX<12>*>(m_fusedAnsatzes[i]);
-            break;
-        case 13:
-            delete static_cast<fusedAnsatzX<13>*>(m_fusedAnsatzes[i]);
-            break;
-        case 14:
-            delete static_cast<fusedAnsatzX<14>*>(m_fusedAnsatzes[i]);
-            break;
-        case 15:
-            delete static_cast<fusedAnsatzX<15>*>(m_fusedAnsatzes[i]);
-            break;
-        case 16:
-            delete static_cast<fusedAnsatzX<16>*>(m_fusedAnsatzes[i]);
-            break;
-        case 17:
-            delete static_cast<fusedAnsatzX<17>*>(m_fusedAnsatzes[i]);
-            break;
-        case 18:
-            delete static_cast<fusedAnsatzX<18>*>(m_fusedAnsatzes[i]);
-            break;
-        default:
-            releaseAssert(false,"Unhandled case default - delete");
+            switch (m_fusedSizes[i])
+            {
+            case -1:
+                delete static_cast<fusedDiagonalAnsatzX<1>*>(m_fusedAnsatzes[i]);
+                break;
+            case -2:
+                delete static_cast<fusedDiagonalAnsatzX<2>*>(m_fusedAnsatzes[i]);
+                break;
+            case -3:
+                delete static_cast<fusedDiagonalAnsatzX<3>*>(m_fusedAnsatzes[i]);
+                break;
+            case -4:
+                delete static_cast<fusedDiagonalAnsatzX<4>*>(m_fusedAnsatzes[i]);
+                break;
+            case -5:
+                delete static_cast<fusedDiagonalAnsatzX<5>*>(m_fusedAnsatzes[i]);
+                break;
+            case -6:
+                delete static_cast<fusedDiagonalAnsatzX<6>*>(m_fusedAnsatzes[i]);
+                break;
+            case -7:
+                delete static_cast<fusedDiagonalAnsatzX<7>*>(m_fusedAnsatzes[i]);
+                break;
+            case -8:
+                delete static_cast<fusedDiagonalAnsatzX<8>*>(m_fusedAnsatzes[i]);
+                break;
+            case -9:
+                delete static_cast<fusedDiagonalAnsatzX<9>*>(m_fusedAnsatzes[i]);
+                break;
+            case -10:
+                delete static_cast<fusedDiagonalAnsatzX<10>*>(m_fusedAnsatzes[i]);
+                break;
+            case -11:
+                delete static_cast<fusedDiagonalAnsatzX<11>*>(m_fusedAnsatzes[i]);
+                break;
+            case -12:
+                delete static_cast<fusedDiagonalAnsatzX<12>*>(m_fusedAnsatzes[i]);
+                break;
+            case -13:
+                delete static_cast<fusedDiagonalAnsatzX<13>*>(m_fusedAnsatzes[i]);
+                break;
+            case -14:
+                delete static_cast<fusedDiagonalAnsatzX<14>*>(m_fusedAnsatzes[i]);
+                break;
+            case -15:
+                delete static_cast<fusedDiagonalAnsatzX<15>*>(m_fusedAnsatzes[i]);
+                break;
+            case -16:
+                delete static_cast<fusedDiagonalAnsatzX<16>*>(m_fusedAnsatzes[i]);
+                break;
+            case -17:
+                delete static_cast<fusedDiagonalAnsatzX<17>*>(m_fusedAnsatzes[i]);
+                break;
+            case -18:
+                delete static_cast<fusedDiagonalAnsatzX<18>*>(m_fusedAnsatzes[i]);
+                break;
+            case 0:
+                releaseAssert(false,"Unhandled case 0 - delete");
+                break;
+            case 1:
+                delete static_cast<fusedAnsatzX<1>*>(m_fusedAnsatzes[i]);
+                break;
+            case 2:
+                delete static_cast<fusedAnsatzX<2>*>(m_fusedAnsatzes[i]);
+                break;
+            case 3:
+                delete static_cast<fusedAnsatzX<3>*>(m_fusedAnsatzes[i]);
+                break;
+            case 4:
+                delete static_cast<fusedAnsatzX<4>*>(m_fusedAnsatzes[i]);
+                break;
+            case 5:
+                delete static_cast<fusedAnsatzX<5>*>(m_fusedAnsatzes[i]);
+                break;
+            case 6:
+                delete static_cast<fusedAnsatzX<6>*>(m_fusedAnsatzes[i]);
+                break;
+            case 7:
+                delete static_cast<fusedAnsatzX<7>*>(m_fusedAnsatzes[i]);
+                break;
+            case 8:
+                delete static_cast<fusedAnsatzX<8>*>(m_fusedAnsatzes[i]);
+                break;
+            case 9:
+                delete static_cast<fusedAnsatzX<9>*>(m_fusedAnsatzes[i]);
+                break;
+            case 10:
+                delete static_cast<fusedAnsatzX<10>*>(m_fusedAnsatzes[i]);
+                break;
+            case 11:
+                delete static_cast<fusedAnsatzX<11>*>(m_fusedAnsatzes[i]);
+                break;
+            case 12:
+                delete static_cast<fusedAnsatzX<12>*>(m_fusedAnsatzes[i]);
+                break;
+            case 13:
+                delete static_cast<fusedAnsatzX<13>*>(m_fusedAnsatzes[i]);
+                break;
+            case 14:
+                delete static_cast<fusedAnsatzX<14>*>(m_fusedAnsatzes[i]);
+                break;
+            case 15:
+                delete static_cast<fusedAnsatzX<15>*>(m_fusedAnsatzes[i]);
+                break;
+            case 16:
+                delete static_cast<fusedAnsatzX<16>*>(m_fusedAnsatzes[i]);
+                break;
+            case 17:
+                delete static_cast<fusedAnsatzX<17>*>(m_fusedAnsatzes[i]);
+                break;
+            case 18:
+                delete static_cast<fusedAnsatzX<18>*>(m_fusedAnsatzes[i]);
+                break;
+            default:
+                releaseAssert(false,"Unhandled case default - delete");
+            }
         }
     }
     m_commuteBoundaries.clear();
     m_fusedAnsatzes.clear();
     m_excPerm.clear();
     m_excInversePerm.clear();
+    m_permExcs.clear();
 }
 
 FusedEvolve::FusedEvolve(const vector<numType> &start, std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham,
@@ -2189,18 +3114,28 @@ void FusedEvolve::updateExc(const std::vector<stateRotate::exc>& excs)
 case N:\
 {\
     constexpr uint8_t num = N;\
-    fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i]);\
-    RunFuseN<dataType,num,false,false,true>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i],diff);\
+    if constexpr (fuseOnTheFly)\
+        RunFuseNOnTheFly<dataType,num,false,false,true>((realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i],diff,&v[0],m_start);\
+    else\
+    {\
+        fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i]);\
+        RunFuseN<dataType,num,false,false,true>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i],diff);\
+    }\
     break;\
 }
 
 #define EvolveDiagonal(N,dataType)\
 case -N:\
 {\
-        constexpr uint8_t num = N;\
+    constexpr uint8_t num = N;\
+    if constexpr (fuseOnTheFly)\
+        RunFuseNDiagonalOnTheFly<dataType,num,false,false,true>((realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i],diff,&v[0],m_start);\
+    else\
+    {\
         fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);\
         RunFuseNDiagonal<dataType,num,false,false,true>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i],diff);\
-        break;\
+    }\
+    break;\
 }
 
 void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& angles, vector<numType>* specifiedStart)
@@ -2216,8 +3151,9 @@ void FusedEvolve::evolve(vector<numType>& dest, const std::vector<realNumType>& 
     std::transform(m_excPerm.begin(),m_excPerm.end(),permAngles.begin(),[&angles](size_t i){return angles[i];});
 
     auto startTime = std::chrono::high_resolution_clock::now();
-    for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+    for (size_t i = 0; i < m_fusedSizes.size(); i++)
     {
+        std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i],m_permExcs.begin()+m_commuteBoundaries[i+1]);
         size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
         switch (m_fusedSizes[i])
         {
@@ -2306,8 +3242,9 @@ void FusedEvolve::evolveMultiple(Matrix<numType> &destMatrix, const Matrix<realN
                 {
                     auto dest = destMatrix.getJVectorView(idx);
                     auto permAngles = Eigen::Map<const Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>>(&permAnglesMatrix(idx,0),1,permAnglesMatrix.cols());
-                    for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+                    for (size_t i = 0; i < m_fusedSizes.size(); i++)
                     {
+                        std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i],m_permExcs.begin()+m_commuteBoundaries[i+1]);
                         size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
                         switch (m_fusedSizes[i])
                         {
@@ -2372,18 +3309,28 @@ void FusedEvolve::evolveMultiple(Matrix<numType> &destMatrix, const Matrix<realN
 case N:\
 {\
     constexpr uint8_t num = N;\
-    fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
-    RunFuseN<dataType,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+    if constexpr (fuseOnTheFly)\
+        RunFuseNOnTheFly<dataType,num,true,false>((realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,&v[0],m_start,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+    else\
+    {\
+        fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
+        RunFuseN<dataType,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+    }\
     break;\
 }
 
 #define EvolveDerDiag(N,dataType)\
 case -N:\
 {\
-        constexpr uint8_t num = N;\
+    constexpr uint8_t num = N;\
+    if constexpr (fuseOnTheFly)\
+        RunFuseNDiagonalOnTheFly<dataType,num,true,false>((realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,&v[0],m_start,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+    else\
+    {\
         fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
         RunFuseNDiagonal<dataType,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
-        break;\
+    }\
+    break;\
 }
 void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<realNumType>& deriv, const std::vector<realNumType> &angles, realNumType* Energy)
 {
@@ -2421,8 +3368,9 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
 
 
 
-    for (size_t i = m_fusedAnsatzes.size(); i > 0; i--)
+    for (size_t i = m_fusedSizes.size(); i > 0; i--)
     {
+        std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i-1],m_permExcs.begin()+m_commuteBoundaries[i]);
         size_t diff = m_commuteBoundaries[i] -m_commuteBoundaries[i-1];
         switch (m_fusedSizes[i-1])
         {
@@ -2485,28 +3433,43 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
 case N:\
 {\
     constexpr uint8_t num = N;\
-    fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i]);\
-    RunFuseN<dataType,num,false,true>(FA->data(),(realNumType*)&psi[0],permAngles.data() + m_commuteBoundaries[i],diff,nullptr,nullptr,(realNumType**)(TPtrs.data() + m_commuteBoundaries[i]));\
+    if constexpr (fuseOnTheFly)\
+        RunFuseNOnTheFly<dataType,num,false,true>((realNumType*)&psi[0],permAngles.data() + m_commuteBoundaries[i],diff,&v[0],m_start,nullptr,nullptr,(realNumType**)(TPtrs.data() + m_commuteBoundaries[i]));\
+    else\
+    {\
+        fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i]);\
+        RunFuseN<dataType,num,false,true>(FA->data(),(realNumType*)&psi[0],permAngles.data() + m_commuteBoundaries[i],diff,nullptr,nullptr,(realNumType**)(TPtrs.data() + m_commuteBoundaries[i]));\
+    }\
 break;\
 }
 
 #define GenerateTangentsDiag(N, dataType)\
 case -N:\
 {\
-        constexpr uint8_t num = N;\
+    constexpr uint8_t num = N;\
+    if constexpr (fuseOnTheFly)\
+        RunFuseNDiagonalOnTheFly<dataType,num,false,true>((realNumType*)&psi[0],permAngles.data() + m_commuteBoundaries[i],diff,&v[0],m_start,nullptr,nullptr,(realNumType**)(TPtrs.data() + m_commuteBoundaries[i]));\
+    else\
+    {\
         fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);\
         RunFuseNDiagonal<dataType,num,false,true>(FA->data(),(realNumType*)&psi[0],permAngles.data() + m_commuteBoundaries[i],diff,nullptr,nullptr,(realNumType**)(TPtrs.data() + m_commuteBoundaries[i]));\
-        break;\
+    }\
+    break;\
 }
 
 #define EvolveTangents(N,dataType)\
 case N:\
 {\
     constexpr uint8_t num = N;\
-    fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i]);\
     if (ang < m_commuteBoundaries[i])\
     {\
-        RunFuseN<dataType,num,false,false>(FA->data(),(realNumType*)TPtrs[ang],permAngles.data() + m_commuteBoundaries[i],diff);\
+        if constexpr (fuseOnTheFly)\
+            RunFuseNOnTheFly<dataType,num,false,false>((realNumType*)TPtrs[ang],permAngles.data() + m_commuteBoundaries[i],diff,&v[0],m_start);\
+        else\
+        {\
+            fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i]);\
+            RunFuseN<dataType,num,false,false>(FA->data(),(realNumType*)TPtrs[ang],permAngles.data() + m_commuteBoundaries[i],diff);\
+        }\
     }\
     else\
     {\
@@ -2517,7 +3480,13 @@ case N:\
             {\
                 if (*TPtr == TPtrs[ang])\
                 {\
-                    RunFuseN<dataType,num,false,false>(FA->data() + currDiff/num,(realNumType*)*TPtr,permAngles.data() + m_commuteBoundaries[i] + currDiff,diff-currDiff);\
+                    if constexpr (fuseOnTheFly)\
+                        RunFuseNOnTheFly<dataType,num,false,false>((realNumType*)*TPtr,permAngles.data() + m_commuteBoundaries[i] + currDiff,diff-currDiff,&v[0]+currDiff/num,m_start);\
+                    else\
+                    {\
+                        fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i]);\
+                        RunFuseN<dataType,num,false,false>(FA->data() + currDiff/num,(realNumType*)*TPtr,permAngles.data() + m_commuteBoundaries[i] + currDiff,diff-currDiff);\
+                    }\
                     break;\
                 }\
             }\
@@ -2529,46 +3498,67 @@ case N:\
 #define EvolveTangentsDiag(N,dataType)\
 case -N:\
 {\
-        constexpr uint8_t num = N;\
-        fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);\
-        if (ang < m_commuteBoundaries[i])\
+    constexpr uint8_t num = N;\
+    if (ang < m_commuteBoundaries[i])\
     {\
-            RunFuseNDiagonal<dataType,num,false,false>(FA->data(),(realNumType*)TPtrs[ang],permAngles.data() + m_commuteBoundaries[i],diff);\
-    }\
+        if constexpr (fuseOnTheFly)\
+            RunFuseNDiagonalOnTheFly<dataType,num,false,false>((realNumType*)TPtrs[ang],permAngles.data() + m_commuteBoundaries[i],diff,&v[0],m_start);\
         else\
-    {\
-            for (size_t currDiff = 0; currDiff < diff; currDiff += num)\
         {\
-                numType** startTPtr = TPtrs.data() + m_commuteBoundaries[i] + currDiff;\
-                for (numType** TPtr = startTPtr; TPtr < startTPtr + num; TPtr++)\
+            fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);\
+            RunFuseNDiagonal<dataType,num,false,false>(FA->data(),(realNumType*)TPtrs[ang],permAngles.data() + m_commuteBoundaries[i],diff);\
+        }\
+    }\
+    else\
+    {\
+        for (size_t currDiff = 0; currDiff < diff; currDiff += num)\
+        {\
+            numType** startTPtr = TPtrs.data() + m_commuteBoundaries[i] + currDiff;\
+            for (numType** TPtr = startTPtr; TPtr < startTPtr + num; TPtr++)\
             {\
-                    if (*TPtr == TPtrs[ang])\
+                if (*TPtr == TPtrs[ang])\
                 {\
+                    if constexpr (fuseOnTheFly)\
+                        RunFuseNDiagonalOnTheFly<dataType,num,false,false>((realNumType*)*TPtr,permAngles.data() + m_commuteBoundaries[i] + currDiff,diff-currDiff,&v[0]+currDiff/num,m_start);\
+                    else\
+                    {\
+                        fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i]);\
                         RunFuseNDiagonal<dataType,num,false,false>(FA->data() + currDiff/num,(realNumType*)*TPtr,permAngles.data() + m_commuteBoundaries[i] + currDiff,diff-currDiff);\
-                        break;\
+                    }\
+                    break;\
                 }\
             }\
         }\
     }\
-        break;\
+    break;\
 }
 
 #define GenerateHPsiT(N,dataType)\
 case N:\
 {\
-constexpr uint8_t num = N;\
-fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
-RunFuseN<dataType,num,true,false>(FA->data(),(realNumType*)&Ts.at(angleIdx,0),permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&localHpsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
-break;\
+    constexpr uint8_t num = N;\
+    if constexpr (fuseOnTheFly)\
+        RunFuseNOnTheFly<dataType,num,true,false>((realNumType*)&Ts.at(angleIdx,0),permAngles.data() + m_commuteBoundaries[i-1],diff,&v[0],m_start,(realNumType*)&localHpsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+    else\
+    {\
+        fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
+        RunFuseN<dataType,num,true,false>(FA->data(),(realNumType*)&Ts.at(angleIdx,0),permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&localHpsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+    }\
+    break;\
 }
 
 #define GenerateHPsiTDiagonal(N,dataType)\
 case -N:\
 {\
-        constexpr uint8_t num = N;\
+    constexpr uint8_t num = N;\
+    if constexpr (fuseOnTheFly)\
+        RunFuseNDiagonalOnTheFly<dataType,num,true,false>((realNumType*)&Ts.at(angleIdx,0),permAngles.data() + m_commuteBoundaries[i-1],diff,&v[0],m_start,(realNumType*)&localHpsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+    else\
+    {\
         fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
         RunFuseNDiagonal<dataType,num,true,false>(FA->data(),(realNumType*)&Ts.at(angleIdx,0),permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&localHpsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
-        break;\
+    }\
+    break;\
 }
 
 void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& derivCompressed,const std::vector<realNumType> &angles, Eigen::Matrix<numType,-1,-1>* TsCopy, realNumType* Energy)
@@ -2617,8 +3607,9 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
 
     auto time1 = std::chrono::high_resolution_clock::now();
 
-    for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+    for (size_t i = 0; i < m_fusedSizes.size(); i++)
     {
+        std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i],m_permExcs.begin()+m_commuteBoundaries[i+1]);
         size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
         switch (m_fusedSizes[i])
         {
@@ -2674,8 +3665,9 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
     {
         futs.push_back(pool.queueWork([ang,this,&TPtrs,&permAngles]()
           {
-              for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+              for (size_t i = 0; i < m_fusedSizes.size(); i++)
               {
+                  std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i],m_permExcs.begin()+m_commuteBoundaries[i+1]);
                   size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
                   if (ang >= m_commuteBoundaries[i+1])
                       continue;
@@ -2866,8 +3858,9 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
                   //This will evaluate each element only once. problem is that diff may go over the boundary. So that needs to be fixed up afterwards.
                   //Further knowing the symmetrical version is annoying so we symmetrise here
                   size_t permAngleIdx = m_excInversePerm[angleIdx];
-                  for (size_t i = m_fusedAnsatzes.size(); i > 0; i--)
+                  for (size_t i = m_fusedSizes.size(); i > 0; i--)
                   {
+                      std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i-1],m_permExcs.begin()+m_commuteBoundaries[i]);
                       //            start                     end
                       size_t diff = m_commuteBoundaries[i] -m_commuteBoundaries[i-1];
                       if (!(permAngleIdx <= m_commuteBoundaries[i]))
@@ -3022,8 +4015,9 @@ void FusedEvolve::evolveDerivativeProj(const vector<numType> &finalVector, vecto
 
 
 
-    for (size_t i = m_fusedAnsatzes.size(); i > 0; i--)
+    for (size_t i = m_fusedSizes.size(); i > 0; i--)
     {
+        std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i-1],m_permExcs.begin()+m_commuteBoundaries[i]);
         size_t diff = m_commuteBoundaries[i] -m_commuteBoundaries[i-1];
         switch (m_fusedSizes[i-1])
         {
@@ -3124,13 +4118,14 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
 
     auto time1 = std::chrono::high_resolution_clock::now();
 
-    for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+    for (size_t i = 0; i < m_fusedSizes.size(); i++)
     {
+        std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i],m_permExcs.begin()+m_commuteBoundaries[i+1]);
         size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
         switch (m_fusedSizes[i])
         {
             GenerateTangentsDiag(1,uint8_t)
-        GenerateTangentsDiag(2,uint8_t)
+            GenerateTangentsDiag(2,uint8_t)
             GenerateTangentsDiag(3,uint8_t)
             GenerateTangentsDiag(4,uint8_t)
             GenerateTangentsDiag(5,uint8_t)
@@ -3181,8 +4176,9 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
     {
         futs.push_back(pool.queueWork([ang,this,&TPtrs,&permAngles]()
                                       {
-                                          for (size_t i = 0; i < m_fusedAnsatzes.size(); i++)
+                                          for (size_t i = 0; i < m_fusedSizes.size(); i++)
                                           {
+                                              std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i],m_permExcs.begin()+m_commuteBoundaries[i+1]);
                                               size_t diff = m_commuteBoundaries[i+1] -m_commuteBoundaries[i];
                                               if (ang >= m_commuteBoundaries[i+1])
                                                   continue;
@@ -3324,8 +4320,9 @@ void FusedEvolve::evolveHessianProj(Eigen::MatrixXd &Hessian, vector<realNumType
                                               //This will evaluate each element only once. problem is that diff may go over the boundary. So that needs to be fixed up afterwards.
                                               //Further knowing the symmetrical version is annoying so we symmetrise here
                                               size_t permAngleIdx = m_excInversePerm[angleIdx];
-                                              for (size_t i = m_fusedAnsatzes.size(); i > 0; i--)
+                                              for (size_t i = m_fusedSizes.size(); i > 0; i--)
                                               {
+                                                  std::vector<stateRotate::exc> v(m_permExcs.begin() + m_commuteBoundaries[i-1],m_permExcs.begin()+m_commuteBoundaries[i]);
                                                   //            start                     end
                                                   size_t diff = m_commuteBoundaries[i] -m_commuteBoundaries[i-1];
                                                   if (!(permAngleIdx <= m_commuteBoundaries[i]))
