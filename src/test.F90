@@ -52,11 +52,7 @@ program myfortran
 
     ! Setup Hamiltonian
 
-    CALL getcwd(cwd)
-    print *, len_trim(cwd)
-    cwd = TRIM(cwd)//"/"
-    status = setHamiltonianFile(cwd,len_trim(cwd),ctx)
-!    status = setHamiltonian(size(HamiIndexes,1,8),HamiIndexes,HamjIndexes,HamCoeffs,ctx)
+    status = setHamiltonian(size(HamiIndexes,1,8),HamiIndexes,HamjIndexes,HamCoeffs,ctx)
     call checkStatus(status)
 
     ! set operators
@@ -113,6 +109,103 @@ program myfortran
     !print *, "gradient:", gradient
     print *, "gradient Norm:         ", norm2(gradient)
     print *, "gradient Norm Expected:", 1.1413822446980523E-11_dp
+
+    !Hessian
+
+    status = getHessian_COMP(9, angles, hessian,ctx)
+    call checkStatus(status)
+    !print *, "hessian:", hessian
+
+    !Full state
+
+    status = getFinalState(9, angles, 256,state, ctx)
+    call checkStatus(status)
+    print *, "state Norm:", norm2(state)
+    print *, "expected   ", 1.0_dp
+
+
+
+
+
+
+    status =  cleanup(ctx)
+    call checkStatus(status)
+
+!    DO THE SAME FOR FROM FILE.
+    print *, "#####################Now doing the same loading Ham from integrals"
+    ctx = init()
+
+    ! Setup inital state
+
+    initialIIndexes(1) = 171
+    initialCoeffs(1) = 1.0
+    status = setInitialState(8,size(initialIIndexes,1,8),initialIIndexes,initialCoeffs,ctx)
+    call checkStatus(status)
+
+    ! Setup Hamiltonian
+
+    CALL getcwd(cwd)
+    print *, len_trim(cwd)
+    cwd = TRIM(cwd)//"/"
+    status = setHamiltonianFile(cwd,len_trim(cwd),ctx)
+!    status = setHamiltonian(size(HamiIndexes,1,8),HamiIndexes,HamjIndexes,HamCoeffs,ctx)
+    call checkStatus(status)
+
+    ! set operators
+
+    status = setExcitation(15,operators,order,ctx)
+    call checkStatus(status)
+
+    !Setup is now complete
+
+    !-----------At the HF angles (This Hamiltonian is actually broken and doesnt correspond to the HF energy but oh well
+    !Energy
+    print *, ""
+    print *, "Evaluate at HF Angles"
+    angles = 0_dp
+    status = getEnergy(9, angles, Energy,ctx)
+    call checkStatus(status)
+    print *, "Energy:  ", Energy
+    print *, "Expected:", -2.1828583348670398_dp
+
+    !Gradient
+
+    status = getGradient_COMP(9, angles, gradient,ctx)
+    call checkStatus(status)
+    !print *, "gradient:", gradient
+    print *, "gradient Norm:         ", norm2(gradient)
+    print *, "gradient Norm Expected:", 0.48701132580304757_dp
+
+    !Hessian
+
+    status = getHessian_COMP(9, angles, hessian,ctx)
+    call checkStatus(status)
+    !print *, "hessian:", hessian
+
+    !Full state
+
+    status = getFinalState(9, angles, 256,state, ctx)
+    call checkStatus(status)
+    print *, "state Norm:", norm2(state)
+    print *, "expected   ", 1.0_dp
+
+    !----------A Minima
+    print *, ""
+    print *, "Evaluate Elsewhere"
+    angles = [0.182710385127496_dp, 1.657072388288146_dp, 0.110549543159596_dp, 0.878483796766535_dp,    0.225437898626115_dp,    1.095597930656243_dp,   -0.000000000027978_dp,    0.797060942289907_dp,   -1.570796326773916_dp]
+
+    status = getEnergy(9, angles, Energy,ctx)
+    call checkStatus(status)
+    print *, "Energy:  ", Energy
+    print *, "Expected:", -2.6446209942055132_dp
+
+    !Gradient
+
+    status = getGradient_COMP(9, angles, gradient,ctx)
+    call checkStatus(status)
+    !print *, "gradient:", gradient
+    print *, "gradient Norm:         ", norm2(gradient)
+    print *, "gradient Norm Expected:", 0.50078482490574161_dp
 
     !Hessian
 

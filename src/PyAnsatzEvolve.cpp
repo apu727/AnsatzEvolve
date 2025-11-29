@@ -21,7 +21,7 @@ PYBIND11_MODULE(PyAnsatzEvolve, m) {
              {
                  std::vector<stateRotate::exc> excs;
                  excs.reserve(operators.size());
-                 stateRotate::exc e;
+                 int8_t e[4];
                  for (auto op : operators)
                  {
                      if (op.size() != 4)
@@ -32,7 +32,7 @@ PYBIND11_MODULE(PyAnsatzEvolve, m) {
                              throw std::out_of_range("Each operator index too big, < 127");
                          e[i] = op[i]-1;
                      }
-                     excs.push_back(e);
+                     excs.emplace_back(e);
                  }
                  self.storeOperators(excs);
              })

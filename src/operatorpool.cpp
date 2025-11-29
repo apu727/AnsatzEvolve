@@ -184,7 +184,7 @@ bool stateRotate::loadOperators(std::string filePath, std::vector<stateRotate::e
 {
     excs.clear();
     FILE *fp;
-    exc Excs;
+    int8_t Excs[4];
 
     fp = fopen(filePath.c_str(), "r");
     if(NULL == fp)
@@ -199,7 +199,7 @@ bool stateRotate::loadOperators(std::string filePath, std::vector<stateRotate::e
         //fprintf(stderr,"Read Operator: %hhd %hhd %hhd %hhd\n ", Excs[0],Excs[1],Excs[2],Excs[3]);
         for (int i = 0; i < 4; i++)
             Excs[i] -= 1;
-        excs.push_back(Excs);
+        excs.emplace_back(Excs);
         ret = fscanf(fp, "%hhd %hhd %hhd %hhd \n",&Excs[0],&Excs[1],&Excs[2],&Excs[3] );
     }
     fclose(fp);
@@ -287,4 +287,29 @@ bool SZAndnumberOperatorCompressor::opDoesSomething(excOp &e)
     int spinDownDestroy = popcount(e.destroy & m_spinDownBitMask);
     return (spinUpCreate == spinUpDestroy) && (spinDownCreate == spinDownDestroy);
 
+}
+void stateRotate::exc::setup()
+{
+    if (first < 0 && second < 0)
+        releaseAssert(false,"first < 0 && second < 0");
+
+    if (third > -1 && fourth > -1) {
+        if (first == second || third == fourth)
+            releaseAssert(false,"Wrong order in creation annihilation operators");
+
+        create = (1ul << first) | (1ul << second);
+        annihilate = (1ul << third) | (1ul << fourth);
+        signMask = ((1ul << first) - 1) ^ ((1ul << second) - 1) ^ ((1ul << third) - 1) ^ ((1ul << fourth) - 1);
+        signMask = signMask & ~((1ul << first) | (1ul << second) | (1ul << third) | (1ul << fourth));
+        if (first > second) // We want 1 5 2 6 to have no phase to match with previous angles
+            sign = !sign;
+        if (third > fourth) // destroy largest first.
+            sign = !sign;
+    } else {
+        create = (1ul << first);
+        annihilate = (1ul << second);
+
+        signMask = ((1ul << first) - 1) ^ ((1ul << second) - 1);
+        signMask = signMask & ~((1ul << first) | (1ul << second));
+    }
 }

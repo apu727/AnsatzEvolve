@@ -186,36 +186,27 @@ public:
 class stateRotate : public operatorPool
 {
 public:
-    struct exc
+    class exc
     {
         int8_t first;
         int8_t second;
         int8_t third;
         int8_t fourth;
+        void setup(); // sets up create,annihilate,signmask,sign
+    public:
+
+        bool sign = false; // true = -1, false = 1. This is the builtin sign due to orderings
+        uint64_t create;
+        uint64_t annihilate;
+        uint64_t signMask;
+
         exc(){}
-        exc(int8_t (&arr)[4]){first = arr[0]; second = arr[1]; third = arr[2]; fourth = arr[3];}
-        exc(uint64_t val){first = val >> 24; second = val >> 16; third = val >> 8; fourth = val;}
+        exc(int8_t (&arr)[4]){first = arr[0]; second = arr[1]; third = arr[2]; fourth = arr[3]; setup();}
+        exc(uint64_t val){first = val >> 24; second = val >> 16; third = val >> 8; fourth = val; setup();}
         operator uint64_t() const {return ((uint8_t)first << 24) + ((uint8_t)second << 16) + ((uint8_t) third << 8) + (uint8_t)fourth;}
         bool isSingleExc() const {return first >= 0 && second >= 0 && third < 0 && fourth < 0;}
         bool isDoubleExc() const {return first >= 0 && second >= 0 && third >= 0 && fourth >= 0;}
         const int8_t& operator [](size_t idx) const
-        {
-            switch (idx)
-            {
-            case 0:
-                return first;
-            case 1:
-                return second;
-            case 2:
-                return third;
-            case 3:
-                return fourth;
-            default:
-                __builtin_trap();
-                return first;
-            }
-        }
-        int8_t& operator [](size_t idx)
         {
             switch (idx)
             {
@@ -278,15 +269,6 @@ public:
         }
         bool isDiagonal() const
         {
-            if (third == -1)
-            {
-                assert(fourth == -1);
-                return first == second;
-            }
-            uint64_t create = (1ul<<first) | (1ul<<second);
-            uint64_t annihilate = (1ul<<third) | (1ul<<fourth);
-            assert(third != fourth);//Double destroy
-            assert(first != second); //Double create
             //dont care about order
             return (create ^ annihilate) == 0;
         }

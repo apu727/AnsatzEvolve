@@ -28,61 +28,26 @@ std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate
 {
     constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
     bool complexSet = false;
-    uint64_t activeBits =  0;
-    uint64_t createBits = 0;
-    uint64_t annihilateBits = 0;
 
-    numType phase = 1;
-    if (a[0] < 0 && a[1] < 0)
-        return std::make_pair(state,true);
+    numType phase = a.sign ? -1 : 1;
 
-    if (isComplex)
+    if constexpr (isComplex)
     {
         complexSet = state & 1;
         state = state >>1;
     }
 
-    if (a[2] > -1 && a[3] > -1)
-    {
-        if (a[0] == a[1] || a[2] == a[3])
-        {
-            fprintf(stderr,"Wrong order in creation annihilation operators");
-            return std::make_pair(state,true);
-        }
-        createBits = (1ul<<a[0]) | (1ul<<a[1]);
-        annihilateBits = (1ul<<a[2]) | (1ul<<a[3]);
-        uint64_t signMask = ((1ul<<a[0])-1) ^ ((1ul<<a[1])-1) ^((1ul<<a[2])-1) ^((1ul<<a[3])-1);
-        signMask = signMask & ~((1ul<<a[0]) | (1ul<<a[1]) | (1ul<<a[2]) | (1ul<<a[3]));
-        activeBits = createBits | annihilateBits;
-        phase *= (popcount(state & signMask) & 1) ? -1 : 1;
-        if (a[0] > a[1]) // We want 1 5 2 6 to have no phase to match with previous angles
-            phase *= -1;
-        if (a[2] > a[3]) // destroy largest first.
-            phase *= -1;
-    }
-    else
-    {
-        createBits = (1ul<<a[0]);
-        annihilateBits = (1ul<<a[1]);
-        activeBits = createBits | annihilateBits;
 
-        uint64_t signMask = ((1ul<<a[0])-1) ^ ((1ul<<a[1])-1);
-        signMask = signMask & ~((1ul<<a[0]) | (1ul<<a[1]));
-        phase *= (popcount(state & signMask) & 1) ? -1 : 1;
-    }
-
-
-    uint64_t basisState = state;
-    uint64_t resultState = basisState;
+    phase *= (popcount(state & a.signMask) & 1) ? -1 : 1;
 
 
 
-    uint64_t maskedBasisState = basisState & activeBits;
+    uint64_t resultState;
 
-    if (createBits == annihilateBits) // number operator
+    if (a.create == a.annihilate) // number operator
     {
 #ifdef useComplex
-        if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0)
+        if (((basisState & annihilateBits) ^ annihilateBits) == 0)
         {
             phase *= iu;
         }
@@ -90,7 +55,7 @@ std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate
         {
             phase = 0;
         }
-        resultState = basisState;
+        resultState = state;
 #else
         logger().log("Complex number not supported in this build, please rebuild");
         __builtin_trap();
@@ -98,47 +63,57 @@ std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate
     }
     else
     { // excitation operator. These are different since we need to make it anti-hermitian which is done differently
-        if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0 && (((maskedBasisState ^ annihilateBits) & createBits)) == 0)
-        {// This allows operators like a^+_4 a^+_3 a_3 a_2 to be handled properly
-            phase *= 1;
-            resultState = (basisState ^ annihilateBits) ^ createBits;
-        }
-        else if (((maskedBasisState & createBits) ^ createBits) == 0 && (((maskedBasisState ^ createBits) & annihilateBits)) == 0)
+        bool canDestroy = ((state & a.annihilate) ^ a.annihilate) == 0;
+        uint64_t destroyed = state ^ a.annihilate;
+        bool canCreate = (destroyed & a.create) == 0;
+        resultState = destroyed | a.create;
+
+        if (canDestroy && canCreate)
         {
-            phase *= -1;
-            resultState = (basisState ^ createBits) ^ annihilateBits;
+            // phase *= 1;
+            // resultState = (basisState ^ annihilateBits) ^ createBits;
         }
         else
         {
-            phase = 0;
+            //try conjugate
+
+            canDestroy = ((state & a.create) ^ a.create) == 0;
+            destroyed = state ^ a.create;
+            canCreate = (destroyed & a.annihilate) == 0;
+            resultState = destroyed | a.annihilate;
+            if (canDestroy && canCreate)
+                phase *= -1;
+            else
+                phase = 0;
+
         }
     }
 
     if (phase == numType(1))
     {
-        if (isComplex)
+        if constexpr (isComplex)
             return std::make_pair((resultState<<1) + (complexSet? 1 : 0),true);
         else
             return std::make_pair(resultState,true);
     }
     else if (phase == numType(-1))
     {
-        if (isComplex)
+        if constexpr (isComplex)
             return std::make_pair((resultState<<1) + (complexSet? 1 : 0),false);
         else
             return std::make_pair(resultState,false);
     }
-    else if (phase == iu)
+    else if (isComplex && phase == iu)
     {
         assert(isComplex);
         return std::make_pair((resultState<<1)+(complexSet? 0 : 1),(complexSet ? false : true));
     }
     else
     {
-        if (isComplex)
-            return std::make_pair((resultState<<1) + (complexSet? 1 : 0),false);
+        if constexpr (isComplex)
+            return std::make_pair((state<<1) + (complexSet? 1 : 0),false);
         else
-            return std::make_pair(resultState,false);
+            return std::make_pair(state,false);
     }
 
 
@@ -157,7 +132,7 @@ std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate
  */
 
 template<typename indexType, indexType numberOfRotsThatExist>
-void fillCurrentMap(indexType activeRotsIdx, indexType numberToFuse,
+void fillCurrentMap_(indexType activeRotsIdx, indexType numberToFuse,
                     uint64_t* currentMap, bool* currentSigns,
                     indexType rotIdx, indexType numberOfActiveRotationsSoFar,
                     const std::array<std::pair<uint64_t,bool>,numberOfRotsThatExist>& initialLinks, const std::array<stateRotate::exc,numberOfRotsThatExist>& rots)
@@ -186,7 +161,7 @@ void fillCurrentMap(indexType activeRotsIdx, indexType numberToFuse,
     while(nextRotIdx < numberOfRotsThatExist && ((1<<nextRotIdx) & activeRotsIdx) == 0)
         ++nextRotIdx;
     if (nextRotIdx < numberOfRotsThatExist)
-        fillCurrentMap<indexType,numberOfRotsThatExist>(activeRotsIdx,numberToFuse,currentMap,currentSigns,nextRotIdx,numberOfActiveRotationsSoFar+1,initialLinks,rots);
+        fillCurrentMap_<indexType,numberOfRotsThatExist>(activeRotsIdx,numberToFuse,currentMap,currentSigns,nextRotIdx,numberOfActiveRotationsSoFar+1,initialLinks,rots);
     //else we are done and the vector has been determined
 
     //Now currentMap[0:1<<numberToFuse] is filled. i.e. the whole thing. Note that 2*(1<<MaxRotIdx) = 1<<numberToFuse
@@ -1060,7 +1035,7 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             //     *(currentMap.begin() + currentMapFilledSize + t) = (uint64_t)-1;
 
             uint64_t currentSignsStep = numberOfActiveRots*currentMapFilledSize/2;
-            fillCurrentMap<indexType,numberToFuse>(activeRotIdx,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
+            fillCurrentMap_<indexType,numberToFuse>(activeRotIdx,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
             // for (indexType t = 0; t < (1<<numberOfActiveRots); t++)
             //     if (*(currentMap.begin() + currentMapFilledSize + t) == (uint64_t)-1)
             //         __builtin_trap();
@@ -2130,7 +2105,7 @@ void RunFuseNOnTheFly(realNumType* startVec, const realNumType* angles, size_t n
             currentMap[0] = currentBasisState;
 
             uint64_t currentSignsStep = 0;
-            fillCurrentMap<indexType,numberToFuse>(activeRotIdx,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
+            fillCurrentMap_<indexType,numberToFuse>(activeRotIdx,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
 
             currentMapFilledSize = 1<<numberOfActiveRots;
             //compress indices

@@ -97,9 +97,10 @@ int setExcitationScale(int nparams, const int *operators, const int *orderfile, 
     stateAnsatzManager* thisPtr = static_cast<stateAnsatzManager*>(ctx);
     std::lock_guard<std::mutex>lock(thisPtr->m_interfaceLock);
 
-    std::vector<stateRotate::exc> excs(nparams);
+    std::vector<stateRotate::exc> excs;
     for (int i = 0; i < nparams; i++)
     {
+        int8_t excArray[4];
         for (int j = 0; j < 4; j++)
         {
             if (operators[nparams*j + i]-1 > std::numeric_limits<int8_t>::max())
@@ -108,8 +109,9 @@ int setExcitationScale(int nparams, const int *operators, const int *orderfile, 
                 logger().log("Excitation out of bounds, max is 128",operators[nparams*j + i]);
                 return 3;
             }
-            excs[i][j] = operators[nparams*j + i]-1; // Fortran order
+            excArray[j] = operators[nparams*j + i]-1;// Fortran order
         }
+        excs.emplace_back(excArray);
     }
     bool succ = thisPtr->storeOperators(excs);
     if (!succ)

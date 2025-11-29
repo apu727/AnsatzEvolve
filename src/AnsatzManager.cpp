@@ -201,22 +201,12 @@ void stateAnsatzManager::setOperatorSymmetry()
 
     for (const auto& e : m_excitations)
     {
-        uint64_t create = 0;
-        uint64_t destroy = 0;
-        if (e.isSingleExc())
-        {
-            create = (1ul<<e.first);
-            destroy = (1ul<<e.second);
-        }
-        else if (e.isDoubleExc())
-        {
-            create = (1ul<<e.first) | (1ul << e.second);
-            destroy = (1ul<<e.third) | (1ul << e.fourth);
-        }
-        else
+        uint64_t create = e.create;
+        uint64_t destroy = e.annihilate;
+        if (!e.isSingleExc() && !e.isDoubleExc())
         {
             char msg[100] = {};
-            sprintf(msg,"exc is neither single nor double excitation %i, %i, %i, %i\n",e.first, e.second, e.third, e.fourth);
+            sprintf(msg,"exc is neither single nor double excitation %i, %i, %i, %i\n",e[0], e[1], e[2], e[3]);
             releaseAssert(false, msg);
         }
         int spinUpCreate = popcount(create & spinUpBitMask);
