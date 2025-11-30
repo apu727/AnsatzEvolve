@@ -119,6 +119,73 @@ std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate
 
 }
 
+//The operator must be applicable to the state via prior knowledge
+bool applyExcToBasisStateSignOnly(uint64_t state, const stateRotate::exc& a)
+{
+    constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
+    bool complexSet = false;
+
+    numType phase = a.sign ? -1 : 1;
+
+    if constexpr (isComplex)
+    {
+        complexSet = state & 1;
+        state = state >>1;
+    }
+
+
+    phase *= (popcount(state & a.signMask) & 1) ? -1 : 1;
+
+#ifdef useComplex
+    if (a.create == a.annihilate) // number operator
+    {
+
+        if (((basisState & annihilateBits) ^ annihilateBits) == 0)
+        {
+            phase *= iu;
+        }
+        else
+        {
+            phase = 0;
+        }
+        resultState = state;
+
+    }
+    else
+#endif
+    { // excitation operator. These are different since we need to make it anti-hermitian which is done differently
+        bool canDestroy = ((state & a.annihilate) ^ a.annihilate) == 0;
+        uint64_t destroyed = state ^ a.annihilate;
+        bool canCreate = (destroyed & a.create) == 0;
+
+        if (canDestroy && canCreate)
+        {
+            return phase == 1 ? true : false;
+        }
+        else
+        {
+            //Conjugate must work
+            return phase == 1 ? false : true;
+        }
+    }
+#ifdef useComplex
+    static_assert(isComplex);
+    if (isComplex && phase == iu)
+    {
+        assert(isComplex);
+        return std::make_pair((resultState<<1)+(complexSet? 0 : 1),(complexSet ? false : true));
+    }
+    else
+    {
+        if constexpr (isComplex)
+            return std::make_pair((state<<1) + (complexSet? 1 : 0),false);
+        else
+            return std::make_pair(state,false);
+    }
+#endif
+
+}
+
 /*
  * numberOfRotsThatExist --------- Max number of rots that exist. Used for bounds checking
  * activeRotsIdx ----------------- bitmap of which rotations are active
@@ -131,7 +198,7 @@ std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate
  * rots -------------------------- Array giving the stateRotate::exc representation of the rotation
  */
 
-template<typename indexType, indexType numberOfRotsThatExist>
+template<typename indexType, indexType numberOfRotsThatExist, bool optimised = false>
 void fillCurrentMap_(indexType activeRotsIdx, indexType numberToFuse,
                     uint64_t* currentMap, bool* currentSigns,
                     indexType rotIdx, indexType numberOfActiveRotationsSoFar,
@@ -147,7 +214,7 @@ void fillCurrentMap_(indexType activeRotsIdx, indexType numberToFuse,
 
     //(localVectorSize/2) gives how many signs are relevant per layer.
     //numberOfActiveRotationsSoFar is how many layers have been initialised
-    currentSigns[(localVectorSize/2)*numberOfActiveRotationsSoFar + numberOfRotationsAddedOnThisLayer++] = initialLinks[rotIdx].second; //should always be true
+    currentSigns[(localVectorSize/2)*numberOfActiveRotationsSoFar + numberOfRotationsAddedOnThisLayer++] = initialLinks[rotIdx].second;
 
     //All of currentMap[0:strideSize] is filled out by the time this is called
     for (indexType idx = 1; idx < strideSize; idx++)
@@ -157,11 +224,12 @@ void fillCurrentMap_(indexType activeRotsIdx, indexType numberToFuse,
         currentMap[idx + strideSize] = effect.first;
         currentSigns[numberOfRotationsAddedOnThisLayer++ + (localVectorSize/2)*numberOfActiveRotationsSoFar] = effect.second;
     }
-    indexType nextRotIdx = rotIdx+1;
-    while(nextRotIdx < numberOfRotsThatExist && ((1<<nextRotIdx) & activeRotsIdx) == 0)
-        ++nextRotIdx;
-    if (nextRotIdx < numberOfRotsThatExist)
+    if (activeRotsIdx != 0)
+    {
+        indexType nextRotIdx =  __builtin_ctzl(activeRotsIdx);
+        activeRotsIdx = activeRotsIdx ^ (1ul << nextRotIdx);
         fillCurrentMap_<indexType,numberOfRotsThatExist>(activeRotsIdx,numberToFuse,currentMap,currentSigns,nextRotIdx,numberOfActiveRotationsSoFar+1,initialLinks,rots);
+    }
     //else we are done and the vector has been determined
 
     //Now currentMap[0:1<<numberToFuse] is filled. i.e. the whole thing. Note that 2*(1<<MaxRotIdx) = 1<<numberToFuse
@@ -173,10 +241,18 @@ void fillCurrentMap_(indexType activeRotsIdx, indexType numberToFuse,
     {
         for (indexType idx = startIdx; idx < startIdx +strideSize; idx++)
         {
-            auto effect = applyExcToBasisState_(currentMap[idx],rots[rotIdx]);
-            assert(effect.first != currentMap[idx]);
-            assert(effect.first == currentMap[idx + strideSize]);
-            currentSigns[numberOfRotationsAddedOnThisLayer++ + (localVectorSize/2)*numberOfActiveRotationsSoFar] = effect.second;
+            if constexpr (optimised)
+            {
+                bool sign = applyExcToBasisStateSignOnly(currentMap[idx],rots[rotIdx]);
+                currentSigns[numberOfRotationsAddedOnThisLayer++ + (localVectorSize/2)*numberOfActiveRotationsSoFar] = sign;
+            }
+            else
+            {
+                auto effect = applyExcToBasisState_(currentMap[idx],rots[rotIdx]);
+                assert(effect.first != currentMap[idx]);
+                assert(effect.first == currentMap[idx + strideSize]);
+                currentSigns[numberOfRotationsAddedOnThisLayer++ + (localVectorSize/2)*numberOfActiveRotationsSoFar] = effect.second;
+            }
         }
         //Note idx = startIdx + strideSize -> startIdx + 2*strideSize are skipped. Hence the notation on currentSigns
     }
@@ -764,6 +840,38 @@ public:
         currPos = 0;
         complexIter = 0;
     }
+    size_t length()
+    {
+        if constexpr(isComplex)
+            return vecSize*2;
+        else
+            return vecSize;
+    }
+    bool setTo(size_t pos)
+    {
+        if constexpr(isComplex)
+        {
+            if (pos < length())
+            {
+                currPos = pos / 2;
+                complexIter = (pos % 2) == 1;
+                return true;
+            }
+            else
+                return false;
+        }
+        else
+        {
+            if (pos < length())
+            {
+                currPos = pos;
+                return true;
+            }
+            else
+                return false;
+        }
+    }
+
 };
 
 template<typename indexType, indexType numberToFuse, bool BraketWithTangentOfResult, bool storeTangent, bool parallelise = false,
@@ -1025,10 +1133,15 @@ auto setupFuseN(const std::vector<stateRotate::exc>& excPath, const vector<numTy
             }
             localVectorMap& currentMap = currentLocalVectors[activeRotIdx].back().first;
             signMap& currentSigns = currentLocalVectors[activeRotIdx].back().second;
-            indexType rotIdx = 0;
-            while(rotIdx < numberToFuse && (activeRotIdx & (1<<rotIdx)) == 0)
-                ++rotIdx;
-            releaseAssert(rotIdx < numberToFuse,"rotIdx < numberToFuse");
+            indexType rotIdx;
+            if (activeRotIdx == 0)
+                __builtin_unreachable();
+
+            rotIdx =  __builtin_ctzl(activeRotIdx);
+            activeRotIdx = activeRotIdx ^ (1ul << rotIdx);
+
+            if (rotIdx >= numberToFuse)
+                    __builtin_unreachable();
 
             *(currentMap.begin()+currentMapFilledSize) = currentBasisState;
             // for (indexType t = 1; t < (1<<numberOfActiveRots); t++)
@@ -2025,8 +2138,7 @@ void RunFuseNOnTheFly(realNumType* startVec, const realNumType* angles, size_t n
 
     compressedIterator<isComplex> basisStateIterator(sampleVec.size(),comp);
 
-    realNumType scratchSpace[localVectorSize];
-    realNumType scratchSpacehPsi[localVectorSize];
+
     auto startTime = std::chrono::high_resolution_clock::now();
 
     if constexpr (BraketWithTangentOfResult)
@@ -2064,11 +2176,36 @@ void RunFuseNOnTheFly(realNumType* startVec, const realNumType* angles, size_t n
         for (indexType idx = 0; idx < numberToFuse; idx++)
             rots[idx] = excPath[i+idx];
 
+
+        std::mutex SerialMutex; // some things need to be done in serial, anything that touches the result
+        threadpool& pool = threadpool::getInstance(NUM_CORES);
+        size_t basisSetSize = basisStateIterator.length();
+        size_t stepSize = std::max(basisSetSize/(50*NUM_CORES),1ul);
+        std::vector<std::future<void>> futs;
+        for (size_t basisSetStartPoint = 0; basisSetStartPoint < basisSetSize; basisSetStartPoint += stepSize)
+        {
+            size_t basisSetEndPoint = std::min(basisSetStartPoint + stepSize,basisSetSize);
+            futs.push_back(pool.queueWork([basisSetStartPoint,basisSetEndPoint,&sampleVec,&comp,&rots,isCompressed,&startVec,&hPsi,&SerialMutex,&sines,&cosines,i,nAngles,trueResult = result,&tangentStore]()
+            {
+        // size_t CompleteCount = 0;
+        realNumType* resultArrayBacking = new realNumType[nAngles];
+        realNumType** result = new realNumType*[nAngles];
+        if constexpr (BraketWithTangentOfResult)
+        {
+
+            for (indexType i = 0; i < nAngles; i++)
+            {
+                result[i] = &resultArrayBacking[i];
+                *(result[i]) = 0;
+            }
+
+        }
+        realNumType scratchSpace[localVectorSize];
+        realNumType scratchSpacehPsi[localVectorSize];
         std::pair<localVectorMap,signMap> currentLocalVector;
-
-
-        basisStateIterator.reset();
-        for(uint64_t currentBasisState = basisStateIterator.get(); basisStateIterator.valid(); currentBasisState = basisStateIterator.next())
+        compressedIterator<isComplex> basisStateIterator(sampleVec.size(),comp);
+        basisStateIterator.setTo(basisSetStartPoint);
+        for(uint64_t currentBasisState = basisStateIterator.get(); basisStateIterator.count() < basisSetEndPoint; currentBasisState = basisStateIterator.next())
         {
             uint32_t currentMapFilledSize = 0;
 
@@ -2099,17 +2236,22 @@ void RunFuseNOnTheFly(realNumType* startVec, const realNumType* angles, size_t n
 
             localVectorMap& currentMap = currentLocalVector.first;
             signMap& currentSigns = currentLocalVector.second;
-            indexType rotIdx = 0;
-            while(rotIdx < numberToFuse && (activeRotIdx & (1<<rotIdx)) == 0)
-                ++rotIdx;
-            if (rotIdx >= numberToFuse)
+            indexType rotIdx;
+            if (activeRotIdx == 0)
                 __builtin_unreachable();
+
+            rotIdx =  __builtin_ctzl(activeRotIdx);
+            indexType activeRotIdxModified = activeRotIdx ^ (1ul << rotIdx);
+
+            if (rotIdx >= numberToFuse)
+                    __builtin_unreachable();
             currentMap[0] = currentBasisState;
 
             uint64_t currentSignsStep = 0;
-            fillCurrentMap_<indexType,numberToFuse>(activeRotIdx,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
+            fillCurrentMap_<indexType,numberToFuse,true>(activeRotIdxModified,numberOfActiveRots,currentMap.begin()+currentMapFilledSize,currentSigns.begin()+currentSignsStep,rotIdx,0,initialLinks,rots);
 
             currentMapFilledSize = 1<<numberOfActiveRots;
+            // CompleteCount += currentMapFilledSize;
             //compress indices
             if (isCompressed)
             {
@@ -2706,7 +2848,26 @@ void RunFuseNOnTheFly(realNumType* startVec, const realNumType* angles, size_t n
 
             }
         }
+        if constexpr (BraketWithTangentOfResult)
+        {
+            {
+            std::lock_guard<std::mutex> lock(SerialMutex);
+            for (indexType k = 0; k < nAngles; k++)
+                *(trueResult[k]) += *(result[k]);
+            }
+
+        }
+        delete[] result;
+        delete[] resultArrayBacking;
+        // logger().log("completeCount",CompleteCount);
+        //End lambda
+        },!parallelise));
+        }// end queue lambdas
+        for (auto& f : futs)
+            f.wait();
+        // logger().log("All done");
     }
+
     //Start now contains the full evolution
     auto endTime = std::chrono::high_resolution_clock::now();
     auto __attribute__ ((unused))duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime-startTime).count();
@@ -3287,11 +3448,11 @@ case N:\
 {\
     constexpr uint8_t num = N;\
     if constexpr (fuseOnTheFly)\
-        RunFuseNOnTheFly<dataType,num,true,false>((realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,&v[0],m_start,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+        RunFuseNOnTheFly<dataType,num,true,false,true>((realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,&v[0],m_start,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
     else\
     {\
         fusedAnsatzX<num>* FA =  static_cast<fusedAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
-        RunFuseN<dataType,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+        RunFuseN<dataType,num,true,false,true>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
     }\
     break;\
 }
@@ -3301,11 +3462,11 @@ case -N:\
 {\
     constexpr uint8_t num = N;\
     if constexpr (fuseOnTheFly)\
-        RunFuseNDiagonalOnTheFly<dataType,num,true,false>((realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,&v[0],m_start,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+        RunFuseNDiagonalOnTheFly<dataType,num,true,false,true>((realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,&v[0],m_start,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
     else\
     {\
         fusedDiagonalAnsatzX<num>* FA =  static_cast<fusedDiagonalAnsatzX<num>*>(m_fusedAnsatzes[i-1]);\
-        RunFuseNDiagonal<dataType,num,true,false>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
+        RunFuseNDiagonal<dataType,num,true,false,true>(FA->data(),(realNumType*)&dest[0],permAngles.data() + m_commuteBoundaries[i-1],diff,(realNumType*)&hPsi[0],derivLocs.data() + m_commuteBoundaries[i-1]);\
     }\
     break;\
 }
