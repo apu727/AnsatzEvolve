@@ -1473,3 +1473,21 @@ template class projectionMatrix<numType>;
 template class sparseMatrix<numType,numType>;
 template class projectionMatrix<numType>;
 #endif
+
+size_t compressor::deserialise(char *ptr,std::shared_ptr<compressor>& dest)
+{
+    int type;
+    std::memcpy(&type,ptr,sizeof(type));
+    switch (static_cast<registeredBaseClasses>(type))
+    {
+    case registeredBaseClasses::numberOperatorCompressor:
+        releaseAssert(false,"Not implemented case: registeredBaseClasses::numberOperatorCompressor:, deserialise");
+        break;
+    case registeredBaseClasses::SZAndnumberOperatorCompressor:
+        return SZAndnumberOperatorCompressor::deserialise(ptr+4,dest) + 4;
+    default:
+        releaseAssert(false,"Not implemented case default, deserialise compressor");
+        break;
+    }
+    return 0;
+}

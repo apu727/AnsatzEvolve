@@ -32,6 +32,10 @@ include_directories(./third-party/eigen-3.4.0)
 if (COMPLEX_MODE)
     add_compile_definitions(useComplex)
 endif()
+if (MPI_MODE)
+    add_compile_definitions(USEMPI REQUIRED)
+    find_package(MPI)
+endif()
 
 #Core library
 add_library(cppAnsatzSynthLib STATIC
@@ -53,10 +57,14 @@ add_library(cppAnsatzSynthLib STATIC
     diis.h diis.cpp
     fusedevolve.cpp fusedevolve.h
     hamiltonianmatrix.h hamiltonianmatrix.cpp
+    mpirelay.h mpirelay.cpp
 )
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 else()
     target_link_libraries(cppAnsatzSynthLib pthread m)
+endif()
+if (MPI_FOUND)
+    target_link_libraries(cppAnsatzSynthLib MPI::MPI_CXX)
 endif()
 
 #C++ executable

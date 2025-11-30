@@ -52,7 +52,7 @@ class sparseMatrix;
 
 typedef sparseMatrix<numType,numType> matrixType;
 
-
+static_assert(sizeof(long) == 8,"long must be 64 bits");
 
 const realNumType TOLERANCE = 1e-5;
 extern unsigned long NUM_CORES;

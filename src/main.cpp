@@ -3,6 +3,7 @@
 
 #include "benchmark.h"
 #include "hamiltonianmatrix.h"
+#include "mpirelay.h"
 #include "operatorpool.h"
 #include "ansatz.h"
 #include "threadpool.h"
@@ -10,7 +11,6 @@
 #include "TUPSLoadingUtils.h"
 #include "tupsquantities.h"
 #include "logger.h"
-
 
 #include <vector>
 
@@ -59,6 +59,7 @@ struct options
     bool makeRDM = false;
     bool hessian = true;
     bool RDM2 = true;
+    bool mpi = false;
     static void printHelp()
     {
         logger().log("Help:");
@@ -74,6 +75,7 @@ struct options
         logger().log("'makeRDM'------------------- Computes the 1RDM, 2RDM, 1NCORR,2NCORR");
         logger().log("'noHess'-------------------- Dont compute the Hessian when writing properties");
         logger().log("'noRDM2'-------------------- Dont compute the RDM2 when writing properties, makeRDM must be set for this to have any effect");
+        logger().log("'mpi' ---------------------- Acts as an MPI slave to another process running as master");
         logger().log("'help' --------------------- Print this");
     }
     static options parse(int argc, char* argv[])
@@ -154,6 +156,10 @@ struct options
             {
                 o.RDM2 = false;
             }
+            else if (!strcmp(arg,"mpi"))
+            {
+                o.mpi = true;
+            }
             else if (!strcmp(arg,"help"))
             {
                 printHelp();
@@ -170,10 +176,17 @@ struct options
 
 int main(int argc, char *argv[])
 {
-    //std::vector<uint64_t> statevectorBasis;
+    options opt = options::parse(argc,argv);
+    if (opt.mpi)
+    {
+        logger().log("Running MPI");
+        MPIRelay &relay = MPIRelay::getInstance();
+        relay.runSlaveLoop();
+        std::exit(0);
+    }
     std::vector<numType> statevectorCoeffs;
     std::vector<uint64_t> statevectorIndexes;
-    options opt = options::parse(argc,argv);
+
     const std::string& filePath = opt.filePath;
     if (!opt.ok)
         return 1;

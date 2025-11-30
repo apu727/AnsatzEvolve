@@ -137,6 +137,21 @@ public:
     virtual size_t getUnCompressedSize() = 0;
     virtual void dummyImplement() = 0; // To make this an abstract base class. Derived class needs to implement the construction of compressPerm and decompressPerm
     virtual bool opDoesSomething(excOp& op) = 0;
+
+    enum class registeredBaseClasses // only needed if you wish to be serialisable
+    {
+        numberOperatorCompressor = 1,
+        SZAndnumberOperatorCompressor = 2,
+    };
+    virtual registeredBaseClasses getSerialisationType() = 0;
+    virtual std::pair<std::shared_ptr<char[]>,size_t> serialise() // derived must serialise this object first, the returned bytes must be stored first in the serial stream
+    {
+        int type = static_cast<int>(getSerialisationType());
+        std::shared_ptr<char[]> ret (new char[sizeof(type)]);
+        std::memcpy(ret.get(),&type,sizeof(type));
+        return {ret,sizeof(type)};
+    }
+    static size_t deserialise(char *ptr,std::shared_ptr<compressor>& dest);// derived class must override, UB if not, probably crash.
 };
 template<typename vectorType>
 inline bool s_loadMatrix(sparseMatrix<std::complex<realNumType>,vectorType>* me,std::string filePath);

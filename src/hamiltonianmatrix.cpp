@@ -5,6 +5,7 @@
  */
 #include "hamiltonianmatrix.h"
 #include "logger.h"
+#include "mpirelay.h"
 #include "threadpool.h"
 #include "myComplex.h"
 
@@ -696,7 +697,7 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
         sizeEstimate = 0.3*comp->getCompressedSize() * choose(numberOfQubits/2+2,2)*choose(numberOfQubits/2,2);
         //This is an overestimate but we can always add more complicated estimate functions later
     }
-    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction)
+    if (m_isSecQuantConstructed && sizeEstimate < maxSizeForFullConstruction && false)
     {
         //Construct Fully
         logger().log("Constructing fully, size estimate", sizeEstimate);
@@ -731,6 +732,114 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::string &fi
 //         srcPtr++;
 //     }
 // }
+
+//The class that can be send over MPI and contains all the information for the destination to apply the Hamiltonian
+template<typename dataType, typename vectorType>
+class HamiltonianWorkData
+{
+public:
+    std::vector<excOp> m_operators;
+    std::vector<dataType> m_vals;
+    std::shared_ptr<compressor> comp;
+    size_t vectorSize;
+    const vectorType* src; // Must exist as long as HamiltonianWorkData exists.
+
+
+    std::pair<std::shared_ptr<char[]>,size_t> serialise();
+
+    static HamiltonianWorkData deserialise(char* ptr);
+};
+
+template<typename dataType, typename vectorType>
+struct HamiltonianReplyData
+{
+public:
+    size_t vectorSize;
+    std::shared_ptr<vectorType[]> dest;
+
+    std::pair<std::shared_ptr<char[]>,size_t> serialise();
+    static HamiltonianReplyData deserialise(char* ptr);
+
+};
+
+template<typename dataType, typename vectorType>
+std::pair<std::shared_ptr<char[]>,size_t> HamiltonianWorkData<dataType, vectorType>::serialise()
+{
+    //This does involve copies, but only small things
+    std::pair<std::shared_ptr<char[]>,size_t> m_operatorsSerialised = serialisableArray<excOp>(m_operators.size(),&m_operators[0]).serialise();
+    std::pair<std::shared_ptr<char[]>,size_t> m_valsSerialised = serialisableArray<dataType>(m_vals.size(),&m_vals[0]).serialise();
+    std::pair<std::shared_ptr<char[]>,size_t> compressorExistsSerialised = serialiseStruct((bool)comp);
+    std::pair<std::shared_ptr<char[]>,size_t> compressorSerialised;
+    if (comp) compressorSerialised = comp->serialise();
+    // std::pair<std::shared_ptr<char[]>,size_t> srcVectorSerialised = serialisableArray<vectorType>(vectorSize,src).serialise();
+
+    size_t totalSize = 0;
+    totalSize += m_operatorsSerialised.second;
+    totalSize += m_valsSerialised.second;
+    totalSize +=  compressorExistsSerialised.second;
+    totalSize += (comp) ? compressorSerialised.second : 0;
+    totalSize += serialisableArray<vectorType>(vectorSize,src).getSerialiedSize();
+
+    std::shared_ptr<char[]> ret(new char[totalSize]);
+    char* retCurrPtr = ret.get();
+    std::memcpy(retCurrPtr,m_operatorsSerialised.first.get(),m_operatorsSerialised.second);
+    retCurrPtr += m_operatorsSerialised.second;
+
+    std::memcpy(retCurrPtr,m_valsSerialised.first.get(),m_valsSerialised.second);
+    retCurrPtr += m_valsSerialised.second;
+
+    std::memcpy(retCurrPtr,compressorExistsSerialised.first.get(),compressorExistsSerialised.second);
+    retCurrPtr += compressorExistsSerialised.second;
+    if (comp)
+    {
+        std::memcpy(retCurrPtr,compressorSerialised.first.get(),compressorSerialised.second);
+        retCurrPtr += compressorSerialised.second;
+    }
+
+    serialisableArray<vectorType>(vectorSize,src).serialise(retCurrPtr,totalSize + ret.get() - retCurrPtr);
+    return {ret,totalSize};
+}
+
+template<typename dataType, typename vectorType>
+HamiltonianWorkData<dataType,vectorType> HamiltonianWorkData<dataType, vectorType>::deserialise(char* ptr)
+{
+    //This does involve copies, but only small things
+    HamiltonianWorkData<dataType,vectorType> ret;
+    ret.m_operators.resize(serialisableArray<excOp>::deserialiseSize(ptr));
+    ptr += serialisableArray<excOp>::deserialise(ptr,&ret.m_operators[0]);
+
+    ret.m_vals.resize(serialisableArray<dataType>::deserialiseSize(ptr));
+    ptr += serialisableArray<dataType>::deserialise(ptr,&ret.m_vals[0]);
+
+    bool isCompressed;
+    ptr += deserialiseStruct(ptr,isCompressed);
+    if (isCompressed)
+        ptr += compressor::deserialise(ptr,ret.comp);
+
+    ret.vectorSize = serialisableArray<vectorType>::deserialiseSize(ptr);
+    serialisableArray<vectorType>::deserialise(ptr,&ret.src);
+    return ret;
+}
+
+template<typename dataType, typename vectorType>
+std::pair<std::shared_ptr<char[]>,size_t> HamiltonianReplyData<dataType, vectorType>::serialise()
+{
+    return serialisableArray<vectorType>(vectorSize,dest.get()).serialise();
+}
+
+template<typename dataType, typename vectorType>
+HamiltonianReplyData<dataType,vectorType> HamiltonianReplyData<dataType, vectorType>::deserialise(char *ptr)
+{
+    //ptr must live
+    HamiltonianReplyData ret;
+    ret.vectorSize = serialisableArray<vectorType>::deserialiseSize(ptr);
+    vectorType* destPtr;
+    serialisableArray<vectorType>::deserialise(ptr,&destPtr);
+    ret.dest = std::shared_ptr<vectorType[]>(destPtr,[](void*){}); // ugly hack to get the lifetime of the data correct
+    return ret;
+}
+
+
 template<typename dataType, typename vectorType>
 void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorType,-1, -1, Eigen::ColMajor> &src,
                                                     Eigen::Matrix<vectorType, -1, -1, Eigen::ColMajor> &dest) const
@@ -882,6 +991,110 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
 }
 
 template<typename dataType, typename vectorType>
+HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(HamiltonianWorkData<dataType,vectorType>& workData)
+{
+    long numberOfCols = workData.vectorSize;
+    HamiltonianReplyData<dataType,vectorType> ret;
+    ret.dest = std::shared_ptr<vectorType[]>(new vectorType[numberOfCols]);
+    ret.vectorSize = numberOfCols;
+
+    for (long i = 0; i < numberOfCols; i++)
+        ret.dest[i] = 0;
+
+    if (workData.comp)
+        assert(workData.comp->getCompressedSize() == (size_t)numberOfCols);
+
+    //Ready
+    // T_{ik} H_{kj}
+    threadpool& pool = threadpool::getInstance(NUM_CORES);
+    long stepSize = std::max(numberOfCols/NUM_CORES,1ul);
+    std::vector<std::future<void>> futs;
+    for (long startj = 0; startj < numberOfCols; startj+= stepSize)
+    {
+        long endj = std::min(startj + stepSize,numberOfCols);
+        futs.push_back(pool.queueWork([&workData, &ret,
+                                       startj,
+                                       endj
+        ](){
+            bool isCompressed = (bool)workData.comp;
+            for (long j = startj; j < endj; j++)
+            {//across
+                uint64_t jBasisState = j;
+                if (isCompressed)
+                    workData.comp->deCompressIndex(jBasisState,jBasisState);
+
+                auto opIt = workData.m_operators.cbegin();
+                auto valIt = workData.m_vals.cbegin();
+                const auto valItEnd = workData.m_vals.cend();
+                uint64_t badCreate = 0;
+                uint64_t goodCreate = 0;
+                uint64_t destroy;
+                bool canDestroy;
+                if (valIt != valItEnd)
+                {
+                    //Yes yes these are backwards to the way it was defined however for real hamiltonians it doesnt matter because theyre Hermitian. see comments on a,b,c,d
+                    goodCreate = opIt->create;
+                    destroy = jBasisState ^ opIt->create;
+                    canDestroy = (destroy & opIt->create) == 0;
+                    if (!canDestroy)
+                    {
+                        badCreate = opIt->create;
+                    }
+                }
+                //The j loop
+                for (;valIt != valItEnd; ++valIt,++opIt)
+                {
+                    if (opIt->create == badCreate)
+                        continue;
+                    badCreate = 0;
+
+                    uint64_t i;
+                    bool sign;
+
+
+                    if (opIt->create != goodCreate)
+                    {
+                        goodCreate = opIt->create;
+                        destroy = jBasisState ^ opIt->create;
+                        canDestroy = (destroy & opIt->create) == 0;
+                        if (!canDestroy)
+                        {
+                            badCreate = opIt->create;
+                            continue;
+                        }
+                    }
+
+                    bool canCreate =  (destroy & opIt->destroy) == 0;
+                    if (!canCreate)
+                        continue;
+                    i  = destroy | opIt->destroy;
+
+                    sign = popcount(jBasisState & opIt->signBitMask) & 1;
+                    if (isCompressed)
+                        workData.comp->compressIndex(i,i);
+                    if (i == (uint64_t)-1)
+                        continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
+
+                    // for (long i = 0; i < numberOfRows; i++)
+                    // {//down
+                    //     HT_C(i,j) += T_C(i,k) * valIt;
+                    // }
+                    // dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt);
+                    dataType v = (sign ? -*valIt : *valIt);
+
+                    ret.dest.get()[j] += workData.src[i] * v;
+
+                }
+            }
+        }));
+    }
+    for (auto& f : futs)
+        f.wait();
+
+    return ret;
+}
+
+template<typename dataType, typename vectorType>
 void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>, Eigen::Aligned32> &src,
                                                     Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>, Eigen::Aligned32> &dest) const
 {//This is a copy paste from above. TODO work with Dense base?
@@ -924,7 +1137,58 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
     {
         //Need to go over the operators and apply them to the basisState one by one;
         //For now no unrolling and no SIMD
+#ifdef USEMPI
+        long numberOfCols = src.cols();
+        long numberOfRows = src.rows();
+        dest.resize(numberOfRows,numberOfCols);
+        dest.setZero();
+        assert(m_compressor->getCompressedSize() == (size_t)numberOfCols);
 
+        MPIRelay& relay = MPIRelay::getInstance();
+        int numberOfFreeNodes = relay.getFreeNodeCount();
+        //Split the work among the nodes and issue it
+        size_t numOperators = m_operators.size();
+        size_t operatorsPerNode = std::max(m_operators.size()/(numberOfFreeNodes+1),1ul);
+        std::mutex destAccumulateMutex;
+        auto doneLambda = [&destAccumulateMutex, &dest](char* data)
+        {
+            HamiltonianReplyData<dataType,vectorType> Done = HamiltonianReplyData<dataType,vectorType>::deserialise(data);
+            Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>> nodeiDestMap(Done.dest.get(),1,Done.vectorSize);
+            std::lock_guard<std::mutex> lock(destAccumulateMutex);
+            dest += nodeiDestMap;
+        };
+
+        for (int i = 0; i < numberOfFreeNodes; i++)
+        {
+            HamiltonianWorkData<dataType,vectorType> nodeiWorkData;
+            size_t endOperators = std::min(numOperators,operatorsPerNode*(i+1));
+            nodeiWorkData.m_operators = std::vector<excOp>(m_operators.begin()+operatorsPerNode*i,m_operators.begin()+endOperators);
+            nodeiWorkData.m_vals = std::vector<dataType>(m_vals.begin()+operatorsPerNode*i,m_vals.begin()+endOperators);
+            nodeiWorkData.src = src.data();
+            nodeiWorkData.vectorSize = src.cols();
+            nodeiWorkData.comp = m_compressor;
+
+            assert(src.rows() == 1);
+            std::pair<std::shared_ptr<char[]>,size_t> serialisedWorkData = nodeiWorkData.serialise();
+            std::pair<std::shared_ptr<char[]>,size_t> serialisedReplyData = MPICOMMAND_HamApplyToVector(serialisedWorkData.first.get(),serialisedWorkData.second);
+            doneLambda(serialisedReplyData.first.get());
+            // relay.IssueCommandToFreeNode(MPICommand::HamApplyToVector,serialisedWorkData.first.get(),serialisedWorkData.second,doneLambda);
+        }
+        //Do this nodes work
+        HamiltonianWorkData<dataType,vectorType> nodeiWorkData;
+        nodeiWorkData.m_operators = std::vector<excOp>(m_operators.begin()+operatorsPerNode*numberOfFreeNodes, m_operators.begin()+numOperators);
+        nodeiWorkData.m_vals = std::vector<dataType>(m_vals.begin()+operatorsPerNode*numberOfFreeNodes, m_vals.begin()+numOperators);
+        nodeiWorkData.src = src.data();
+        nodeiWorkData.vectorSize = src.cols();
+        nodeiWorkData.comp = m_compressor;
+
+        HamiltonianReplyData<dataType,vectorType> myDone = applyVectorHamiltonianKernel(nodeiWorkData);
+        Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>> nodeiDestMap(myDone.dest.get(),1,myDone.vectorSize);
+        std::lock_guard<std::mutex> lock(destAccumulateMutex);
+        dest += nodeiDestMap;
+
+        return;
+#else
         long numberOfCols = src.cols();
         long numberOfRows = src.rows();
         dest.resize(numberOfRows,numberOfCols);
@@ -1013,6 +1277,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         }
         for (auto& f : futs)
             f.wait();
+#endif
         return;
     }
     else
@@ -1389,7 +1654,15 @@ Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::getNumberCorr2RDM(c
 }
 
 
-
+std::pair<std::shared_ptr<char[]>, size_t> MPICOMMAND_HamApplyToVector(char *ptr, size_t size)
+{
+#ifdef useComplex
+    static_assert(false,"complex + MPI not implemented, Cant resolve templates yet");
+#endif
+    HamiltonianWorkData<numType,numType> nodeiWorkData = HamiltonianWorkData<numType,numType>::deserialise(ptr);
+    HamiltonianReplyData<numType,numType> myDone = applyVectorHamiltonianKernel(nodeiWorkData);
+    return myDone.serialise();
+}
 
 
 
@@ -1404,6 +1677,13 @@ template class RDM<numType,numType>;
 template class HamiltonianMatrix<numType,numType>;
 template class RDM<numType,numType>;
 #endif
+
+
+
+
+
+
+
 
 
 

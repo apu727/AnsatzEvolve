@@ -91,6 +91,9 @@ public:
     size_t getUnCompressedSize() override { return m_decompressedSize; }
     virtual void dummyImplement() override{}
     virtual bool opDoesSomething(excOp&) override{return true;} // Always true for now. All operators are particle conserving
+    registeredBaseClasses getSerialisationType() override {return registeredBaseClasses::numberOperatorCompressor;};
+    virtual std::pair<std::shared_ptr<char[]>, size_t> serialise() override; // derived must serialise this object first, the returned bytes must be stored first in the serial stream
+    static std::shared_ptr<compressor> deserialise(char *ptr);
 };
 
 class SZAndnumberOperatorCompressor : public compressor
@@ -152,6 +155,14 @@ class SZAndnumberOperatorCompressor : public compressor
         }
         return spinDownRank;
     }
+    struct serialData
+    {
+        uint64_t stateVectorSize;
+        int spinUp;
+        int spinDown;
+    };
+    friend compressor;
+    static size_t deserialise(char *ptr,std::shared_ptr<compressor>& dest);
 public:
 
 
@@ -181,6 +192,14 @@ public:
     size_t getUnCompressedSize() override { return m_decompressedSize; }
     virtual void dummyImplement() override{}
     virtual bool opDoesSomething(excOp&) override;
+
+
+
+
+    virtual registeredBaseClasses getSerialisationType() override {return registeredBaseClasses::SZAndnumberOperatorCompressor;};
+    virtual std::pair<std::shared_ptr<char[]>,size_t> serialise() override;
+
+
 };
 
 class stateRotate : public operatorPool

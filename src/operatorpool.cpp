@@ -288,6 +288,39 @@ bool SZAndnumberOperatorCompressor::opDoesSomething(excOp &e)
     return (spinUpCreate == spinUpDestroy) && (spinDownCreate == spinDownDestroy);
 
 }
+
+std::pair<std::shared_ptr<char[]>, size_t> SZAndnumberOperatorCompressor::serialise()
+{
+    std::pair<std::shared_ptr<char[]>,size_t> baseSerial = compressor::serialise();
+    serialData myData;
+    myData.stateVectorSize = m_decompressedSize;
+    myData.spinUp = m_spinUp;
+    myData.spinDown = m_spinDown;
+
+    std::shared_ptr<char[]> ret (new char[sizeof(myData)+baseSerial.second]);
+    std::memcpy(ret.get(),baseSerial.first.get(),baseSerial.second);
+    std::memcpy(ret.get()+baseSerial.second,&myData,sizeof(myData));
+    return {ret,sizeof(myData)+baseSerial.second};
+}
+
+size_t SZAndnumberOperatorCompressor::deserialise(char *ptr,std::shared_ptr<compressor>& dest)
+{
+    serialData myData;
+    std::memcpy(&myData,ptr,sizeof(myData));
+    dest = std::make_shared<SZAndnumberOperatorCompressor>(myData.stateVectorSize,myData.spinUp,myData.spinDown);
+    return sizeof(myData);
+}
+
+std::pair<std::shared_ptr<char[]>, size_t> numberOperatorCompressor::serialise() // derived must serialise this object first, the returned bytes must be stored first in the serial stream
+{
+    releaseAssert(false, "not implemented, serialise number operator");
+}
+
+std::shared_ptr<compressor> numberOperatorCompressor::deserialise(char *ptr)
+{
+    releaseAssert(false, "not implemented, deserialise number operator");
+}
+
 void stateRotate::exc::setup()
 {
     if (first < 0 && second < 0)
@@ -313,3 +346,4 @@ void stateRotate::exc::setup()
         signMask = signMask & ~((1ul << first) | (1ul << second));
     }
 }
+

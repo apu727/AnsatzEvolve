@@ -19,6 +19,8 @@ struct excOp
     uint64_t signBitMask;
 };
 
+std::pair<std::shared_ptr<char[]>, size_t> MPICOMMAND_HamApplyToVector(char* ptr, size_t size);
+
 template <typename dataType,typename vectorType>
 class HamiltonianMatrix
 {
