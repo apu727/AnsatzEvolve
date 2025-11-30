@@ -27,6 +27,7 @@ MPIRelay::MPIRelay()
         logger().log("Master node initialized with workers", m_totalNodes);
 
     }
+    registerCommands();
 #else
     releaseAssert(false,"MPIRelay called without MPI build");
 #endif
@@ -65,7 +66,7 @@ bool MPIRelay::IssueCommandToFreeNode(MPICommand comm, char *data, size_t dataSi
     int targetNode = -1;
     for (int node = 1; node < m_totalNodes+1; ++node)
     {
-        if (m_nodeCallBackMap.find(node) != m_nodeCallBackMap.end())
+        if (m_nodeCallBackMap.find(node) == m_nodeCallBackMap.end())
         {
             targetNode = node;
             break;
@@ -80,7 +81,7 @@ bool MPIRelay::IssueCommandToFreeNode(MPICommand comm, char *data, size_t dataSi
     int cmdInt = static_cast<int>(comm);
     MPI_Send(&cmdInt, 1, MPI_INT, targetNode, 0, MPI_COMM_WORLD);
     MPI_Send(data, dataSize, MPI_CHAR, targetNode, 0, MPI_COMM_WORLD);
-
+    logger().log("Sending command", cmdInt);
     return true;
 #else
     releaseAssert(false,"IssueCommandToFreeNode called without MPI build");
@@ -100,8 +101,10 @@ void MPIRelay::waitForAll()
 
     MPI_Status status;
     std::vector<char> dataBuffer;
+    logger().log("Enter Waiting for Nodes", m_totalNodes - m_freeNodes);
     while (m_freeNodes != m_totalNodes)
     {
+        logger().log("Waiting for Nodes", m_totalNodes - m_freeNodes);
         // Wait for any worker to return
         MPI_Probe(MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
         int node = status.MPI_SOURCE;
@@ -152,7 +155,7 @@ void MPIRelay::runSlaveLoop()
 
         if (command == MPICommand::Shutdown)
             break;
-
+        logger().log("Received command", cmd);
         // Probe second message to determine payload size
         MPI_Probe(0, 0, MPI_COMM_WORLD, &status);
         MPI_Count byteCount;                     //long long
@@ -167,7 +170,7 @@ void MPIRelay::runSlaveLoop()
         auto it = m_registeredMPICommands.find(command);
         if (it == m_registeredMPICommands.end())
         {
-            std::cerr << "[Worker " << rank << "] Unknown command " << cmd << std::endl;
+            fprintf(stderr,"[Worker %i] Unknown command %i\n", rank,cmd);
             continue;
         }
 

@@ -1170,9 +1170,9 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
 
             assert(src.rows() == 1);
             std::pair<std::shared_ptr<char[]>,size_t> serialisedWorkData = nodeiWorkData.serialise();
-            std::pair<std::shared_ptr<char[]>,size_t> serialisedReplyData = MPICOMMAND_HamApplyToVector(serialisedWorkData.first.get(),serialisedWorkData.second);
-            doneLambda(serialisedReplyData.first.get());
-            // relay.IssueCommandToFreeNode(MPICommand::HamApplyToVector,serialisedWorkData.first.get(),serialisedWorkData.second,doneLambda);
+            // std::pair<std::shared_ptr<char[]>,size_t> serialisedReplyData = MPICOMMAND_HamApplyToVector(serialisedWorkData.first.get(),serialisedWorkData.second);
+            // doneLambda(serialisedReplyData.first.get());
+            relay.IssueCommandToFreeNode(MPICommand::HamApplyToVector,serialisedWorkData.first.get(),serialisedWorkData.second,doneLambda);
         }
         //Do this nodes work
         HamiltonianWorkData<dataType,vectorType> nodeiWorkData;
@@ -1184,9 +1184,12 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
 
         HamiltonianReplyData<dataType,vectorType> myDone = applyVectorHamiltonianKernel(nodeiWorkData);
         Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>> nodeiDestMap(myDone.dest.get(),1,myDone.vectorSize);
-        std::lock_guard<std::mutex> lock(destAccumulateMutex);
-        dest += nodeiDestMap;
+        {
+            std::lock_guard<std::mutex> lock(destAccumulateMutex);
+            dest += nodeiDestMap;
+        }
 
+        relay.waitForAll();
         return;
 #else
         long numberOfCols = src.cols();
