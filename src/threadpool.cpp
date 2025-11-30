@@ -72,7 +72,7 @@ threadpool::~threadpool()
 
 std::future<void> threadpool::queueWork(std::function<void ()> work, bool dontQueue)
 {
-    std::lock_guard lock(m_workQueueMutex);
+
     std::promise<void> prom;
     std::future<void> fut = prom.get_future();
     if(m_workers.size() == 0 || dontQueue)
@@ -82,6 +82,7 @@ std::future<void> threadpool::queueWork(std::function<void ()> work, bool dontQu
     }
     else
     {
+        std::lock_guard lock(m_workQueueMutex);
         m_workQueue.push({work,std::move(prom)});
         m_newWork.notify_all();
     }

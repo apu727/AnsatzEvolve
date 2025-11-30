@@ -76,6 +76,7 @@ template <typename dataType>
 std::pair<std::shared_ptr<char[]>,size_t> serialiseStruct(const dataType &data)
 {
     std::shared_ptr<char[]> ptr(new char[sizeof(data)]);
+    std::memcpy(ptr.get(),&data,sizeof(data));
     return {ptr,sizeof(data)};
 }
 
@@ -89,6 +90,7 @@ size_t deserialiseStruct(char* ptr,  dataType &data) // non default constructibl
 enum class MPICommand
 {
     Shutdown = 0, // not actually in the map.
+    Reply = 1, // Used to indicate a slave reply
     //Reserved for future stuff
     //32-64 Hamiltonian stuff
     HamApplyToVector = 33,

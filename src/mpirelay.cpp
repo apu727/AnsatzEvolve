@@ -6,7 +6,14 @@
 #ifdef USEMPI
 #include <mpi.h>
 #endif
+constexpr bool traceMessages = false;
+constexpr int maxPayloadSize = 2000000000;
 
+struct payloadHeader
+{
+    MPICommand command;
+    int64_t payloadSize;
+};
 
 MPIRelay::MPIRelay()
 {
@@ -77,11 +84,20 @@ bool MPIRelay::IssueCommandToFreeNode(MPICommand comm, char *data, size_t dataSi
 
     m_nodeCallBackMap[targetNode] = callBack;
     --m_freeNodes;
+    payloadHeader payload;
+    payload.command = comm;
+    payload.payloadSize = dataSize;
+    if (traceMessages) logger().log("Sending command", static_cast<int>(payload.command));
 
-    int cmdInt = static_cast<int>(comm);
-    MPI_Send(&cmdInt, 1, MPI_INT, targetNode, 0, MPI_COMM_WORLD);
-    MPI_Send(data, dataSize, MPI_CHAR, targetNode, 0, MPI_COMM_WORLD);
-    logger().log("Sending command", cmdInt);
+    MPI_Send(&payload, sizeof(payloadHeader), MPI_CHAR, targetNode, 0, MPI_COMM_WORLD);
+    int64_t sentBytes = 0;
+    while (sentBytes < payload.payloadSize)
+    {
+        int64_t toSend = std::min(payload.payloadSize - sentBytes,(int64_t)maxPayloadSize);
+        MPI_Send(data+sentBytes, toSend, MPI_CHAR, targetNode, 0, MPI_COMM_WORLD);
+        sentBytes += toSend;
+    }
+
     return true;
 #else
     releaseAssert(false,"IssueCommandToFreeNode called without MPI build");
@@ -101,24 +117,38 @@ void MPIRelay::waitForAll()
 
     MPI_Status status;
     std::vector<char> dataBuffer;
-    logger().log("Enter Waiting for Nodes", m_totalNodes - m_freeNodes);
+    if (traceMessages) logger().log("Enter Waiting for Nodes", m_totalNodes - m_freeNodes);
     while (m_freeNodes != m_totalNodes)
     {
-        logger().log("Waiting for Nodes", m_totalNodes - m_freeNodes);
+        if (traceMessages) logger().log("Waiting for Nodes", m_totalNodes - m_freeNodes);
         // Wait for any worker to return
         MPI_Probe(MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
         int node = status.MPI_SOURCE;
-
+        if (traceMessages) logger().log("Data from node", node);
         // Determine payload size
-        MPI_Count byteCount;
-        MPI_Get_elements_x(&status, MPI_CHAR, &byteCount);
+        payloadHeader payload;
+        MPI_Recv(&payload, sizeof(payload), MPI_CHAR, node, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        if (dataBuffer.size() < static_cast<size_t>(byteCount))
-            dataBuffer.resize(byteCount);
+        if (traceMessages) logger().log("Command", static_cast<int>(payload.command));
+        if (traceMessages) logger().log("payloadSize", payload.payloadSize);
+        if (dataBuffer.size() < static_cast<size_t>(payload.payloadSize))
+            dataBuffer.resize(payload.payloadSize);
 
         // Receive payload
-        MPI_Recv(dataBuffer.data(), byteCount, MPI_CHAR, node, 0,
-                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        int64_t bytesReceived = 0;
+        while (bytesReceived < payload.payloadSize)
+        {
+            int toRead;
+            MPI_Probe(node, 0, MPI_COMM_WORLD, &status);
+            MPI_Get_count(&status,MPI_CHAR,&toRead);
+            if (traceMessages) logger().log("Reading", toRead);
+            releaseAssert(toRead + bytesReceived <= payload.payloadSize,"toRead + bytesReceived <= payload.payloadSize");
+
+            MPI_Recv(dataBuffer.data()+bytesReceived, toRead, MPI_CHAR, node, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            bytesReceived += toRead;
+        }
+        releaseAssert(bytesReceived == payload.payloadSize,"bytesReceived == payload.payloadSize");
+        if (traceMessages) logger().log("Done Read");
 
         // --- Pop callback for this node ---
         std::function<void(char*)> cb;
@@ -129,6 +159,7 @@ void MPIRelay::waitForAll()
         // Execute returned callback
         if (cb)
             cb(dataBuffer.data());
+        if (traceMessages) logger().log("Done CallBack");
     }
 #else
     releaseAssert(false,"waitForAll called without MPI build");
@@ -149,36 +180,56 @@ void MPIRelay::runSlaveLoop()
     std::vector<char> dataBuffer;
     while (m_isRunning)
     {
-        int cmd;
-        MPI_Recv(&cmd, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        MPICommand command = static_cast<MPICommand>(cmd);
+        payloadHeader payload;
+        MPI_Recv(&payload, sizeof(payload), MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        if (command == MPICommand::Shutdown)
+        if (payload.command == MPICommand::Shutdown)
             break;
-        logger().log("Received command", cmd);
-        // Probe second message to determine payload size
-        MPI_Probe(0, 0, MPI_COMM_WORLD, &status);
-        MPI_Count byteCount;                     //long long
-        MPI_Get_elements_x(&status, MPI_CHAR, &byteCount);
+        if (traceMessages) logger().log("Received command", static_cast<int>(payload.command));
+        if (traceMessages) logger().log("PayloadSize", static_cast<int>(payload.payloadSize));
 
-        if (dataBuffer.size() < static_cast<size_t>(byteCount))
-            dataBuffer.resize(byteCount);
+        if (dataBuffer.size() < static_cast<size_t>(payload.payloadSize))
+            dataBuffer.resize(payload.payloadSize);
 
-        MPI_Recv(dataBuffer.data(), byteCount, MPI_CHAR, 0, 0,
-                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        int64_t bytesReceived = 0;
+        while (bytesReceived < payload.payloadSize)
+        {
+            int toRead;
+            MPI_Probe(0, 0, MPI_COMM_WORLD, &status);
+            MPI_Get_count(&status,MPI_CHAR,&toRead);
+            if (traceMessages)  logger().log("reading ", toRead);
+            releaseAssert(toRead + bytesReceived <= payload.payloadSize,"toRead + bytesReceived <= payload.payloadSize");
 
-        auto it = m_registeredMPICommands.find(command);
+            MPI_Recv(dataBuffer.data()+bytesReceived, toRead, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            bytesReceived += toRead;
+        }
+        releaseAssert(bytesReceived == payload.payloadSize,"bytesReceived == payload.payloadSize");
+        if (traceMessages) logger().log("Done Read ");
+        auto it = m_registeredMPICommands.find(payload.command);
         if (it == m_registeredMPICommands.end())
         {
-            fprintf(stderr,"[Worker %i] Unknown command %i\n", rank,cmd);
+            fprintf(stderr,"[Worker %i] Unknown command %i\n", rank,static_cast<int>(payload.command));
             continue;
         }
 
         // Execute remote function
-        std::pair<std::shared_ptr<char[]>, size_t> result = it->second(&dataBuffer[0], byteCount);
-
+        std::pair<std::shared_ptr<char[]>, size_t> result = it->second(&dataBuffer[0], payload.payloadSize);
+        if (traceMessages) logger().log("Done Work ");
         // Send response back
-        MPI_Send(result.first.get(), result.second, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+        payload.command = MPICommand::Reply;
+        payload.payloadSize = result.second;
+        if (traceMessages) logger().log("Sending ",payload.payloadSize);
+        MPI_Send(&payload, sizeof(payloadHeader), MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+
+        int64_t sentBytes = 0;
+        while (sentBytes < payload.payloadSize)
+        {
+            int64_t toSend = std::min(payload.payloadSize - sentBytes,(int64_t)maxPayloadSize);
+            if (traceMessages) logger().log("Send chunk ",toSend);
+            MPI_Send(result.first.get()+sentBytes, toSend, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+            sentBytes += toSend;
+        }
+        if (traceMessages) logger().log("Done send");
     }
     logger().log("SlaveLoop quiting",m_rank);
     m_isRunning = false;
