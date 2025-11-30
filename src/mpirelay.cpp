@@ -93,7 +93,7 @@ bool MPIRelay::IssueCommandToFreeNode(MPICommand comm, char *data, size_t dataSi
     int64_t sentBytes = 0;
     while (sentBytes < payload.payloadSize)
     {
-        int64_t toSend = std::min(payload.payloadSize - sentBytes,(int64_t)maxPayloadSize);
+        int toSend = std::min(payload.payloadSize - sentBytes,(int64_t)maxPayloadSize);
         MPI_Send(data+sentBytes, toSend, MPI_CHAR, targetNode, 0, MPI_COMM_WORLD);
         sentBytes += toSend;
     }
@@ -224,7 +224,7 @@ void MPIRelay::runSlaveLoop()
         int64_t sentBytes = 0;
         while (sentBytes < payload.payloadSize)
         {
-            int64_t toSend = std::min(payload.payloadSize - sentBytes,(int64_t)maxPayloadSize);
+            int toSend = std::min(payload.payloadSize - sentBytes,(int64_t)maxPayloadSize);
             if (traceMessages) logger().log("Send chunk ",toSend);
             MPI_Send(result.first.get()+sentBytes, toSend, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
             sentBytes += toSend;
