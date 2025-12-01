@@ -289,18 +289,18 @@ bool SZAndnumberOperatorCompressor::opDoesSomething(excOp &e)
 
 }
 
-std::pair<std::shared_ptr<char[]>, size_t> SZAndnumberOperatorCompressor::serialise()
+serialDataContainer SZAndnumberOperatorCompressor::serialise()
 {
-    std::pair<std::shared_ptr<char[]>,size_t> baseSerial = compressor::serialise();
+    serialDataContainer baseSerial = compressor::serialise();
     serialData myData;
     myData.stateVectorSize = m_decompressedSize;
     myData.spinUp = m_spinUp;
     myData.spinDown = m_spinDown;
 
-    std::shared_ptr<char[]> ret (new char[sizeof(myData)+baseSerial.second]);
-    std::memcpy(ret.get(),baseSerial.first.get(),baseSerial.second);
-    std::memcpy(ret.get()+baseSerial.second,&myData,sizeof(myData));
-    return {ret,sizeof(myData)+baseSerial.second};
+    std::shared_ptr<char[]> ret (new char[sizeof(myData)+baseSerial.size]);
+    std::memcpy(ret.get(),baseSerial.ptr.get(),baseSerial.size);
+    std::memcpy(ret.get()+baseSerial.size,&myData,sizeof(myData));
+    return {.ptr = ret, .size = sizeof(myData)+baseSerial.size, .alignment = alignof(char)};
 }
 
 size_t SZAndnumberOperatorCompressor::deserialise(char *ptr,std::shared_ptr<compressor>& dest)
@@ -311,12 +311,12 @@ size_t SZAndnumberOperatorCompressor::deserialise(char *ptr,std::shared_ptr<comp
     return sizeof(myData);
 }
 
-std::pair<std::shared_ptr<char[]>, size_t> numberOperatorCompressor::serialise() // derived must serialise this object first, the returned bytes must be stored first in the serial stream
+serialDataContainer numberOperatorCompressor::serialise() // derived must serialise this object first, the returned bytes must be stored first in the serial stream
 {
     releaseAssert(false, "not implemented, serialise number operator");
 }
 
-std::shared_ptr<compressor> numberOperatorCompressor::deserialise(char *ptr)
+std::shared_ptr<compressor> numberOperatorCompressor::deserialise(char */*ptr*/)
 {
     releaseAssert(false, "not implemented, deserialise number operator");
 }

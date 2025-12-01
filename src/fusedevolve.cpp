@@ -123,7 +123,7 @@ std::pair<uint64_t,bool> applyExcToBasisState_(uint64_t state, const stateRotate
 bool applyExcToBasisStateSignOnly(uint64_t state, const stateRotate::exc& a)
 {
     constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
-    bool complexSet = false;
+    bool  __attribute__ ((unused))complexSet = false;
 
     numType phase = a.sign ? -1 : 1;
 

@@ -13,6 +13,7 @@ struct payloadHeader
 {
     MPICommand command;
     int64_t payloadSize;
+    size_t alignment; // alignment needed of the resultant payload
 };
 
 MPIRelay::MPIRelay()
@@ -64,7 +65,7 @@ void MPIRelay::registerCommands()
     m_registeredMPICommands[MPICommand::HamApplyToVector] = MPICOMMAND_HamApplyToVector;
 }
 
-bool MPIRelay::IssueCommandToFreeNode(MPICommand comm, char *data, size_t dataSize, std::function<void (char *)> callBack)
+bool MPIRelay::IssueCommandToFreeNode(MPICommand comm, const serialDataContainer& data, std::function<void(char*)> callBack)
 {
 #ifdef USEMPI
     if (m_freeNodes <= 0 || !m_amMaster || m_totalNodes == 0)
@@ -86,15 +87,23 @@ bool MPIRelay::IssueCommandToFreeNode(MPICommand comm, char *data, size_t dataSi
     --m_freeNodes;
     payloadHeader payload;
     payload.command = comm;
-    payload.payloadSize = dataSize;
+    payload.payloadSize = data.size;
+    // Determine what it is aligned to here and replicate on the other side.
+    // Ideally we actually want to be told this as a memory can accidentally have higher alignment than needed.
+    // This leads to uneccessary reallocations on the other side
+    payload.alignment = data.alignment;
+
+
     if (traceMessages) logger().log("Sending command", static_cast<int>(payload.command));
+    if (traceMessages) logger().log("Sending payload.payloadSize", payload.payloadSize);
+    if (traceMessages) logger().log("Sending payload.alignment", payload.alignment);
 
     MPI_Send(&payload, sizeof(payloadHeader), MPI_CHAR, targetNode, 0, MPI_COMM_WORLD);
     int64_t sentBytes = 0;
     while (sentBytes < payload.payloadSize)
     {
         int toSend = std::min(payload.payloadSize - sentBytes,(int64_t)maxPayloadSize);
-        MPI_Send(data+sentBytes, toSend, MPI_CHAR, targetNode, 0, MPI_COMM_WORLD);
+        MPI_Send(data.ptr.get()+sentBytes, toSend, MPI_CHAR, targetNode, 0, MPI_COMM_WORLD);
         sentBytes += toSend;
     }
 
@@ -116,7 +125,10 @@ void MPIRelay::waitForAll()
     }
 
     MPI_Status status;
-    std::vector<char> dataBuffer;
+    char* dataBuffer = nullptr;
+    size_t bufferSize = 0;
+    size_t bufferAlignment = 1;
+
     if (traceMessages) logger().log("Enter Waiting for Nodes", m_totalNodes - m_freeNodes);
     while (m_freeNodes != m_totalNodes)
     {
@@ -131,8 +143,13 @@ void MPIRelay::waitForAll()
 
         if (traceMessages) logger().log("Command", static_cast<int>(payload.command));
         if (traceMessages) logger().log("payloadSize", payload.payloadSize);
-        if (dataBuffer.size() < static_cast<size_t>(payload.payloadSize))
-            dataBuffer.resize(payload.payloadSize);
+
+        if (bufferSize < static_cast<size_t>(payload.payloadSize) || bufferAlignment < payload.alignment)
+        {
+            if (dataBuffer)
+                delete[] dataBuffer;
+            dataBuffer = new (std::align_val_t(payload.alignment)) char[payload.payloadSize];
+        }
 
         // Receive payload
         int64_t bytesReceived = 0;
@@ -144,7 +161,7 @@ void MPIRelay::waitForAll()
             if (traceMessages) logger().log("Reading", toRead);
             releaseAssert(toRead + bytesReceived <= payload.payloadSize,"toRead + bytesReceived <= payload.payloadSize");
 
-            MPI_Recv(dataBuffer.data()+bytesReceived, toRead, MPI_CHAR, node, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(dataBuffer+bytesReceived, toRead, MPI_CHAR, node, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             bytesReceived += toRead;
         }
         releaseAssert(bytesReceived == payload.payloadSize,"bytesReceived == payload.payloadSize");
@@ -158,9 +175,11 @@ void MPIRelay::waitForAll()
 
         // Execute returned callback
         if (cb)
-            cb(dataBuffer.data());
+            cb(dataBuffer);
         if (traceMessages) logger().log("Done CallBack");
     }
+    if (dataBuffer)
+        delete[] dataBuffer;
 #else
     releaseAssert(false,"waitForAll called without MPI build");
 #endif
@@ -177,7 +196,9 @@ void MPIRelay::runSlaveLoop()
     m_isRunning = true;
     MPI_Status status;
 
-    std::vector<char> dataBuffer;
+    char* dataBuffer = nullptr;
+    size_t bufferSize = 0;
+    size_t bufferAlignment = 1;
     while (m_isRunning)
     {
         payloadHeader payload;
@@ -187,9 +208,14 @@ void MPIRelay::runSlaveLoop()
             break;
         if (traceMessages) logger().log("Received command", static_cast<int>(payload.command));
         if (traceMessages) logger().log("PayloadSize", static_cast<int>(payload.payloadSize));
+        if (traceMessages) logger().log("Payload alignment", static_cast<int>(payload.alignment));
 
-        if (dataBuffer.size() < static_cast<size_t>(payload.payloadSize))
-            dataBuffer.resize(payload.payloadSize);
+        if (bufferSize < static_cast<size_t>(payload.payloadSize) || bufferAlignment < payload.alignment)
+        {
+            if (dataBuffer)
+                delete[] dataBuffer;
+            dataBuffer = new (std::align_val_t(payload.alignment)) char[payload.payloadSize];
+        }
 
         int64_t bytesReceived = 0;
         while (bytesReceived < payload.payloadSize)
@@ -200,7 +226,7 @@ void MPIRelay::runSlaveLoop()
             if (traceMessages)  logger().log("reading ", toRead);
             releaseAssert(toRead + bytesReceived <= payload.payloadSize,"toRead + bytesReceived <= payload.payloadSize");
 
-            MPI_Recv(dataBuffer.data()+bytesReceived, toRead, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(dataBuffer + bytesReceived, toRead, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             bytesReceived += toRead;
         }
         releaseAssert(bytesReceived == payload.payloadSize,"bytesReceived == payload.payloadSize");
@@ -213,11 +239,12 @@ void MPIRelay::runSlaveLoop()
         }
 
         // Execute remote function
-        std::pair<std::shared_ptr<char[]>, size_t> result = it->second(&dataBuffer[0], payload.payloadSize);
+        serialDataContainer result = it->second(dataBuffer, payload.payloadSize);
         if (traceMessages) logger().log("Done Work ");
         // Send response back
         payload.command = MPICommand::Reply;
-        payload.payloadSize = result.second;
+        payload.payloadSize = result.size;
+        payload.alignment = result.alignment;
         if (traceMessages) logger().log("Sending ",payload.payloadSize);
         MPI_Send(&payload, sizeof(payloadHeader), MPI_CHAR, 0, 0, MPI_COMM_WORLD);
 
@@ -226,13 +253,15 @@ void MPIRelay::runSlaveLoop()
         {
             int toSend = std::min(payload.payloadSize - sentBytes,(int64_t)maxPayloadSize);
             if (traceMessages) logger().log("Send chunk ",toSend);
-            MPI_Send(result.first.get()+sentBytes, toSend, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+            MPI_Send(result.ptr.get()+sentBytes, toSend, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
             sentBytes += toSend;
         }
         if (traceMessages) logger().log("Done send");
     }
     logger().log("SlaveLoop quiting",m_rank);
     m_isRunning = false;
+    if (dataBuffer)
+        delete[] dataBuffer;
 #else
     releaseAssert(false,"runSlaveLoop called without MPI build");
 #endif

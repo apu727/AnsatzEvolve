@@ -6,6 +6,7 @@
 #ifndef HAMILTONIANMATRIX_H
 #define HAMILTONIANMATRIX_H
 
+#include "serialise.h"
 #include "linalg.h"
 #include <Eigen/Sparse>
 struct excOp
@@ -19,7 +20,7 @@ struct excOp
     uint64_t signBitMask;
 };
 
-std::pair<std::shared_ptr<char[]>, size_t> MPICOMMAND_HamApplyToVector(char* ptr, size_t size);
+serialDataContainer MPICOMMAND_HamApplyToVector(char* ptr, size_t size);
 
 template <typename dataType,typename vectorType>
 class HamiltonianMatrix

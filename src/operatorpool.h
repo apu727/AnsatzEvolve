@@ -92,7 +92,7 @@ public:
     virtual void dummyImplement() override{}
     virtual bool opDoesSomething(excOp&) override{return true;} // Always true for now. All operators are particle conserving
     registeredBaseClasses getSerialisationType() override {return registeredBaseClasses::numberOperatorCompressor;};
-    virtual std::pair<std::shared_ptr<char[]>, size_t> serialise() override; // derived must serialise this object first, the returned bytes must be stored first in the serial stream
+    virtual serialDataContainer serialise() override; // derived must serialise this object first, the returned bytes must be stored first in the serial stream
     static std::shared_ptr<compressor> deserialise(char *ptr);
 };
 
@@ -197,7 +197,7 @@ public:
 
 
     virtual registeredBaseClasses getSerialisationType() override {return registeredBaseClasses::SZAndnumberOperatorCompressor;};
-    virtual std::pair<std::shared_ptr<char[]>,size_t> serialise() override;
+    virtual serialDataContainer serialise() override;
 
 
 };

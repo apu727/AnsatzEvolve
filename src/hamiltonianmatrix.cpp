@@ -745,7 +745,7 @@ public:
     const vectorType* src; // Must exist as long as HamiltonianWorkData exists.
 
 
-    std::pair<std::shared_ptr<char[]>,size_t> serialise();
+    serialDataContainer serialise();
 
     static HamiltonianWorkData deserialise(char* ptr);
 };
@@ -757,57 +757,93 @@ public:
     size_t vectorSize;
     std::shared_ptr<vectorType[]> dest;
 
-    std::pair<std::shared_ptr<char[]>,size_t> serialise();
+    serialDataContainer serialise();
     static HamiltonianReplyData deserialise(char* ptr);
 
 };
 
 template<typename dataType, typename vectorType>
-std::pair<std::shared_ptr<char[]>,size_t> HamiltonianWorkData<dataType, vectorType>::serialise()
+serialDataContainer HamiltonianWorkData<dataType, vectorType>::serialise()
 {
     //This does involve copies, but only small things
-    std::pair<std::shared_ptr<char[]>,size_t> m_operatorsSerialised = serialisableArray<excOp>(m_operators.size(),&m_operators[0]).serialise();
-    std::pair<std::shared_ptr<char[]>,size_t> m_valsSerialised = serialisableArray<dataType>(m_vals.size(),&m_vals[0]).serialise();
-    std::pair<std::shared_ptr<char[]>,size_t> compressorExistsSerialised = serialiseStruct((bool)comp);
-    std::pair<std::shared_ptr<char[]>,size_t> compressorSerialised;
-    if (comp) compressorSerialised = comp->serialise();
-    // std::pair<std::shared_ptr<char[]>,size_t> srcVectorSerialised = serialisableArray<vectorType>(vectorSize,src).serialise();
 
-    size_t totalSize = 0;
-    totalSize += m_operatorsSerialised.second;
-    totalSize += m_valsSerialised.second;
-    totalSize +=  compressorExistsSerialised.second;
-    totalSize += (comp) ? compressorSerialised.second : 0;
-    totalSize += serialisableArray<vectorType>(vectorSize,src).getSerialiedSize();
+    serialDataContainer m_operatorsSerialised = serialisableArray<excOp>(m_operators.size(),&m_operators[0]).serialise();
 
-    std::shared_ptr<char[]> ret(new char[totalSize]);
-    char* retCurrPtr = ret.get();
-    std::memcpy(retCurrPtr,m_operatorsSerialised.first.get(),m_operatorsSerialised.second);
-    retCurrPtr += m_operatorsSerialised.second;
 
-    std::memcpy(retCurrPtr,m_valsSerialised.first.get(),m_valsSerialised.second);
-    retCurrPtr += m_valsSerialised.second;
+    serialDataContainer m_valsSerialised = serialisableArray<dataType>(m_vals.size(),&m_vals[0]).serialise();
 
-    std::memcpy(retCurrPtr,compressorExistsSerialised.first.get(),compressorExistsSerialised.second);
-    retCurrPtr += compressorExistsSerialised.second;
+    serialDataContainer compressorExistsSerialised = serialiseStruct((bool)comp);
+    serialDataContainer compressorSerialised;
     if (comp)
     {
-        std::memcpy(retCurrPtr,compressorSerialised.first.get(),compressorSerialised.second);
-        retCurrPtr += compressorSerialised.second;
+        //This is constructed by copy so no alignment requirements.
+        compressorSerialised = comp->serialise();
+    }
+    size_t maxNeededAlignment = m_operatorsSerialised.alignment;
+    maxNeededAlignment = std::max(maxNeededAlignment,m_valsSerialised.alignment);
+    maxNeededAlignment = std::max(maxNeededAlignment,serialisableArray<vectorType>::getAlignment());
+
+    logger().log("max needed alignment", maxNeededAlignment);
+
+    size_t totalSize = 0;
+    //No Alignment, first one
+    totalSize += m_operatorsSerialised.size;
+
+    totalSize += computePaddingBytes(totalSize,m_valsSerialised.alignment);
+    totalSize += m_valsSerialised.size;
+
+    //No alignment
+    totalSize +=  compressorExistsSerialised.size;
+
+    //No alignment
+    totalSize += (comp) ? compressorSerialised.size : 0;
+
+    totalSize += computePaddingBytes(totalSize,serialisableArray<vectorType>::getAlignment());
+    totalSize += serialisableArray<vectorType>(vectorSize,src).getSerialiedSize();
+
+    std::shared_ptr<char[]> ret(new (std::align_val_t(maxNeededAlignment)) char[totalSize]);
+    char* retCurrPtr = ret.get();
+
+    //First one so no alignment
+    releaseAssert(is_aligned(retCurrPtr,serialisableArray<excOp>::getAlignment()),"Failed to set alignment");
+    std::memcpy(retCurrPtr,m_operatorsSerialised.ptr.get(),m_operatorsSerialised.size);
+    retCurrPtr += m_operatorsSerialised.size;
+
+    retCurrPtr += computePaddingBytes(retCurrPtr-ret.get(),serialisableArray<dataType>::getAlignment());
+    releaseAssert(is_aligned(retCurrPtr,serialisableArray<dataType>::getAlignment()),"Failed to set alignment");
+    std::memcpy(retCurrPtr,m_valsSerialised.ptr.get(),m_valsSerialised.size);
+    retCurrPtr += m_valsSerialised.size;
+
+    //No alignment
+    std::memcpy(retCurrPtr,compressorExistsSerialised.ptr.get(),compressorExistsSerialised.size);
+    retCurrPtr += compressorExistsSerialised.size;
+
+    if (comp)
+    {
+        //noAlignment
+        std::memcpy(retCurrPtr,compressorSerialised.ptr.get(),compressorSerialised.size);
+        retCurrPtr += compressorSerialised.size;
     }
 
+    retCurrPtr += computePaddingBytes(retCurrPtr-ret.get(),serialisableArray<vectorType>::getAlignment());
+    releaseAssert(is_aligned(retCurrPtr,serialisableArray<vectorType>::getAlignment()),"Failed to set alignment");
     serialisableArray<vectorType>(vectorSize,src).serialise(retCurrPtr,totalSize + ret.get() - retCurrPtr);
-    return {ret,totalSize};
+    return {.ptr = ret,.size = totalSize, .alignment = maxNeededAlignment};
 }
 
 template<typename dataType, typename vectorType>
 HamiltonianWorkData<dataType,vectorType> HamiltonianWorkData<dataType, vectorType>::deserialise(char* ptr)
 {
+    // size_t maxNeededAlignment = serialisableArray<excOp>::getAlignment();
+    // maxNeededAlignment = std::max(maxNeededAlignment,serialisableArray<dataType>::getAlignment());
+    // maxNeededAlignment = std::max(maxNeededAlignment,serialisableArray<vectorType>::getAlignment());
+
     //This does involve copies, but only small things
     HamiltonianWorkData<dataType,vectorType> ret;
     ret.m_operators.resize(serialisableArray<excOp>::deserialiseSize(ptr));
     ptr += serialisableArray<excOp>::deserialise(ptr,&ret.m_operators[0]);
 
+    ptr += computePaddingBytes((uintptr_t)ptr,serialisableArray<dataType>::getAlignment());
     ret.m_vals.resize(serialisableArray<dataType>::deserialiseSize(ptr));
     ptr += serialisableArray<dataType>::deserialise(ptr,&ret.m_vals[0]);
 
@@ -816,13 +852,14 @@ HamiltonianWorkData<dataType,vectorType> HamiltonianWorkData<dataType, vectorTyp
     if (isCompressed)
         ptr += compressor::deserialise(ptr,ret.comp);
 
+    ptr += computePaddingBytes((uintptr_t)ptr,serialisableArray<vectorType>::getAlignment());
     ret.vectorSize = serialisableArray<vectorType>::deserialiseSize(ptr);
     serialisableArray<vectorType>::deserialise(ptr,&ret.src);
     return ret;
 }
 
 template<typename dataType, typename vectorType>
-std::pair<std::shared_ptr<char[]>,size_t> HamiltonianReplyData<dataType, vectorType>::serialise()
+serialDataContainer HamiltonianReplyData<dataType, vectorType>::serialise()
 {
     return serialisableArray<vectorType>(vectorSize,dest.get()).serialise();
 }
@@ -1169,10 +1206,10 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
             nodeiWorkData.comp = m_compressor;
 
             assert(src.rows() == 1);
-            std::pair<std::shared_ptr<char[]>,size_t> serialisedWorkData = nodeiWorkData.serialise();
+            serialDataContainer serialisedWorkData = nodeiWorkData.serialise();
             // std::pair<std::shared_ptr<char[]>,size_t> serialisedReplyData = MPICOMMAND_HamApplyToVector(serialisedWorkData.first.get(),serialisedWorkData.second);
             // doneLambda(serialisedReplyData.first.get());
-            relay.IssueCommandToFreeNode(MPICommand::HamApplyToVector,serialisedWorkData.first.get(),serialisedWorkData.second,doneLambda);
+            relay.IssueCommandToFreeNode(MPICommand::HamApplyToVector,serialisedWorkData,doneLambda);
         }
         //Do this nodes work
         HamiltonianWorkData<dataType,vectorType> nodeiWorkData;
@@ -1657,7 +1694,7 @@ Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::getNumberCorr2RDM(c
 }
 
 
-std::pair<std::shared_ptr<char[]>, size_t> MPICOMMAND_HamApplyToVector(char *ptr, size_t size)
+serialDataContainer MPICOMMAND_HamApplyToVector(char *ptr, size_t /*size*/)
 {
 #ifdef useComplex
     static_assert(false,"complex + MPI not implemented, Cant resolve templates yet");

@@ -144,12 +144,12 @@ public:
         SZAndnumberOperatorCompressor = 2,
     };
     virtual registeredBaseClasses getSerialisationType() = 0;
-    virtual std::pair<std::shared_ptr<char[]>,size_t> serialise() // derived must serialise this object first, the returned bytes must be stored first in the serial stream
+    virtual serialDataContainer serialise() // derived must serialise this object first, the returned bytes must be stored first in the serial stream
     {
         int type = static_cast<int>(getSerialisationType());
         std::shared_ptr<char[]> ret (new char[sizeof(type)]);
         std::memcpy(ret.get(),&type,sizeof(type));
-        return {ret,sizeof(type)};
+        return {.ptr = ret, .size = sizeof(type), .alignment = alignof(char)};
     }
     static size_t deserialise(char *ptr,std::shared_ptr<compressor>& dest);// derived class must override, UB if not, probably crash.
 };

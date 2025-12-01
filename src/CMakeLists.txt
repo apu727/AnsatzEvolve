@@ -58,6 +58,7 @@ add_library(cppAnsatzSynthLib STATIC
     fusedevolve.cpp fusedevolve.h
     hamiltonianmatrix.h hamiltonianmatrix.cpp
     mpirelay.h mpirelay.cpp
+    serialise.h
 )
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 else()
