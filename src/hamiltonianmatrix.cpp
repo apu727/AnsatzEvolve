@@ -783,7 +783,7 @@ serialDataContainer HamiltonianWorkData<dataType, vectorType>::serialise()
     maxNeededAlignment = std::max(maxNeededAlignment,m_valsSerialised.alignment);
     maxNeededAlignment = std::max(maxNeededAlignment,serialisableArray<vectorType>::getAlignment());
 
-    logger().log("max needed alignment", maxNeededAlignment);
+    // logger().log("max needed alignment", maxNeededAlignment);
 
     size_t totalSize = 0;
     //No Alignment, first one
