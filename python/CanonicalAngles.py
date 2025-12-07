@@ -84,7 +84,7 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
         # Find the angle of the S required such that Y'.startVector = Y'.endVector. There are two such angles at pi apart. Pick the smaller one
 
         # theta1 = -np.atan2((resultVector[1,0]-startVector[1,0])*np.sqrt(2),startVector[2,0]-startVector[0,0]+resultVector[0,0]-resultVector[2,0])/2
-        theta1 = np.atan(((resultVector[1,0]-startVector[1,0])*np.sqrt(2))/(startVector[2,0]-startVector[0,0]+resultVector[0,0]-resultVector[2,0]))/2
+        theta1 = -np.atan(((resultVector[1,0]-startVector[1,0])*np.sqrt(2))/(startVector[2,0]-startVector[0,0]+resultVector[0,0]-resultVector[2,0]))/2
         XPrime = 0.5*np.sin(-2*theta1)*Kappa1@[[1],[0],[0]] + 0.25*(1-np.cos(-2*theta1)) * Kappa1 @ Kappa1 @ [[1],[0],[0]] + [[1],[0],[0]]
         YPrime = 0.5*np.sin(-2*theta1)*Kappa1@[[0],[1],[0]] + 0.25*(1-np.cos(-2*theta1)) * Kappa1 @ Kappa1 @ [[0],[1],[0]] + [[0],[1],[0]]
         ZPrime = 0.5*np.sin(-2*theta1)*Kappa1@[[0],[0],[1]] + 0.25*(1-np.cos(-2*theta1)) * Kappa1 @ Kappa1 @ [[0],[0],[1]] + [[0],[0],[1]]
@@ -125,6 +125,9 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
     if invertSignOfWavefunction:
         stateAfter = man.getFinalState()
         assert(np.isclose(np.dot(stateBefore,stateAfter),-1))
+    else:
+        stateAfter = man.getFinalState()
+        assert(np.isclose(np.dot(stateBefore,stateAfter),1))
     return Angles
 
 if __name__ == "__main__":
@@ -178,4 +181,22 @@ if __name__ == "__main__":
     #Compute the canonical angles for the negative of this wavefunction and check    
     CanNegAngles = CanonicaliseAngles(man,Angles[2],Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices,True)
     print(f"Angles before:\n {np.array(Angles[2])}\n Went to:\n {CanNegAngles}")
+
+    #Fuzzing
+    def fuzzing():
+        numAngles = len(Angles[2])
+        for i in range(0,100):
+            a = np.random.rand(numAngles)
+            #Enforce the orderfile
+            #This has been tacked on not the true order file as this has the SDS structure already
+            order = [(0,1),(0,1),(1,1),(2,1),(2,1),(3,1),(3,1),(4,1),(5,1),(5,1),(6,1),(6,1),(7,1),(8,1),(8,1)]
+
+            compA = np.zeros(9) # numUniqueParameters
+            for j,o in enumerate(order):
+                compA[o[0]] = a[j]
+            for j in range(len(a)):
+                a[j] = compA[order[j][0]]*order[j][1]
+
+            CanAngles = CanonicaliseAngles(man,a,Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices)
+    fuzzing()
 
