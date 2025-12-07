@@ -54,8 +54,9 @@ public:
     void waitForAll(); // waits for all nodes to be free again
     int getFreeNodeCount(){return m_freeNodes;}; // an estimate. If multiple people are queuing then there may be race conditions. If this becomes a problem, implement a semaphore type behaviour. Does not include the current node
 
-    bool isMaster(){return m_amMaster;};
+    bool isMaster(){return m_amMaster;}
     void runSlaveLoop();
+    int getRank(){return m_rank;}
 
 
 };

@@ -1030,6 +1030,10 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
 template<typename dataType, typename vectorType>
 HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(HamiltonianWorkData<dataType,vectorType>& workData)
 {
+
+#ifdef USEMPI
+    auto time1 = std::chrono::high_resolution_clock::now();
+#endif
     long numberOfCols = workData.vectorSize;
     HamiltonianReplyData<dataType,vectorType> ret;
     ret.dest = std::shared_ptr<vectorType[]>(new vectorType[numberOfCols]);
@@ -1127,7 +1131,11 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
     }
     for (auto& f : futs)
         f.wait();
-
+#ifdef USEMPI
+    auto time2 = std::chrono::high_resolution_clock::now();
+    long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+    fprintf(stderr,"Applying HamiltonianKernel, Rank %i, duration (ms): %zi\n",MPIRelay::getInstance().getRank(),duration1);
+#endif
     return ret;
 }
 
@@ -1189,14 +1197,19 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         std::mutex destAccumulateMutex;
         auto doneLambda = [&destAccumulateMutex, &dest](char* data)
         {
+            auto time1 = std::chrono::high_resolution_clock::now();
             HamiltonianReplyData<dataType,vectorType> Done = HamiltonianReplyData<dataType,vectorType>::deserialise(data);
             Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>> nodeiDestMap(Done.dest.get(),1,Done.vectorSize);
             std::lock_guard<std::mutex> lock(destAccumulateMutex);
             dest += nodeiDestMap;
+            auto time2 = std::chrono::high_resolution_clock::now();
+            long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+            logger().log("Time to deserialise + FMA other node work", duration1);
         };
 
         for (int i = 0; i < numberOfFreeNodes; i++)
         {
+            auto time1 = std::chrono::high_resolution_clock::now();
             HamiltonianWorkData<dataType,vectorType> nodeiWorkData;
             size_t endOperators = std::min(numOperators,operatorsPerNode*(i+1));
             nodeiWorkData.m_operators = std::vector<excOp>(m_operators.begin()+operatorsPerNode*i,m_operators.begin()+endOperators);
@@ -1207,11 +1220,20 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
 
             assert(src.rows() == 1);
             serialDataContainer serialisedWorkData = nodeiWorkData.serialise();
+            auto time2 = std::chrono::high_resolution_clock::now();
+            long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+            logger().log("Time to setup nodeiWorkData", duration1);
             // std::pair<std::shared_ptr<char[]>,size_t> serialisedReplyData = MPICOMMAND_HamApplyToVector(serialisedWorkData.first.get(),serialisedWorkData.second);
             // doneLambda(serialisedReplyData.first.get());
+
+            time1 = std::chrono::high_resolution_clock::now();
             relay.IssueCommandToFreeNode(MPICommand::HamApplyToVector,serialisedWorkData,doneLambda);
+            time2 = std::chrono::high_resolution_clock::now();
+            duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+            logger().log("Time to send nodeiWorkData", duration1);
         }
         //Do this nodes work
+        auto time1 = std::chrono::high_resolution_clock::now();
         HamiltonianWorkData<dataType,vectorType> nodeiWorkData;
         nodeiWorkData.m_operators = std::vector<excOp>(m_operators.begin()+operatorsPerNode*numberOfFreeNodes, m_operators.begin()+numOperators);
         nodeiWorkData.m_vals = std::vector<dataType>(m_vals.begin()+operatorsPerNode*numberOfFreeNodes, m_vals.begin()+numOperators);
@@ -1220,13 +1242,23 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         nodeiWorkData.comp = m_compressor;
 
         HamiltonianReplyData<dataType,vectorType> myDone = applyVectorHamiltonianKernel(nodeiWorkData);
+        auto time2 = std::chrono::high_resolution_clock::now();
+
         Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>> nodeiDestMap(myDone.dest.get(),1,myDone.vectorSize);
         {
             std::lock_guard<std::mutex> lock(destAccumulateMutex);
             dest += nodeiDestMap;
         }
+        auto time3 = std::chrono::high_resolution_clock::now();
+        long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+        long duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(time3-time2).count();
+        fprintf(stderr,"Time to apply node 0 Hamiltonian: %zi time to FMA: %zi\n", duration1,duration2);
 
+        time1 = std::chrono::high_resolution_clock::now();
         relay.waitForAll();
+        time2 = std::chrono::high_resolution_clock::now();
+        duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+        logger().log("Time to receive + handle other node work", duration1);
         return;
 #else
         long numberOfCols = src.cols();
