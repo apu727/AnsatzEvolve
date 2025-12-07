@@ -134,17 +134,20 @@ if __name__ == "__main__":
     PathBase = "/home/bence/AnsatzEvolve/Hams/H4/L1/H4"
     
     #Load a template path to know how long it will be.
-    templatePath = loadPath(PathBase + "_Operators.dat")
+    templatePath = loadPath(PathBase + "_Operators.dat") # AKA qc_ucc.dat
     
     #Load all the paths from the files. returns a tuple with:
     # (rotationPaths,order,numberOfUniqueParameters)
     # rotationPaths is a list of pairs of elements, first is the rotation (Deprecated, always zero), second is the angle
     # order is a list of numbers representing parameter dependencies
     # numberOfUnique parameters represents the total number of free angles
+
+    # AKA "qc_ucc_order.dat" and "lowest"
     rotationPaths,order,numberOfUniqueParameters = loadParameters(PathBase + "_Order.dat",PathBase + "_Parameters.dat",templatePath)
     Angles = [[a[1] for a in p] for p in rotationPaths] # Extract the angles
 
     #Load the initial state
+    # AKA qc_ucc_initial.dat
     InitialState = readCsvState(PathBase + "_Initial.dat")
     
     #Sparsify the initial state. Currently we can only deal with one basis state at the start
@@ -159,10 +162,12 @@ if __name__ == "__main__":
     numberOfQubits = round(np.log2(len(InitialState)))
 
     #Load the ansatz,
+    #AKA qc_ucc.dat
     Operators = loadOperators(PathBase + "_Operators.dat")
 
     #Setup the ansatzManager to be able to run circuits
     man = stateAnsatzManager()
+    #Hamiltonians are loaded from "H4_Ham_Coeff.dat" and "H4_Ham_Index.dat" or "H4_oneEInts.bin" and "H4_twoEInts.bin"
     man.storeRunPath(PathBase)
     man.storeInitial(numberOfQubits,InitialStateIndices,InitialStateCoeffs)
     man.storeOperators(Operators)
