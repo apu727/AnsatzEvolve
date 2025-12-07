@@ -24,3 +24,9 @@ bool loadParameters(std::string filePath,
                     std::vector<std::pair<int,realNumType>> &order,
                     int& numberOfUniqueParameters);
 
+bool loadParameters(const std::string& orderFilePath, const std::string& parameterFilePath,
+                    std::vector<ansatz::rotationElement>& rotationPath,
+                    std::vector<std::vector<ansatz::rotationElement>> &rotationPaths,
+                    std::vector<std::pair<int,realNumType>> &orders/*the fixed relation between parameters*/,
+                    int& numberOfUniqueParameters);
+

@@ -98,12 +98,12 @@ PYBIND11_MODULE(PyAnsatzEvolve, m) {
         ;
 
 
-    m.def("loadParameters",[](const std::string &filepath, std::vector<ansatz::rotationElement>& templatePath)
+    m.def("loadParameters",[](const std::string &orderFilePath, const std::string &parameterFilepath, std::vector<ansatz::rotationElement>& templatePath)
           {
               std::vector<std::vector<ansatz::rotationElement>> rotationPaths;
               std::vector<std::pair<int,realNumType>> order;
               int numberOfUniqueParameters;
-              loadParameters(filepath,templatePath,rotationPaths,order,numberOfUniqueParameters);
+              loadParameters(orderFilePath,parameterFilepath,templatePath,rotationPaths,order,numberOfUniqueParameters);
               return py::make_tuple(rotationPaths,order,numberOfUniqueParameters);
           });
 
