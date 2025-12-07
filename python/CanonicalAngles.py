@@ -185,7 +185,7 @@ if __name__ == "__main__":
     #Fuzzing
     def fuzzing():
         numAngles = len(Angles[2])
-        for i in range(0,100):
+        for i in range(0,10000):
             a = np.random.rand(numAngles)
             #Enforce the orderfile
             #This has been tacked on not the true order file as this has the SDS structure already
@@ -198,5 +198,6 @@ if __name__ == "__main__":
                 a[j] = compA[order[j][0]]*order[j][1]
 
             CanAngles = CanonicaliseAngles(man,a,Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices)
+            CanNegAngles = CanonicaliseAngles(man,Angles[2],Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices,True)
     fuzzing()
 
