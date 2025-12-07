@@ -55,6 +55,7 @@ bool loadParameters(std::string filePath,
     fp2 = fopen((filePath+"_Order.dat").c_str(), "r");
     if(fp2 == nullptr)
     {
+        fclose(fp);
         fprintf(stderr,"\nError in opening file.");
         fprintf(stderr,"fileGiven: %s\n",(filePath+"_Order.dat").c_str());
         return 0;
