@@ -12,7 +12,6 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
 
     assert(len(InitialStateCoeffs) == len(InitialStateIndices) and len(InitialStateIndices) == 1)
 
-
     Angles = np.array(Angles).copy()
 
     man.setAngles(Angles)
@@ -62,6 +61,8 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
             startVector[0,0] = 1.
         elif InitialStateBitstring == (InitialStateBitstringUnset | (1<<SpinDownAOs[0]) | (1<<SpinUpAOs[0])): #Z state
             startVector[2,0] = 1.
+        else:
+            continue
         
         #find the resultant vector:
         #Setup rotation generators
@@ -116,12 +117,14 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
                 
 
 
-    print(f"Angles After {Angles}")
+    # print(f"Angles After {Angles}")
     man.setAngles(Angles)
     EnergyAfter = man.getExpectationValue()
-    stateAfter = man.getFinalState()
-    print(f"Energy before: {EnergyBefore} Energy after: {EnergyAfter} Diff: {EnergyAfter - EnergyBefore}")
-    print(f"State Overlap: {np.dot(stateBefore,stateAfter)}")
+    
+    # print(f"Energy before: {EnergyBefore} Energy after: {EnergyAfter} Diff: {EnergyAfter - EnergyBefore}")
+    if invertSignOfWavefunction:
+        stateAfter = man.getFinalState()
+        assert(np.isclose(np.dot(stateBefore,stateAfter),-1))
     return Angles
 
 if __name__ == "__main__":
@@ -170,9 +173,9 @@ if __name__ == "__main__":
     SDSPositions = [[[0,1],[2],[3,4]],[[5,6],[7],[8,9]]]
     #Compute the canonical angles for this wavefunction and check
     CanAngles = CanonicaliseAngles(man,Angles[2],Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices)
-    print(CanAngles)
+    print(f"Angles before:\n {np.array(Angles[2])}\n went to:\n {CanAngles}")
     
     #Compute the canonical angles for the negative of this wavefunction and check    
     CanNegAngles = CanonicaliseAngles(man,Angles[2],Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices,True)
-    print(CanNegAngles)
+    print(f"Angles before:\n {np.array(Angles[2])}\n Went to:\n {CanNegAngles}")
 
