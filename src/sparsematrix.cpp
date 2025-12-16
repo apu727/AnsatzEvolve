@@ -505,7 +505,7 @@ sparseMatrix<dataType,vectorType>::sparseMatrix(const std::vector<dataType> &val
     m_jIndexes.reserve(N);
     m_jIndexes.insert(m_jIndexes.end(),jIndexes.begin(),jIndexes.end());
     m_data = value;
-    unblankAll();
+    sparseMatrix::unblankAll();
 }
 
 template<typename dataType, typename vectorType>
@@ -1428,7 +1428,7 @@ projectionMatrix<dataType>::projectionMatrix(std::vector<vector<dataType>>&& bas
         realNumType MagSq = v.dot(v);
         v *= 1/std::sqrt(MagSq);
     }
-    unblankAll();
+    projectionMatrix::unblankAll();
 }
 
 template<typename dataType>

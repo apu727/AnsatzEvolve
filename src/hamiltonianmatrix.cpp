@@ -82,9 +82,9 @@ inline bool s_loadMatrix(Eigen::SparseMatrix<dataType, Eigen::ColMajor>& destMat
 }
 
 
-static unsigned long ReadFile(FILE *fp, unsigned char *Buffer, unsigned long BufferSize)
+static size_t ReadFile(FILE *fp, unsigned char *Buffer, unsigned long BufferSize)
 {
-    return(fread(Buffer, 1, BufferSize, fp));
+    return fread(Buffer, 1, BufferSize, fp);
 }
 
 static size_t CalculateFileSize(FILE *fp)
@@ -342,8 +342,8 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
                             comp->compressIndex(compj,compj);
                         }
 
-                        assert(abs(CheckWith.coeff(compi,compj) - Energy) < 1e-13);
-                        assert(abs(CheckWith.coeff(compj,compi) - Energy) < 1e-13);
+                        assert(std::abs(CheckWith.coeff(compi,compj) - Energy) < 1e-13);
+                        assert(std::abs(CheckWith.coeff(compj,compi) - Energy) < 1e-13);
 
                     }
                 }
@@ -382,8 +382,8 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
                     comp->compressIndex(compj,compj);
                 }
 
-                assert(abs(CheckWith.coeff(compi,compj) - Energy) < 1e-13);
-                assert(abs(CheckWith.coeff(compj,compi) - Energy) < 1e-13);
+                assert(std::abs(CheckWith.coeff(compi,compj) - Energy) < 1e-13);
+                assert(std::abs(CheckWith.coeff(compj,compi) - Energy) < 1e-13);
             }
 
         }
@@ -393,7 +393,7 @@ bool s_loadOneAndTwoElectronsIntegrals_Check(Eigen::SparseMatrix<dataType, Eigen
         if (comp)
             comp->compressIndex(compj,compj);
 
-        assert(abs(CheckWith.coeff(compj,compj) - Energy) < 1e-13);
+        assert(std::abs(CheckWith.coeff(compj,compj) - Energy) < 1e-13);
     }
 
     delete[] twoEInts;
@@ -509,7 +509,7 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
                     //The factor of two goes due to pqrs = qpsr. Exchange takes care of the pqrs->pqsr perm
 
                     double Energy = getTwoElectronEnergy(idxs); // Both fock and exchange
-                    if (abs(Energy) > tol)//TODO threshold
+                    if (std::abs(Energy) > tol)//TODO threshold
                     {
                         // operators.push_back({a,b,c,d});
                         uint64_t create = (1ul<<a) | (1ul<<b);
@@ -534,7 +534,7 @@ bool s_loadOneAndTwoElectronsIntegrals(std::vector<excOp>& operators,
                 continue;
 
             realNumType Energy = oneEInts(a % (numberOfQubits/2), c % (numberOfQubits/2));
-            if (abs(Energy) > tol)//TODO threshold
+            if (std::abs(Energy) > tol)//TODO threshold
             {
                 // operators.push_back({a,a,c,c});
                 uint64_t create = (1ul<<a);

@@ -485,13 +485,13 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         start.copy(dest);
         vector<numType> next;
         m_Ham->apply(start,next);
-        while(abs(next.dot(start) + 1) > 1e-10)
+        while(std::abs(next.dot(start) + 1) > 1e-10)
         {
             static_cast<Matrix<numType>&>(start) = std::move(next);
             m_Ham->apply(start,next);
             // fprintf(stderr,"NExtNorm: %lg\n", next.norm());
             next.normalize();
-            // fprintf(stderr,"error: %lg\n", abs(next.dot(start) + 1));
+            // fprintf(stderr,"error: %lg\n", std::abs(next.dot(start) + 1));
         }
         fprintf(stderr, "Largest E Value,%.16lg",(m_Ham->apply(next).dot(next)));
 
@@ -746,12 +746,12 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         bool allPositiveEigenvalues = true;
         for (long int i = 0; i < hessianEigVal.rows(); i++)
         {
-            if(abs(hessianEigVal[i]) >= zeroThreshold)
+            if(std::abs(hessianEigVal[i]) >= zeroThreshold)
             {
                 if (avoidNegativeHessianValues)
                 {
-                    InvhessianEigVal[i] = curveDamp(abs(1./(hessianEigVal[i])));
-                    /*if (hessianEigVal[i].real() < 0 && abs(gradVector_mu.dot(hessianEigVec.col(i))) < zeroThreshold)
+                    InvhessianEigVal[i] = curveDamp(std::abs(1./(hessianEigVal[i])));
+                    /*if (hessianEigVal[i].real() < 0 && std::abs(gradVector_mu.dot(hessianEigVec.col(i))) < zeroThreshold)
                         negativeEigenValueDirections += hessianEigVec.col(i) * 0.1;*/
                     // if (hessianEigVal[i].real() < 0)
                     // {
@@ -819,7 +819,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                 newAlpha = alpha1 - (alpha1-alpha0)*((directionalDeriv1 + d2 - d1)/(directionalDeriv1 - directionalDeriv0 + 2*d2));
 
                 bool tobreak = false;
-                if (abs(alpha1-alpha0) < 1e-10)
+                if (std::abs(alpha1-alpha0) < 1e-10)
                     tobreak = true;
 
                 if (!std::isfinite(newAlpha))
@@ -856,7 +856,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                     tobreak = true;
                 }
 
-                if (abs(newAlpha) < 1e-3) // without doing complicated things this should be safe ish
+                if (std::abs(newAlpha) < 1e-3) // without doing complicated things this should be safe ish
                 {
                     newAlpha = 1e-3; // force progress
                     tobreak = true;
@@ -887,7 +887,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                 }
                 else
                 {
-                    if (abs(directionalDerivTrial) <= -c2*directionalDerivAt0)
+                    if (std::abs(directionalDerivTrial) <= -c2*directionalDerivAt0)
                         break; // set angles to newAlpha
                     if (directionalDerivTrial*(alpha1-alpha0) >= 0)
                     {
@@ -1071,7 +1071,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             // logger().log("Energy Trial", energyTrial);
             // logger().log("initialDirectionalDeriv",initialDirectionalDeriv);
             // logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
-            // if (!(abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
+            // if (!(std::abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
             //     logger().log("Failed to meet wolfe condition",searchCount);
 
         }
@@ -1122,7 +1122,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         //     vector<realNumType>::EigenVector updateAnglesCopy = updateAngles;
         //     realNumType biggestAngle  = updateAnglesCopy[0];
         //     for (auto a : updateAnglesCopy)
-        //         biggestAngle = std::max(biggestAngle,abs(a));
+        //         biggestAngle = std::max(biggestAngle,std::abs(a));
         //     // logger().log("Biggest Angle at start",biggestAngle);
         //     while(true)
         //     {
@@ -1138,12 +1138,12 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         //         if (EnergyTrial > lastEnergyTrial)
         //         {//Backtracking
         //             // logger().log("Backtracking",BacktrackCount);
-        //             biggestAngle  = abs(updateAnglesCopy[0]/2);
+        //             biggestAngle  = std::abs(updateAnglesCopy[0]/2);
         //             for (size_t i = 0; i < angles.size();i++)
         //             {
         //                 updateAnglesCopy[i] /=2;
         //                 angles[i] -= updateAnglesCopy[i];
-        //                 biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
+        //                 biggestAngle = std::max(biggestAngle,std::abs(updateAnglesCopy[i]));
         //             }
         //             tBackTrackStepSize /= 2;
         //             tBacktrack -= tBackTrackStepSize;
@@ -1154,12 +1154,12 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         //             break;
         //             // logger().log("Forwardtracking",BacktrackCount);
         //             lastEnergyTrial = EnergyTrial;
-        //             biggestAngle  = abs(updateAnglesCopy[0]/2);
+        //             biggestAngle  = std::abs(updateAnglesCopy[0]/2);
         //             for (size_t i = 0; i < angles.size();i++)
         //             {
         //                 updateAnglesCopy[i] /=2;
         //                 angles[i] += updateAnglesCopy[i];
-        //                 biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
+        //                 biggestAngle = std::max(biggestAngle,std::abs(updateAnglesCopy[i]));
         //             }
         //             tBackTrackStepSize /= 2;
         //             tBacktrack += tBackTrackStepSize;
@@ -1243,11 +1243,11 @@ void TUPSQuantities::runNewtonMethodProjected(FusedEvolve *myAnsatz,std::vector<
 
         for (long int i = 0; i < hessianEigVal.rows(); i++)
         {
-            if(abs(hessianEigVal[i].real()) >= zeroThreshold)
+            if(std::abs(hessianEigVal[i].real()) >= zeroThreshold)
             {
                 if (avoidNegativeHessianValues)
                 {
-                    InvhessianEigVal[i] = abs(1./(hessianEigVal[i].real()));
+                    InvhessianEigVal[i] = std::abs(1./(hessianEigVal[i].real()));
                 }
                 else
                     InvhessianEigVal[i] = 1./(hessianEigVal[i].real());
@@ -1393,7 +1393,7 @@ void TUPSQuantities::runNewtonMethodProjected(FusedEvolve *myAnsatz,std::vector<
             // logger().log("Energy Trial", energyTrial);
             // logger().log("initialDirectionalDeriv",initialDirectionalDeriv);
             // logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
-            // if (!(abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
+            // if (!(std::abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
             //     logger().log("Failed to meet wolfe condition",searchCount);
 
         }
@@ -1524,8 +1524,8 @@ bool TUPSQuantities::doStepsUntilHessianIsPositiveDefinite(FusedEvolve *myAnsatz
 
 
         //opt->m_vars.count++;
-        //realNumType maxGradientValue = *std::max_element(g,g+n,[](realNumType a, realNumType b) {return std::abs(a) < std::abs(b);}); // actual gradient
-        //realNumType minGradientValue = *std::min_element(g,g+n,[](realNumType a, realNumType b) {return std::abs(a) < std::abs(b);}); // actual gradient
+        //realNumType maxGradientValue = *std::max_element(g,g+n,[](realNumType a, realNumType b) {return std::std::abs(a) < std::std::abs(b);}); // actual gradient
+        //realNumType minGradientValue = *std::min_element(g,g+n,[](realNumType a, realNumType b) {return std::std::abs(a) < std::std::abs(b);}); // actual gradient
         //fprintf(stderr,"LBFGS-LS MaxGradientValue: %g, MaxGradientValue2: %g, MaxGradCoeff:%g\n",maxGradientValue,minGradientValue, opt->m_vars.maxGradCoeff);
         //opt->printDistance(opt->m_vars.count);
         fprintf(stderr,"Tryling gradient step: Energy: " realNumTypeCode " GradNorm: " realNumTypeCode "\n", Energy, gradVectorEM.norm());

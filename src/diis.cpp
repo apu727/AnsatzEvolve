@@ -42,7 +42,7 @@ bool simpleNewtonRaphson(const std::function<Eigen::MatrixXd (Eigen::VectorXd)> 
         eVec = es.eigenvectors();
         for (auto& e : eVal)
         {
-            if (abs(e) < zeroThreshold)
+            if (std::abs(e) < zeroThreshold)
                 e = 0;
             else
                 e = 1./e;

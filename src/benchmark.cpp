@@ -2082,7 +2082,7 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
             const matrixType &rotationGenerator = *lie->getLieAlgebraMatrix(rp.first);
             for (auto d = rotationGenerator.begin(); d < rotationGenerator.end(); d++)
             {
-                if (abs(*d) != 1)
+                if (std::abs(*d) != 1)
                     logger().log("Magnitude not 1 but ", *d);
             }
             std::vector<uint64_t> intoIs;

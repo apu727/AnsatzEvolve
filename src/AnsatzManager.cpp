@@ -282,9 +282,9 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<long
         for (auto& c : coeffs)
             mag += c*c;
         mag = std::sqrt(mag);
-        if (abs(mag-1) > 1e-14)
+        if (std::abs(mag-1) > 1e-14)
         {
-            logger().log("Warning: Initial vector is not normalised, the error is", abs(mag-1));
+            logger().log("Warning: Initial vector is not normalised, the error is", std::abs(mag-1));
         }
         m_numberOfQubits = numberOfQubits;
 

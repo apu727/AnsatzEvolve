@@ -5,6 +5,7 @@
 cmake_minimum_required(VERSION 3.5)
 project(AnsatzEvolve LANGUAGES CXX Fortran)
 
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set (CMAKE_C_STANDARD 11)
@@ -28,7 +29,7 @@ endif()
 
 # set(CMAKE_VERBOSE_MAKEFILE on)
 # include(GNUInstallDirs)
-include_directories(./third-party/eigen-3.4.0)
+
 if (COMPLEX_MODE)
     add_compile_definitions(useComplex)
 endif()
@@ -60,6 +61,7 @@ add_library(cppAnsatzSynthLib STATIC
     mpirelay.h mpirelay.cpp
     serialise.h
 )
+target_include_directories(cppAnsatzSynthLib SYSTEM PUBLIC ./third-party/eigen-3.4.0)
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 else()
     target_link_libraries(cppAnsatzSynthLib pthread m)
