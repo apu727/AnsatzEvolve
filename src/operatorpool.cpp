@@ -253,20 +253,20 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
 
     threadpool& pool = threadpool::getInstance(NUM_CORES);
     std::vector<std::future<void>> futs;
-    uint32_t totalSteps = (1u <<(numberOfQubits/2));
-    uint32_t stepSize = std::max(totalSteps/NUM_CORES,1ul);
-    for (uint32_t starti = 0; starti < totalSteps; starti+= stepSize)
+    uint64_t totalSteps = (1u <<(numberOfQubits/2));
+    uint64_t stepSize = std::max(totalSteps/NUM_CORES,1ul);
+    for (uint64_t starti = 0; starti < totalSteps; starti+= stepSize)
     {
-        uint32_t endi = std::min(starti+stepSize,totalSteps);
+        uint64_t endi = std::min(starti+stepSize,totalSteps);
         futs.push_back(pool.queueWork(
             [this,starti,endi]()
             {
-                for (uint32_t i = starti; i < endi; i++)
+                for (uint64_t i = starti; i < endi; i++)
                 {
                     bool spinUpActive = popcount(i) == (char)m_spinUp;
                     bool spinDownActive = popcount(i) == (char)m_spinDown;
-                    uint32_t spinUpIndex;
-                    uint32_t spinDownIndex;
+                    uint64_t spinUpIndex;
+                    uint64_t spinDownIndex;
                     if (spinUpActive)
                     {
                         spinUpIndex = ColexicoOrder(i,m_spinUp);
@@ -287,9 +287,9 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
 
     totalSteps = stateVectorSize;
     stepSize = std::max(totalSteps/NUM_CORES,1ul);
-    for (uint32_t starti = 0; starti < totalSteps; starti+= stepSize)
+    for (uint64_t starti = 0; starti < totalSteps; starti+= stepSize)
     {
-        uint32_t endi = std::min(starti+stepSize,totalSteps);
+        uint64_t endi = std::min(starti+stepSize,totalSteps);
         futs.push_back(pool.queueWork(
             [this,starti,endi]()
             {
