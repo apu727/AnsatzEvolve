@@ -6,6 +6,7 @@
 #include "operatorpool.h"
 #include "globals.h"
 #include "logger.h"
+#include "threadpool.h"
 
 #include <cassert>
 
@@ -250,30 +251,60 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
     m_compressedSpinUpLookup.resize((1u <<(numberOfQubits/2)),-1);
     m_compressedSpinDownLookup.resize((1u <<(numberOfQubits/2)),-1);
 
+    threadpool& pool = threadpool::getInstance(NUM_CORES);
+    std::vector<std::future<void>> futs;
+    uint32_t totalSteps = (1u <<(numberOfQubits/2));
+    uint32_t stepSize = std::max(totalSteps/NUM_CORES,1ul);
+    for (uint32_t starti = 0; starti < totalSteps; starti+= stepSize)
+    {
+        uint32_t endi = std::min(starti+stepSize,totalSteps);
+        futs.push_back(pool.queueWork(
+            [this,starti,endi]()
+            {
+                for (uint32_t i = starti; i < endi; i++)
+                {
+                    bool spinUpActive = popcount(i) == (char)m_spinUp;
+                    bool spinDownActive = popcount(i) == (char)m_spinDown;
+                    uint32_t spinUpIndex;
+                    uint32_t spinDownIndex;
+                    if (spinUpActive)
+                    {
+                        spinUpIndex = ColexicoOrder(i,m_spinUp);
+                        m_compressedSpinUpLookup[i] = spinUpIndex;
+                    }
+                    if (spinDownActive)
+                    {
+                        spinDownIndex = ColexicoOrder(i,m_spinDown);
+                        m_compressedSpinDownLookup[i] = spinDownIndex;
+                    }
+                }
+            }
+            ));
+    }
+    for (auto& f : futs)
+        f.wait();
+    futs.clear();
 
-    for (uint32_t i = 0; i < (1u <<(numberOfQubits/2)); i++)
+    totalSteps = stateVectorSize;
+    stepSize = std::max(totalSteps/NUM_CORES,1ul);
+    for (uint32_t starti = 0; starti < totalSteps; starti+= stepSize)
     {
-        bool spinUpActive = popcount(i) == (char)m_spinUp;
-        bool spinDownActive = popcount(i) == (char)m_spinDown;
-        uint32_t spinUpIndex;
-        uint32_t spinDownIndex;
-        if (spinUpActive)
-        {
-            spinUpIndex = ColexicoOrder(i,m_spinUp);
-            m_compressedSpinUpLookup[i] = spinUpIndex;
-        }
-        if (spinDownActive)
-        {
-            spinDownIndex = ColexicoOrder(i,m_spinDown);
-            m_compressedSpinDownLookup[i] = spinDownIndex;
-        }
+        uint32_t endi = std::min(starti+stepSize,totalSteps);
+        futs.push_back(pool.queueWork(
+            [this,starti,endi]()
+            {
+                for (uint64_t i = starti; i < endi; i++)
+                {
+                    uint64_t compressedIndex;
+                    if (SZAndnumberOperatorCompressor::compressIndex(i,compressedIndex))
+                        decompressPerm[compressedIndex] = i;
+                }
+            }
+            ));
     }
-    for (uint64_t i = 0; i < stateVectorSize; i++)
-    {
-        uint64_t compressedIndex;
-        if (SZAndnumberOperatorCompressor::compressIndex(i,compressedIndex))
-            decompressPerm[compressedIndex] = i;
-    }
+    for (auto& f : futs)
+        f.wait();
+    futs.clear();
 
     logger().log("Compressed statevector size (elements)",decompressPerm.size());
 }
