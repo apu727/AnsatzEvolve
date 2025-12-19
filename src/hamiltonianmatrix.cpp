@@ -741,8 +741,8 @@ public:
     std::vector<excOp> m_operators;
     std::vector<dataType> m_vals;
     std::shared_ptr<compressor> comp;
-    size_t vectorSize;
-    const vectorType* src; // Must exist as long as HamiltonianWorkData exists.
+    // size_t vectorSize;
+    // const vectorType* src; // Must exist as long as HamiltonianWorkData exists.
 
 
     serialDataContainer serialise();
@@ -798,10 +798,10 @@ serialDataContainer HamiltonianWorkData<dataType, vectorType>::serialise()
     //No alignment
     totalSize += (comp) ? compressorSerialised.size : 0;
 
-    totalSize += computePaddingBytes(totalSize,serialisableArray<vectorType>::getAlignment());
-    totalSize += serialisableArray<vectorType>(vectorSize,src).getSerialiedSize();
+    // totalSize += computePaddingBytes(totalSize,serialisableArray<vectorType>::getAlignment());
+    // totalSize += serialisableArray<vectorType>(vectorSize,src).getSerialiedSize();
 
-    std::shared_ptr<char[]> ret(new (std::align_val_t(maxNeededAlignment)) char[totalSize]);
+    std::shared_ptr<char[]> ret(new (std::align_val_t(maxNeededAlignment)) char[totalSize],[maxNeededAlignment](char* p){operator delete[] (p,std::align_val_t(maxNeededAlignment));});
     char* retCurrPtr = ret.get();
 
     //First one so no alignment
@@ -825,9 +825,9 @@ serialDataContainer HamiltonianWorkData<dataType, vectorType>::serialise()
         retCurrPtr += compressorSerialised.size;
     }
 
-    retCurrPtr += computePaddingBytes(retCurrPtr-ret.get(),serialisableArray<vectorType>::getAlignment());
-    releaseAssert(is_aligned(retCurrPtr,serialisableArray<vectorType>::getAlignment()),"Failed to set alignment");
-    serialisableArray<vectorType>(vectorSize,src).serialise(retCurrPtr,totalSize + ret.get() - retCurrPtr);
+    // retCurrPtr += computePaddingBytes(retCurrPtr-ret.get(),serialisableArray<vectorType>::getAlignment());
+    // releaseAssert(is_aligned(retCurrPtr,serialisableArray<vectorType>::getAlignment()),"Failed to set alignment");
+    // serialisableArray<vectorType>(vectorSize,src).serialise(retCurrPtr,totalSize + ret.get() - retCurrPtr);
     return {.ptr = ret,.size = totalSize, .alignment = maxNeededAlignment};
 }
 
@@ -852,9 +852,9 @@ HamiltonianWorkData<dataType,vectorType> HamiltonianWorkData<dataType, vectorTyp
     if (isCompressed)
         ptr += compressor::deserialise(ptr,ret.comp);
 
-    ptr += computePaddingBytes((uintptr_t)ptr,serialisableArray<vectorType>::getAlignment());
-    ret.vectorSize = serialisableArray<vectorType>::deserialiseSize(ptr);
-    serialisableArray<vectorType>::deserialise(ptr,&ret.src);
+    // ptr += computePaddingBytes((uintptr_t)ptr,serialisableArray<vectorType>::getAlignment());
+    // ret.vectorSize = serialisableArray<vectorType>::deserialiseSize(ptr);
+    // serialisableArray<vectorType>::deserialise(ptr,&ret.src);
     return ret;
 }
 
@@ -1028,13 +1028,13 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
 }
 
 template<typename dataType, typename vectorType>
-HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(HamiltonianWorkData<dataType,vectorType>& workData)
+HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(HamiltonianWorkData<dataType,vectorType>& workData, size_t vectorSize, numType* vectorPtr)
 {
 
 #ifdef USEMPI
     auto time1 = std::chrono::high_resolution_clock::now();
 #endif
-    long numberOfCols = workData.vectorSize;
+    long numberOfCols = vectorSize;
     HamiltonianReplyData<dataType,vectorType> ret;
     ret.dest = std::shared_ptr<vectorType[]>(new vectorType[numberOfCols]);
     ret.vectorSize = numberOfCols;
@@ -1055,7 +1055,8 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
         long endj = std::min(startj + stepSize,numberOfCols);
         futs.push_back(pool.queueWork([&workData, &ret,
                                        startj,
-                                       endj
+                                       endj,
+                                       vectorPtr
         ](){
             bool isCompressed = (bool)workData.comp;
             for (long j = startj; j < endj; j++)
@@ -1123,7 +1124,7 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
                     // dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt);
                     dataType v = (sign ? -*valIt : *valIt);
 
-                    ret.dest.get()[j] += workData.src[i] * v;
+                    ret.dest.get()[j] += vectorPtr[i] * v;
 
                 }
             }
@@ -1186,7 +1187,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         long numberOfCols = src.cols();
         long numberOfRows = src.rows();
         dest.resize(numberOfRows,numberOfCols);
-        dest.setZero();
+        // dest.setZero();
         assert(m_compressor->getCompressedSize() == (size_t)numberOfCols);
 
         MPIRelay& relay = MPIRelay::getInstance();
@@ -1194,18 +1195,6 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         //Split the work among the nodes and issue it
         size_t numOperators = m_operators.size();
         size_t operatorsPerNode = std::max(m_operators.size()/(numberOfFreeNodes+1),1ul);
-        std::mutex destAccumulateMutex;
-        auto doneLambda = [&destAccumulateMutex, &dest](char* data)
-        {
-            auto time1 = std::chrono::high_resolution_clock::now();
-            HamiltonianReplyData<dataType,vectorType> Done = HamiltonianReplyData<dataType,vectorType>::deserialise(data);
-            Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>> nodeiDestMap(Done.dest.get(),1,Done.vectorSize);
-            std::lock_guard<std::mutex> lock(destAccumulateMutex);
-            dest += nodeiDestMap;
-            auto time2 = std::chrono::high_resolution_clock::now();
-            long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
-            logger().log("Time to deserialise + FMA other node work", duration1);
-        };
 
         for (int i = 0; i < numberOfFreeNodes; i++)
         {
@@ -1214,8 +1203,8 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
             size_t endOperators = std::min(numOperators,operatorsPerNode*(i+1));
             nodeiWorkData.m_operators = std::vector<excOp>(m_operators.begin()+operatorsPerNode*i,m_operators.begin()+endOperators);
             nodeiWorkData.m_vals = std::vector<dataType>(m_vals.begin()+operatorsPerNode*i,m_vals.begin()+endOperators);
-            nodeiWorkData.src = src.data();
-            nodeiWorkData.vectorSize = src.cols();
+            // nodeiWorkData.src = src.data();
+            // nodeiWorkData.vectorSize = src.cols();
             nodeiWorkData.comp = m_compressor;
 
             assert(src.rows() == 1);
@@ -1223,11 +1212,11 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
             auto time2 = std::chrono::high_resolution_clock::now();
             long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
             logger().log("Time to setup nodeiWorkData", duration1);
-            // std::pair<std::shared_ptr<char[]>,size_t> serialisedReplyData = MPICOMMAND_HamApplyToVector(serialisedWorkData.first.get(),serialisedWorkData.second);
-            // doneLambda(serialisedReplyData.first.get());
 
             time1 = std::chrono::high_resolution_clock::now();
-            relay.IssueCommandToFreeNode(MPICommand::HamApplyToVector,serialisedWorkData,doneLambda);
+
+            relay.IssueCommandToFreeNode(MPICommand::HamApplyToVector,serialisedWorkData);
+
             time2 = std::chrono::high_resolution_clock::now();
             duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
             logger().log("Time to send nodeiWorkData", duration1);
@@ -1237,22 +1226,25 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         HamiltonianWorkData<dataType,vectorType> nodeiWorkData;
         nodeiWorkData.m_operators = std::vector<excOp>(m_operators.begin()+operatorsPerNode*numberOfFreeNodes, m_operators.begin()+numOperators);
         nodeiWorkData.m_vals = std::vector<dataType>(m_vals.begin()+operatorsPerNode*numberOfFreeNodes, m_vals.begin()+numOperators);
-        nodeiWorkData.src = src.data();
-        nodeiWorkData.vectorSize = src.cols();
+        // nodeiWorkData.src = src.data();
+        // nodeiWorkData.vectorSize = src.cols();
         nodeiWorkData.comp = m_compressor;
 
-        HamiltonianReplyData<dataType,vectorType> myDone = applyVectorHamiltonianKernel(nodeiWorkData);
+        // HamiltonianReplyData<dataType,vectorType> myDone = applyVectorHamiltonianKernel(nodeiWorkData);
+        std::shared_ptr<const vectorType> srcDataPtr(src.data(),[](const vectorType*){});
+
+        releaseAssert(MPIRelay::getInstance().isMaster(),"Main driver must be master");
+
+        serialDataContainer serialisedWorkData = MPICOMMAND_HamApplyToVectorDefault(reinterpret_cast<char*>(&nodeiWorkData),sizeof(nodeiWorkData),srcDataPtr,src.cols());
         auto time2 = std::chrono::high_resolution_clock::now();
 
-        Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>> nodeiDestMap(myDone.dest.get(),1,myDone.vectorSize);
-        {
-            std::lock_guard<std::mutex> lock(destAccumulateMutex);
-            dest += nodeiDestMap;
-        }
+        Eigen::Map<Eigen::Matrix<vectorType, 1, -1, Eigen::RowMajor>> nodeiDestMap(reinterpret_cast<vectorType*>(serialisedWorkData.ptr.get()),1,serialisedWorkData.size/sizeof(vectorType));
+        dest = nodeiDestMap;
+
         auto time3 = std::chrono::high_resolution_clock::now();
         long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
         long duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(time3-time2).count();
-        fprintf(stderr,"Time to apply node 0 Hamiltonian: %zi time to FMA: %zi\n", duration1,duration2);
+        fprintf(stderr,"Time to apply node 0 Hamiltonian: %zi time to STORE: %zi\n", duration1,duration2);
 
         time1 = std::chrono::high_resolution_clock::now();
         relay.waitForAll();
@@ -1725,15 +1717,89 @@ Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::getNumberCorr2RDM(c
     return ret;
 }
 
-
-serialDataContainer MPICOMMAND_HamApplyToVector(char *ptr, size_t /*size*/)
+serialDataContainer MPICOMMAND_HamApplyToVector(char* ptr, size_t size)
+{ //trampoline the default arguments
+    return MPICOMMAND_HamApplyToVectorDefault(ptr,size);
+}
+serialDataContainer MPICOMMAND_HamApplyToVectorDefault(char *ptr, size_t /*size*/,std::shared_ptr<const numType> node0StateVector, size_t node0StateVectorSize)
 {
 #ifdef useComplex
     static_assert(false,"complex + MPI not implemented, Cant resolve templates yet");
 #endif
-    HamiltonianWorkData<numType,numType> nodeiWorkData = HamiltonianWorkData<numType,numType>::deserialise(ptr);
-    HamiltonianReplyData<numType,numType> myDone = applyVectorHamiltonianKernel(nodeiWorkData);
-    return myDone.serialise();
+    HamiltonianWorkData<numType,numType> nodeiWorkData;
+    numType* stateVector;
+    size_t vectorSize;
+    serialDataContainer vectorData;
+    if (!MPIRelay::getInstance().isMaster())
+    {
+        auto time1 = std::chrono::high_resolution_clock::now();
+        nodeiWorkData = HamiltonianWorkData<numType,numType>::deserialise(ptr);
+        auto time2 = std::chrono::high_resolution_clock::now();
+
+        vectorData = MPIRelay::getInstance().ReceiveBroadcast();
+
+        auto time3 = std::chrono::high_resolution_clock::now();
+
+        long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+        long duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(time3-time2).count();
+        fprintf(stderr,"Deserialise time taken, Rank %i, duration (ms): %zi\n",MPIRelay::getInstance().getRank(),duration1);
+        fprintf(stderr,"Receive vector time taken, Rank %i, duration (ms): %zi\n",MPIRelay::getInstance().getRank(),duration2);
+    }
+    else
+    {
+        nodeiWorkData = *reinterpret_cast<HamiltonianWorkData<numType,numType>*>(ptr);
+        //WARNING CAST AWAY CONST. This is because here we dont modify vectorData but we could in principle.
+        //TODO make this a weak_ptr.
+        vectorData.ptr = std::shared_ptr<char[]>((char*)(node0StateVector.get()),
+                                                 [ptr = std::weak_ptr<const numType>(node0StateVector)](char*)
+                                                 {releaseAssert(!ptr.expired(),"MPICOMMAND_HamApplyToVectorDefault Node0StateVectorPtr has expired but we had a reference to it");});
+        vectorData.size = node0StateVectorSize*sizeof(numType);
+        vectorData.alignment = alignof(numType);
+        auto time1 = std::chrono::high_resolution_clock::now();
+
+        MPIRelay::getInstance().BroadcastToAllNodes(vectorData);
+
+        auto time2 = std::chrono::high_resolution_clock::now();
+        long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+        fprintf(stderr,"Send vector time taken, Rank %i, duration (ms): %zi\n",MPIRelay::getInstance().getRank(),duration1);
+    }
+
+    releaseAssert((bool)vectorData.ptr,"(bool)vectorData.ptr == false");
+    stateVector = reinterpret_cast<numType*>(vectorData.ptr.get());
+    vectorSize = vectorData.size/(sizeof(numType));
+
+    HamiltonianReplyData<numType,numType> myDone = applyVectorHamiltonianKernel(nodeiWorkData,vectorSize,stateVector);
+
+    vectorData.size = myDone.vectorSize*sizeof(numType);
+    vectorData.alignment = alignof(numType);
+    //Here we capture a shared ptr by value. This is risky as one can create cycles. Be careful never to store vectorData within the original myDone
+    vectorData.ptr = std::shared_ptr<char[]>(reinterpret_cast<char*>(myDone.dest.get()),[myDone](char*){});
+    vectorData = MPIRelay::getInstance().treeReduceOp(vectorData,
+    [](const serialDataContainer& theirs, const serialDataContainer& ours)
+                                         {
+                                             releaseAssert((bool)theirs.ptr,"(bool)theirs.ptr == false");
+                                             numType* theirStateVector = reinterpret_cast<numType*>(theirs.ptr.get());
+                                             size_t theirVectorSize = theirs.size/(sizeof(numType));
+
+                                             numType* ourStateVector = reinterpret_cast<numType*>(ours.ptr.get());
+                                             size_t ourVectorSize = ours.size/(sizeof(numType));
+
+                                             Eigen::Map<Eigen::Matrix<numType, 1, -1, Eigen::RowMajor>> theirMap(theirStateVector,1,theirVectorSize);
+                                             Eigen::Map<Eigen::Matrix<numType, 1, -1, Eigen::RowMajor>> ourMap(ourStateVector,1,ourVectorSize);
+
+                                             auto time1 = std::chrono::high_resolution_clock::now();
+                                             ourMap += theirMap;
+                                             auto time2 = std::chrono::high_resolution_clock::now();
+
+                                             long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+                                             fprintf(stderr,"Node: %i FMA time (ms): %zi\n",MPIRelay::getInstance().getRank(),duration1);
+                                             return ours;
+
+                                         });
+
+
+
+    return vectorData;
 }
 
 

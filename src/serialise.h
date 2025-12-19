@@ -58,7 +58,7 @@ public:
 
     serialDataContainer serialise()
     {
-        std::shared_ptr<char[]> ptr(new (std::align_val_t(alignment)) char[getSerialiedSize()]);
+        std::shared_ptr<char[]> ptr(new (std::align_val_t(alignment)) char[getSerialiedSize()],[](char* p){operator delete[] (p,std::align_val_t(alignment));});
 
         std::memcpy(ptr.get(), &m_size, sizeof(m_size));
         std::memcpy(ptr.get()+sizeof(m_size)+paddingBytes, m_data, m_size*sizeof(dataType));

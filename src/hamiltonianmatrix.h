@@ -19,9 +19,9 @@ struct excOp
     uint64_t destroy;
     uint64_t signBitMask;
 };
-
+//Trampoline function to avoid default arguments
 serialDataContainer MPICOMMAND_HamApplyToVector(char* ptr, size_t size);
-
+serialDataContainer MPICOMMAND_HamApplyToVectorDefault(char* ptr, size_t size,std::shared_ptr<const numType> node0StateVector = nullptr, size_t node0StateVectorSize = -1);
 template <typename dataType,typename vectorType>
 class HamiltonianMatrix
 {

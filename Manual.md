@@ -292,7 +292,7 @@ At a high level, ```XX/YY_oneEInts.bin``` contains all Hamiltonian terms of the 
 
 ```XX/YY_twoEInts.bin``` contains:
 
-```(il|jk) = <ij|1/r12|kl> = twoEInts[i][l][j][l]```
+```(il|jk) = <ij|1/r12|kl> = twoEInts[i][l][j][k]```
 
 The array order is assumed to be C ordered i.e. 
 ```(13|24) = <12|1/r12|34> = twoEInts[1*N^3 + 3*N^2 + 2*N + 4]```
@@ -300,7 +300,7 @@ with ```N``` is the number of MOs.
 
 The total Second quantised Hamiltonian could be written as:
 
-```H = oneEInts[p][q] a^+_p a_q + twoEInts[i][l][j][l] a^+_i a^+_j a^+_k a^+_l```
+```H = oneEInts[p][q] a^+_p a_q + twoEInts[i][l][j][k] a^+_i a^+_j a^+_k a^+_l```
 
 
 Note the spin requirement that ```Spin p == Spin q``` and ```Spin i == Spin l && Spin j == Spin k``` 
