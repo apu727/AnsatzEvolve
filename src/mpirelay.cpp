@@ -5,9 +5,10 @@
 
 #ifdef USEMPI
 #include <mpi.h>
-#endif
 constexpr bool traceMessages = false;
 constexpr int maxPayloadSize = 2000000000;
+#endif
+
 
 struct payloadHeader
 {
@@ -66,9 +67,13 @@ void MPIRelay::registerCommands()
     m_registeredMPICommands[MPICommand::HamApplyToVector] = MPICOMMAND_HamApplyToVector;
 }
 
+#ifndef USEMPI
+bool MPIRelay::IssueCommandToFreeNode(MPICommand, const serialDataContainer&, std::function<void(char*)>)
+{
+#endif
+#ifdef USEMPI
 bool MPIRelay::IssueCommandToFreeNode(MPICommand comm, const serialDataContainer& data, std::function<void(char*)> callBack)
 {
-#ifdef USEMPI
     if (m_freeNodes <= 0 || !m_amMaster || m_totalNodes == 0)
         return false;
 
@@ -190,6 +195,11 @@ void MPIRelay::waitForAll()
 #endif
 }
 
+#ifndef USEMPI
+bool MPIRelay::BroadcastToAllNodes(const serialDataContainer &)
+{
+#endif
+#ifdef USEMPI
 bool MPIRelay::BroadcastToAllNodes(const serialDataContainer &data)
 {
     releaseAssert(m_freeNodes == 0,m_logPretext + "BroadCastToAllNodes but not all nodes are waiting");
@@ -216,10 +226,15 @@ bool MPIRelay::BroadcastToAllNodes(const serialDataContainer &data)
 
 
     return true;
+#else
+    releaseAssert(false,"BroadcastToAllNodes called without MPI build");
+    return false;
+#endif
 }
 
 serialDataContainer MPIRelay::ReceiveBroadcast()
 {
+#ifdef USEMPI
     serialDataContainer ret;
 
     payloadHeader payload;
@@ -248,9 +263,17 @@ serialDataContainer MPIRelay::ReceiveBroadcast()
     releaseAssert(bytesReceived == payload.payloadSize,m_logPretext + "bytesReceived == payload.payloadSize");
     if (traceMessages) logger().log(m_logPretext + "Done ReceiveBroadcast");
     return ret;
-
+#else
+    releaseAssert(false,"ReceiveBroadcast called without MPI build");
+    return serialDataContainer();
+#endif
 }
 
+#ifndef USEMPI
+serialDataContainer MPIRelay::ReceiveFromNode(int)
+{
+#endif
+#ifdef USEMPI
 serialDataContainer MPIRelay::ReceiveFromNode(int nodeID)
 {
     releaseAssert(nodeID < m_totalNodes+1,m_logPretext + "Invalid NodeID given: " + std::to_string(nodeID));
@@ -286,8 +309,17 @@ serialDataContainer MPIRelay::ReceiveFromNode(int nodeID)
     releaseAssert(bytesReceived == payload.payloadSize,m_logPretext + "bytesReceived == payload.payloadSize");
     if (traceMessages) logger().log(m_logPretext + "Done ReceiveFromNode");
     return ret;
+#else
+    releaseAssert(false,"ReceiveFromNode called without MPI build");
+    return serialDataContainer();
+#endif
 }
 
+#ifndef USEMPI
+bool MPIRelay::sendToNode(int, serialDataContainer &)
+{
+#endif
+#ifdef USEMPI
 bool MPIRelay::sendToNode(int nodeID, serialDataContainer &data)
 {
     payloadHeader payload;
@@ -310,8 +342,17 @@ bool MPIRelay::sendToNode(int nodeID, serialDataContainer &data)
     }
 
     return true;
+#else
+    releaseAssert(false,"sendToNode called without MPI build");
+    return false;
+#endif
 }
 
+#ifndef USEMPI
+serialDataContainer MPIRelay::treeReduceOp(const serialDataContainer &, std::function<serialDataContainer (const serialDataContainer& , const serialDataContainer& )> )
+{
+#endif
+#ifdef USEMPI
 serialDataContainer MPIRelay::treeReduceOp(const serialDataContainer &data, std::function<serialDataContainer (const serialDataContainer& theirs, const serialDataContainer& ours)> callBack)
 {
     //Each node sends data to a lower node count and applies callBack to the data along with the received data
@@ -359,6 +400,10 @@ serialDataContainer MPIRelay::treeReduceOp(const serialDataContainer &data, std:
     }
     releaseAssert(m_rank == 0,m_logPretext + "NonNode0 has reached treeDepth");
     return currentData;
+#else
+    releaseAssert(false,"treeReduceOp called without MPI build");
+    return serialDataContainer();
+#endif
 }
 
 void MPIRelay::runSlaveLoop()
