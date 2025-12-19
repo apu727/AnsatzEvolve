@@ -6,7 +6,7 @@
 #ifdef USEMPI
 #include <mpi.h>
 #endif
-constexpr bool traceMessages = true;
+constexpr bool traceMessages = false;
 constexpr int maxPayloadSize = 2000000000;
 
 struct payloadHeader
