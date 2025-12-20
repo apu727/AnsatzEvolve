@@ -933,7 +933,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
             long endj = std::min(startj + stepSize,numberOfCols);
             futs.push_back(pool.queueWork([this,src = src.data(),dest = dest.data(),startj,endj](){
                 long endJ8 = ((endj-startj)/8)*8 + startj;
-                assert((endJ8-startj)%4 == 0);
+                assert((endJ8-startj)%8 == 0);
                 for (long j = startj; j < endJ8; j+=8)
                 {//across
                     uint32_t jBasisStates[8];
@@ -1024,7 +1024,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         vs = _mm512_mask_xor_pd(vs,signs,vs,negZero);
 
                         __m512d destVec = _mm512_loadu_pd(dest + j);
-                        __m512d srcVec = _mm512_i32gather_pd(is,src,sizeof(double));
+                        __m512d srcVec = _mm512_mask_i32gather_pd(negZero,valid,is,src,sizeof(double));
                         destVec = _mm512_mask3_fmadd_pd(srcVec,vs,destVec,valid);
                         _mm512_store_pd(dest + j,destVec);
 
