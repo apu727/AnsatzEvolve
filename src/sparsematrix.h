@@ -75,11 +75,11 @@ public:
         return compressPerm[index] >= 0;
     };
 
-    inline void compressIndex(const __m128i indexes, __m128i& compressedIdxs, __mmask8& valid) const
+    inline void compressIndex(const __m256i indexes, __m256i& compressedIdxs, __mmask8& valid) const
     {
-        compressedIdxs = _mm_i32gather_epi32(compressPerm.data(),indexes,sizeof(int32_t));
+        compressedIdxs = _mm256_i32gather_epi32(compressPerm.data(),indexes,sizeof(int32_t));
 
-        valid = _mm_cmpge_epi32_mask(compressedIdxs,_mm_set1_epi32(0));
+        valid = _mm256_cmpge_epi32_mask(compressedIdxs,_mm256_set1_epi32(0));
     };
 
     bool deCompressIndex(uint32_t index, uint32_t& decompressedIdx)
@@ -88,17 +88,25 @@ public:
         decompressedIdx = decompressPerm[index];
         return true;
     }
-    inline bool deCompressIndex(const uint32_t (&arr)[4], uint32_t (&decompressedArr)[4])
+    inline bool deCompressIndex(const uint32_t (&arr)[8], uint32_t (&decompressedArr)[8])
     {
         assert(arr[0] < decompressPerm.size());
         assert(arr[1] < decompressPerm.size());
         assert(arr[2] < decompressPerm.size());
         assert(arr[3] < decompressPerm.size());
+        assert(arr[4] < decompressPerm.size());
+        assert(arr[5] < decompressPerm.size());
+        assert(arr[6] < decompressPerm.size());
+        assert(arr[7] < decompressPerm.size());
 
         decompressedArr[0] = decompressPerm[arr[0]];
         decompressedArr[1] = decompressPerm[arr[1]];
         decompressedArr[2] = decompressPerm[arr[2]];
         decompressedArr[3] = decompressPerm[arr[3]];
+        decompressedArr[4] = decompressPerm[arr[4]];
+        decompressedArr[5] = decompressPerm[arr[5]];
+        decompressedArr[6] = decompressPerm[arr[6]];
+        decompressedArr[7] = decompressPerm[arr[7]];
         return true;
     }
 

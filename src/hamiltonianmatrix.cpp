@@ -932,20 +932,22 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         {
             long endj = std::min(startj + stepSize,numberOfCols);
             futs.push_back(pool.queueWork([this,src = src.data(),dest = dest.data(),startj,endj](){
-                long endJ4 = ((endj-startj)/4)*4 + startj;
-                assert((endJ4-startj)%4 == 0);
-                for (long j = startj; j < endJ4; j+=4)
+                long endJ8 = ((endj-startj)/8)*8 + startj;
+                assert((endJ8-startj)%4 == 0);
+                for (long j = startj; j < endJ8; j+=8)
                 {//across
-                    uint32_t jBasisStates[4];
+                    uint32_t jBasisStates[8];
                     jBasisStates[0] = j;
                     jBasisStates[1] = j+1;
                     jBasisStates[2] = j+2;
                     jBasisStates[3] = j+3;
+                    jBasisStates[4] = j+4;
+                    jBasisStates[5] = j+5;
+                    jBasisStates[6] = j+6;
+                    jBasisStates[7] = j+7;
 
                     if (m_isCompressed)
-                    {
                         m_compressor->deCompressIndex(jBasisStates,jBasisStates);
-                    }
 
                     auto opIt = m_operators.cbegin();
                     auto valIt = m_vals.cbegin();
@@ -953,9 +955,9 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                     uint32_t badCreate = 0;
                     uint32_t goodCreate = 0;
 
-                    __m128i destroys;
-                    __m128i BCastCreate = _mm_broadcastd_epi32(_mm_loadu_si32(&opIt->create));
-                    __m128i JBasisStatesVec = _mm_loadu_epi32(jBasisStates);
+                    __m256i destroys;
+                    __m256i BCastCreate = _mm256_broadcastd_epi32(_mm_loadu_si32(&opIt->create));
+                    __m256i JBasisStatesVec = _mm256_loadu_epi32(jBasisStates);
 
                     __mmask8 canDestroys;
                     if (valIt != valItEnd)
@@ -964,11 +966,9 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         goodCreate = opIt->create;
 
                         destroys = JBasisStatesVec ^ BCastCreate;
-                        canDestroys = _mm_testn_epi32_mask(destroys, BCastCreate);
+                        canDestroys = _mm256_testn_epi32_mask(destroys, BCastCreate);
                         if (canDestroys == 0)
-                        {
                             badCreate = opIt->create;
-                        }
                     }
                     //The j loop
                     for (;valIt != valItEnd; ++valIt,++opIt)
@@ -983,10 +983,10 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
 
                         if (opIt->create != goodCreate)
                         {
-                            BCastCreate = _mm_set1_epi32(opIt->create);
+                            BCastCreate = _mm256_set1_epi32(opIt->create);
                             goodCreate = opIt->create;
                             destroys = JBasisStatesVec ^ BCastCreate;
-                            canDestroys = _mm_testn_epi32_mask(destroys, BCastCreate);
+                            canDestroys = _mm256_testn_epi32_mask(destroys, BCastCreate);
                             if (canDestroys == 0)
                             {
                                 badCreate = opIt->create;
@@ -996,43 +996,41 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
 
                         //destroyOp
                         __mmask8 canCreates;
-                        __m128i BCastDestroy = _mm_set1_epi32(opIt->destroy);
+                        __m256i BCastDestroy = _mm256_set1_epi32(opIt->destroy);
 
-                        canCreates =  _mm_testn_epi32_mask(destroys, BCastDestroy);
+                        canCreates =  _mm256_testn_epi32_mask(destroys, BCastDestroy);
 
                         if (canCreates == 0)
                         {
                             continue;
                         }
 
-                        __m128i is;
-                        __m128i BCastSignBitMask = _mm_set1_epi32(opIt->signBitMask);
+                        __m256i is;
+                        __m256i BCastSignBitMask = _mm256_set1_epi32(opIt->signBitMask);
                         is = destroys | BCastDestroy;
-                        __m128i BCast1s = _mm_set1_epi32(1);
-                        signs = _mm_test_epi32_mask(_mm_popcnt_epi32(JBasisStatesVec & BCastSignBitMask),BCast1s);
+                        __m256i BCast1s = _mm256_set1_epi32(1);
+                        signs = _mm256_test_epi32_mask(_mm256_popcnt_epi32(JBasisStatesVec & BCastSignBitMask),BCast1s);
 
 
                         __mmask8 valid = -1;
                         if (m_isCompressed)
-                        {
                             m_compressor->compressIndex(is,is,valid);
-                        }
                         valid = valid & canCreates & canDestroys;
                         if (valid == 0)
                             continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
-                        __m256d vs = _mm256_set1_pd(*valIt);
-                        __m256d negZero = _mm256_set1_pd(-0.0);
-                        vs = _mm256_mask_xor_pd(vs,signs,vs,negZero);
+                        __m512d vs = _mm512_set1_pd(*valIt);
+                        __m512d negZero = _mm512_set1_pd(-0.0);
+                        vs = _mm512_mask_xor_pd(vs,signs,vs,negZero);
 
-                        __m256d destVec = _mm256_loadu_pd(dest + j);
-                        __m256d srcVec = _mm256_i32gather_pd(src,is,sizeof(double));
-                        destVec = _mm256_mask3_fmadd_pd(srcVec,vs,destVec,valid);
-                        _mm256_store_pd(dest + j,destVec);
+                        __m512d destVec = _mm512_loadu_pd(dest + j);
+                        __m512d srcVec = _mm512_i32gather_pd(is,src,sizeof(double));
+                        destVec = _mm512_mask3_fmadd_pd(srcVec,vs,destVec,valid);
+                        _mm512_store_pd(dest + j,destVec);
 
                     }
                 }
-                for (long j = endJ4; j < endj; j++)
+                for (long j = endJ8; j < endj; j++)
                 {//across
                     uint32_t jBasisState = j;
                     if (m_isCompressed)
