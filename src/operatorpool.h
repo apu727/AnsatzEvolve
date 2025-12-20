@@ -188,6 +188,30 @@ public:
             return false;
         }
     }
+
+    bool compressIndex(__m512i index, __m512i& compressedIdx, __mmask8& valid)
+    {
+        __m512i spinUpBlock = _mm512_srl_epi64(index,_mm_set1_epi64x(m_spinUpBitMask));
+        __m512i spinDownBlock = _mm512_and_epi64(index,_mm512_set1_epi64(m_spinDownBitMask));
+        __mmask8 spinUpActive = _mm512_testn_epi64_mask(_mm512_popcnt_epi64(spinUpBlock), _mm512_set1_epi64(m_spinUp));
+        __mmask8 spinDownActive = _mm512_testn_epi64_mask(_mm512_popcnt_epi64(spinDownBlock), _mm512_set1_epi64(m_spinDown));
+        valid = spinUpActive & spinDownActive;
+        if (valid)
+        {
+            __m512i spinUpIndex = _mm512_i64gather_epi64(spinUpBlock,m_compressedSpinUpLookup.data(),sizeof(uint64_t));//m_compressedSpinUpLookup[spinUpBlock];
+            __m512i spinDownIndex = _mm512_i64gather_epi64(spinDownBlock,m_compressedSpinDownLookup.data(),sizeof(uint64_t));//m_compressedSpinDownLookup[spinDownBlock];
+
+            // compressedIdx = spinUpIndex*m_spinDownSize + spinDownIndex;
+            compressedIdx = _mm512_add_epi64(_mm512_mullo_epi64(spinUpIndex,_mm512_set1_epi64(m_spinDownSize)),spinDownIndex);
+
+            return true;
+        }
+        else
+        {
+            compressedIdx = _mm512_set1_epi64(-1);
+            return false;
+        }
+    }
     SZAndnumberOperatorCompressor(uint64_t stateVectorSize, int spinUp, int spinDown);
     size_t getUnCompressedSize() override { return m_decompressedSize; }
     virtual void dummyImplement() override{}

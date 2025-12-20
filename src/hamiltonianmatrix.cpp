@@ -1027,10 +1027,10 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Matrix<vectorTy
     }
 }
 
-template<typename dataType, typename vectorType>
+template< bool isSZCompressor,typename dataType, typename vectorType>
 HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(HamiltonianWorkData<dataType,vectorType>& workData, size_t vectorSize, numType* vectorPtr)
 {
-
+    static_assert(isSZCompressor,"Not implemented the others yet");
 #ifdef USEMPI
     auto time1 = std::chrono::high_resolution_clock::now();
 #endif
@@ -1053,24 +1053,146 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
     for (long startj = 0; startj < numberOfCols; startj+= stepSize)
     {
         long endj = std::min(startj + stepSize,numberOfCols);
-        futs.push_back(pool.queueWork([&workData, &ret,
-                                       startj,
-                                       endj,
-                                       vectorPtr
-        ](){
+        futs.push_back(pool.queueWork([&workData,&ret,src = vectorPtr,startj,endj](){
             bool isCompressed = (bool)workData.comp;
-            for (long j = startj; j < endj; j++)
+            vectorType* dest = ret.dest.get();
+            SZAndnumberOperatorCompressor* SZComp = dynamic_cast<SZAndnumberOperatorCompressor*>(workData.comp.get());
+
+            long endJ8 = ((endj-startj)/8)*8 + startj;
+            assert((endJ8-startj)%8 == 0);
+            for (long j = startj; j < endJ8; j+=8)
             {//across
-                uint64_t jBasisState = j;
+                //Do 8 JBasisStates at a time
+                uint64_t jBasisStates[8];
+                jBasisStates[0] = j;
+                jBasisStates[1] = j+1;
+                jBasisStates[2] = j+2;
+                jBasisStates[3] = j+3;
+                jBasisStates[4] = j+4;
+                jBasisStates[5] = j+5;
+                jBasisStates[6] = j+6;
+                jBasisStates[7] = j+7;
                 if (isCompressed)
-                    workData.comp->deCompressIndex(jBasisState,jBasisState);
+                {
+                    workData.comp->deCompressIndex(jBasisStates,jBasisStates);
+                }
+
 
                 auto opIt = workData.m_operators.cbegin();
                 auto valIt = workData.m_vals.cbegin();
                 const auto valItEnd = workData.m_vals.cend();
                 uint64_t badCreate = 0;
                 uint64_t goodCreate = 0;
+
+                __m512i destroys;
+                __m512i BCastCreate = _mm512_broadcastq_epi64(_mm_loadu_si32(&opIt->create));
+                __m512i JBasisStatesVec = _mm512_loadu_epi64(jBasisStates);
+
+                __mmask8 canDestroys;
+                if (valIt != valItEnd)
+                {
+                    //Yes yes these are backwards to the way it was defined however for real hamiltonians it doesnt matter because theyre Hermitian. see comments on a,b,c,d
+                    goodCreate = opIt->create;
+                    //Apply the Creation operator on the right, (Destroy)
+                    destroys = JBasisStatesVec ^ BCastCreate;
+                    //Check that the bits have been destroyed, Same as checking they were 1 before
+                    canDestroys = _mm512_testn_epi64_mask(destroys, BCastCreate);
+                    //Check that this did something
+                    if (canDestroys == 0)
+                        badCreate = opIt->create;
+                }
+                //The j loop
+                for (;valIt != valItEnd; ++valIt,++opIt)
+                {
+                    //Skip if known that it does nothing
+                    if (opIt->create == badCreate)
+                        continue;
+                    badCreate = 0;
+
+                    __mmask8 signs;
+
+                    //createOp
+
+                    if (opIt->create != goodCreate)
+                    {
+                        //Broadcast the create op to the whole vector
+                        BCastCreate = _mm512_set1_epi64(opIt->create);
+                        goodCreate = opIt->create;
+                        //Apply the Creation operator on the right, (Destroy)
+                        destroys = JBasisStatesVec ^ BCastCreate;
+                        //Check that the bits have been destroyed, Same as checking they were 1 before
+                        canDestroys = _mm512_testn_epi64_mask(destroys, BCastCreate);
+                        //Check that this did something
+                        if (canDestroys == 0)
+                        {
+                            badCreate = opIt->create;
+                            continue;
+                        }
+                    }
+
+                    //destroyOp
+                    __mmask8 canCreates;
+                    __m512i BCastDestroy = _mm512_set1_epi64(opIt->destroy);
+                    //Check that the bits can be created
+                    canCreates =  _mm512_testn_epi64_mask(destroys, BCastDestroy);
+                    //Check that this did something
+                    if (canCreates == 0)
+                        continue;
+
+                    __m512i is;
+                    //Setup the signmask as a vector
+                    __m512i BCastSignBitMask = _mm512_set1_epi64(opIt->signBitMask);
+                    //Create the bits
+                    is = destroys | BCastDestroy;
+                    __m512i BCast1s = _mm512_set1_epi64(1);
+                    //Compute the signs. bool signs =  popcount(JBasisStatesVec & signBitMask) & 1. sign = 1 => negative
+                    signs = _mm512_test_epi64_mask(_mm512_popcnt_epi64(JBasisStatesVec & BCastSignBitMask),BCast1s);
+
+
+                    __mmask8 valid = -1;
+                    //Compress the indices if needed
+                    if constexpr (isSZCompressor)
+                    {
+                        SZComp->compressIndex(is,is,valid);
+                    }
+                    //check that we need to do something
+                    valid = valid & canCreates & canDestroys;
+                    if (valid == 0)
+                        continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
+
+                    //Load the value vector
+                    __m512d vs = _mm512_set1_pd(*valIt);
+                    __m512d negZero = _mm512_set1_pd(-0.0);
+                    //Negate the terms indicated by signs
+                    vs = _mm512_mask_xor_pd(vs,signs,vs,negZero);
+
+                    //Load the dest vector for FMA
+                    __m512d destVec = _mm512_loadu_pd(dest + j);
+                    //Load the src vector for FMA, Mask out any invalids with negZero. (exact value doesnt matter)
+                    __m512d srcVec = _mm512_mask_i64gather_pd(negZero,valid,is,src,sizeof(double));
+                    //FMA, Mask means that if valid == 0 then FMA copies from destVec. i.e. does nothing
+                    destVec = _mm512_mask3_fmadd_pd(srcVec,vs,destVec,valid);
+                    //Store the result. Take care of unaligned accesses potentially.
+                    _mm512_storeu_pd(dest + j,destVec);
+
+                }
+            }
+            for (long j = endJ8; j < endj; j++)
+            {//across
+                uint64_t jBasisState = j;
+                if (isCompressed)
+                {
+                    workData.comp->deCompressIndex(jBasisState,jBasisState);
+                }
+
+                auto opIt = workData.m_operators.cbegin();
+                auto valIt = workData.m_vals.cbegin();
+                const auto valItEnd = workData.m_vals.cend();
+                uint64_t badCreate = 0;
+                uint64_t goodCreate = 0;
+
                 uint64_t destroy;
+
                 bool canDestroy;
                 if (valIt != valItEnd)
                 {
@@ -1107,24 +1229,23 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
                     }
 
                     bool canCreate =  (destroy & opIt->destroy) == 0;
+
                     if (!canCreate)
                         continue;
-                    i  = destroy | opIt->destroy;
 
+                    i  = destroy | opIt->destroy;
                     sign = popcount(jBasisState & opIt->signBitMask) & 1;
+
+                    bool OutOfSpace = false;
                     if (isCompressed)
-                        workData.comp->compressIndex(i,i);
-                    if (i == (uint64_t)-1)
+                        OutOfSpace = !workData.comp->compressIndex(i,i);
+
+                    if (isCompressed && OutOfSpace)
                         continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
-                    // for (long i = 0; i < numberOfRows; i++)
-                    // {//down
-                    //     HT_C(i,j) += T_C(i,k) * valIt;
-                    // }
-                    // dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt);
-                    dataType v = (sign ? -*valIt : *valIt);
-
-                    ret.dest.get()[j] += vectorPtr[i] * v;
+                    dataType v;
+                    v = (sign ? -*valIt : *valIt);
+                    dest[j] += src[i] * v;
 
                 }
             }
@@ -1767,8 +1888,11 @@ serialDataContainer MPICOMMAND_HamApplyToVectorDefault(char *ptr, size_t /*size*
     releaseAssert((bool)vectorData.ptr,"(bool)vectorData.ptr == false");
     stateVector = reinterpret_cast<numType*>(vectorData.ptr.get());
     vectorSize = vectorData.size/(sizeof(numType));
-
-    HamiltonianReplyData<numType,numType> myDone = applyVectorHamiltonianKernel(nodeiWorkData,vectorSize,stateVector);
+    HamiltonianReplyData<numType,numType> myDone;
+    if (dynamic_cast<SZAndnumberOperatorCompressor*>(nodeiWorkData.comp.get()))
+        myDone = applyVectorHamiltonianKernel<true>(nodeiWorkData,vectorSize,stateVector);
+    else
+        releaseAssert(false,"dynamic_cast<SZAndnumberOperatorCompressor*>(nodeiWorkData.comp.get())");
 
     vectorData.size = myDone.vectorSize*sizeof(numType);
     vectorData.alignment = alignof(numType);

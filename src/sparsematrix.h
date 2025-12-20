@@ -76,6 +76,28 @@ public:
         decompressedIdx = decompressPerm[index];
         return true;
     }
+
+    inline bool deCompressIndex(const uint64_t (&arr)[8], uint64_t (&decompressedArr)[8])
+    {
+        assert(arr[0] < decompressPerm.size());
+        assert(arr[1] < decompressPerm.size());
+        assert(arr[2] < decompressPerm.size());
+        assert(arr[3] < decompressPerm.size());
+        assert(arr[4] < decompressPerm.size());
+        assert(arr[5] < decompressPerm.size());
+        assert(arr[6] < decompressPerm.size());
+        assert(arr[7] < decompressPerm.size());
+
+        decompressedArr[0] = decompressPerm[arr[0]];
+        decompressedArr[1] = decompressPerm[arr[1]];
+        decompressedArr[2] = decompressPerm[arr[2]];
+        decompressedArr[3] = decompressPerm[arr[3]];
+        decompressedArr[4] = decompressPerm[arr[4]];
+        decompressedArr[5] = decompressPerm[arr[5]];
+        decompressedArr[6] = decompressPerm[arr[6]];
+        decompressedArr[7] = decompressPerm[arr[7]];
+        return true;
+    }
     template<typename VectorType>
     static void compressVector(const vectorView<const Matrix<VectorType>,Eigen::RowMajor>& src, vectorView<Matrix<VectorType>,Eigen::RowMajor> dst,
                                std::shared_ptr<compressor> thisPtr)
