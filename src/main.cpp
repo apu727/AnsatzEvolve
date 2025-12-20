@@ -340,35 +340,33 @@ int main(int argc, char *argv[])
     {
         //benchmark(myAnsatz.get(),rotationPaths[1], Ham,quantityCalc.m_compressMatrix, quantityCalc.m_deCompressMatrix);
         //return 0;
-	FE = std::make_shared<FusedEvolve>(start,Ham,quantityCalc.m_compressMatrix,quantityCalc.m_deCompressMatrix);
+        FE = std::make_shared<FusedEvolve>(start,Ham,quantityCalc.m_compressMatrix,quantityCalc.m_deCompressMatrix);
         FE->updateExc(excs);
         vector<numType> dest;
         std::vector<realNumType> angles(rotationPath.size());
         std::transform(rotationPaths[1].begin(),rotationPaths[1].end(), angles.begin(),[](baseAnsatz::rotationElement r){return r.second;});
         // logger().log("angles:",angles);
-	
+
         FE->evolve(dest,angles);
-	vector<realNumType> deriv;
-	realNumType Energy;
+        vector<realNumType> deriv;
+        realNumType Energy;
 
         auto time1 = std::chrono::high_resolution_clock::now();
         constexpr int numLoops = 10000;
-	for (int i = 0; i < numLoops; i++)
-	    FE->evolveDerivative(dest,deriv,angles,&Energy);
+        for (int i = 0; i < numLoops; i++)
+            FE->evolveDerivative(dest,deriv,angles,&Energy);
         auto time2 = std::chrono::high_resolution_clock::now();
         long duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time2-time1).count();
-	logger().log("Benchmark Derivative Time per derivative (us)", (double)duration1/numLoops);
+        logger().log("Benchmark Derivative Time per derivative (us)", (double)duration1/numLoops);
         
         time1 = std::chrono::high_resolution_clock::now();
-	for (int i = 0; i < numLoops; i++)
-	    Energy = FE->getEnergy(dest);
+        for (int i = 0; i < numLoops; i++)
+            Energy = FE->getEnergy(dest);
         time2 = std::chrono::high_resolution_clock::now();
         duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time2-time1).count();
-	logger().log("Benchmark getEnergy (us)", (double)duration1/numLoops);
+        logger().log("Benchmark getEnergy (us)", (double)duration1/numLoops);
 
-        return 0;
-
-	
+        return 0;     
     }
 
     //TODO command line switches
