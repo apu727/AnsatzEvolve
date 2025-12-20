@@ -1026,7 +1026,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         __m512d destVec = _mm512_loadu_pd(dest + j);
                         __m512d srcVec = _mm512_mask_i32gather_pd(negZero,valid,is,src,sizeof(double));
                         destVec = _mm512_mask3_fmadd_pd(srcVec,vs,destVec,valid);
-                        _mm512_store_pd(dest + j,destVec);
+                        _mm512_storeu_pd(dest + j,destVec);
 
                     }
                 }
