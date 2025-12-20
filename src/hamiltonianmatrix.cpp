@@ -1085,7 +1085,7 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
                 uint64_t goodCreate = 0;
 
                 __m512i destroys;
-                __m512i BCastCreate = _mm512_broadcastq_epi64(_mm_loadu_si32(&opIt->create));
+                __m512i BCastCreate = _mm512_set1_epi64(opIt->create);
                 __m512i JBasisStatesVec = _mm512_loadu_epi64(jBasisStates);
 
                 __mmask8 canDestroys;
