@@ -65,8 +65,8 @@ public:
 class compressor
 {
 protected:
-    std::vector<int64_t> compressPerm;
-    std::vector<int64_t> decompressPerm;
+    std::vector<int32_t> compressPerm;
+    std::vector<int32_t> decompressPerm;
 public:
     bool compressIndex(uint32_t index, uint32_t& compressedIdx)
     {
@@ -74,12 +74,34 @@ public:
         compressedIdx = compressPerm[index];
         return compressPerm[index] >= 0;
     };
+
+    inline void compressIndex(const __m128i indexes, __m128i& compressedIdxs, __mmask8& valid) const
+    {
+        compressedIdxs = _mm_i32gather_epi32(compressPerm.data(),indexes,sizeof(int32_t));
+
+        valid = _mm_cmpge_epi32_mask(compressedIdxs,_mm_set1_epi32(0));
+    };
+
     bool deCompressIndex(uint32_t index, uint32_t& decompressedIdx)
     {
         assert(index < decompressPerm.size());
         decompressedIdx = decompressPerm[index];
         return true;
     }
+    inline bool deCompressIndex(const uint32_t (&arr)[4], uint32_t (&decompressedArr)[4])
+    {
+        assert(arr[0] < decompressPerm.size());
+        assert(arr[1] < decompressPerm.size());
+        assert(arr[2] < decompressPerm.size());
+        assert(arr[3] < decompressPerm.size());
+
+        decompressedArr[0] = decompressPerm[arr[0]];
+        decompressedArr[1] = decompressPerm[arr[1]];
+        decompressedArr[2] = decompressPerm[arr[2]];
+        decompressedArr[3] = decompressPerm[arr[3]];
+        return true;
+    }
+
     template<typename VectorType>
     static void compressVector(const vectorView<const Matrix<VectorType>,Eigen::RowMajor>& src, vectorView<Matrix<VectorType>,Eigen::RowMajor> dst,
                                std::shared_ptr<compressor> thisPtr)

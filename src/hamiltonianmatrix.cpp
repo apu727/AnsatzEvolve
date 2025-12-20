@@ -931,7 +931,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         for (long startj = 0; startj < numberOfCols; startj+= stepSize)
         {
             long endj = std::min(startj + stepSize,numberOfCols);
-            futs.push_back(pool.queueWork([this,&src,&dest,startj,endj](){
+            futs.push_back(pool.queueWork([this,src = src.data(),dest = dest.data(),startj,endj](){
                 long endJ4 = ((endj-startj)/4)*4 + startj;
                 assert((endJ4-startj)%4 == 0);
                 for (long j = startj; j < endJ4; j+=4)
@@ -944,8 +944,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
 
                     if (m_isCompressed)
                     {
-                        for (uint_fast8_t idx = 0; idx < 4; idx++)
-                            m_compressor->deCompressIndex(jBasisStates[idx],jBasisStates[idx]);
+                        m_compressor->deCompressIndex(jBasisStates,jBasisStates);
                     }
 
                     auto opIt = m_operators.cbegin();
@@ -954,21 +953,19 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                     uint32_t badCreate = 0;
                     uint32_t goodCreate = 0;
 
-                    uint32_t destroys[4];
+                    __m128i destroys;
+                    __m128i BCastCreate = _mm_broadcastd_epi32(_mm_loadu_si32(&opIt->create));
+                    __m128i JBasisStatesVec = _mm_loadu_epi32(jBasisStates);
 
-                    bool canDestroys[4];
+                    __mmask8 canDestroys;
                     if (valIt != valItEnd)
                     {
                         //Yes yes these are backwards to the way it was defined however for real hamiltonians it doesnt matter because theyre Hermitian. see comments on a,b,c,d
                         goodCreate = opIt->create;
-#pragma GCC unroll 4
-#pragma GCC ivdep
-                        for (uint_fast8_t idx = 0; idx < 4; idx++)
-                        {
-                            destroys[idx] = jBasisStates[idx] ^ opIt->create;
-                            canDestroys[idx] = (destroys[idx] & opIt->create) == 0;
-                        }
-                        if (!(canDestroys[0] || canDestroys[1]||canDestroys[2]||canDestroys[3]))
+
+                        destroys = JBasisStatesVec ^ BCastCreate;
+                        canDestroys = _mm_testn_epi32_mask(destroys, BCastCreate);
+                        if (canDestroys == 0)
                         {
                             badCreate = opIt->create;
                         }
@@ -980,79 +977,58 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                             continue;
                         badCreate = 0;
 
-                        uint32_t is[4];
-                        bool signs[4];
+                        __mmask8 signs;
 
+                        //createOp
 
                         if (opIt->create != goodCreate)
                         {
+                            BCastCreate = _mm_set1_epi32(opIt->create);
                             goodCreate = opIt->create;
-#pragma GCC unroll 4
-#pragma GCC ivdep
-                            for (uint_fast8_t idx = 0; idx < 4; idx++)
-                            {
-                                destroys[idx] = jBasisStates[idx] ^ opIt->create;
-                                canDestroys[idx] = (destroys[idx] & opIt->create) == 0;
-                            }
-                            if (!(canDestroys[0] || canDestroys[1]||canDestroys[2]||canDestroys[3]))
+                            destroys = JBasisStatesVec ^ BCastCreate;
+                            canDestroys = _mm_testn_epi32_mask(destroys, BCastCreate);
+                            if (canDestroys == 0)
                             {
                                 badCreate = opIt->create;
                                 continue;
                             }
                         }
 
-                        bool canCreates[4];
-#pragma GCC unroll 4
-#pragma GCC ivdep
-                        for (uint_fast8_t idx = 0; idx < 4; idx++)
-                        {
-                            canCreates[idx] =  (destroys[idx] & opIt->destroy) == 0;
-                        }
-                        if (!(canCreates[0] || canCreates[1] || canCreates[2] || canCreates[3]))
+                        //destroyOp
+                        __mmask8 canCreates;
+                        __m128i BCastDestroy = _mm_set1_epi32(opIt->destroy);
+
+                        canCreates =  _mm_testn_epi32_mask(destroys, BCastDestroy);
+
+                        if (canCreates == 0)
                         {
                             continue;
                         }
-#pragma GCC unroll 4
-#pragma GCC ivdep
-                        for (uint_fast8_t idx = 0; idx < 4; idx++)
-                        {
-                            is[idx]  = destroys[idx] | opIt->destroy;
-                            signs[idx] = popcount(jBasisStates[idx] & opIt->signBitMask) & 1;
-                        }
+
+                        __m128i is;
+                        __m128i BCastSignBitMask = _mm_set1_epi32(opIt->signBitMask);
+                        is = destroys | BCastDestroy;
+                        __m128i BCast1s = _mm_set1_epi32(1);
+                        signs = _mm_test_epi32_mask(_mm_popcnt_epi32(JBasisStatesVec & BCastSignBitMask),BCast1s);
 
 
-
-                        bool OutOfSpace[4] = {false,false,false,false};
+                        __mmask8 valid = -1;
                         if (m_isCompressed)
                         {
-#pragma GCC unroll 4
-#pragma GCC ivdep
-                            for (uint_fast8_t idx = 0; idx < 4; idx++)
-                            {
-                                OutOfSpace[idx] = !m_compressor->compressIndex(is[idx],is[idx]);
-                            }
+                            m_compressor->compressIndex(is,is,valid);
                         }
-                        if (OutOfSpace[0] && OutOfSpace[1] && OutOfSpace[2] && OutOfSpace[3])
+                        valid = valid & canCreates & canDestroys;
+                        if (valid == 0)
                             continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
-                        dataType vs[4];
-#pragma GCC unroll 4
-#pragma GCC ivdep
-                        for (uint_fast8_t idx = 0; idx < 4; idx++)
-                        {
-                            vs[idx] = (signs[idx] ? -*valIt : *valIt);
-                        }
-#pragma GCC unroll 4
-#pragma GCC ivdep
-                        for (uint_fast8_t idx = 0; idx < 4; idx++)
-                        {
-                            if (OutOfSpace[idx])
-                                continue;
-                            //ideally we want to check if these are in order or not. 1 load vs multiple. usually they will be in order but dont know how to guarantee that.
-                            dest(0,j+idx) += src(0,is[idx]) * vs[idx];
-                        }
+                        __m256d vs = _mm256_set1_pd(*valIt);
+                        __m256d negZero = _mm256_set1_pd(-0.0);
+                        vs = _mm256_mask_xor_pd(vs,signs,vs,negZero);
 
-
+                        __m256d destVec = _mm256_loadu_pd(dest + j);
+                        __m256d srcVec = _mm256_i32gather_pd(src,is,sizeof(double));
+                        destVec = _mm256_mask3_fmadd_pd(srcVec,vs,destVec,valid);
+                        _mm256_store_pd(dest + j,destVec);
 
                     }
                 }
@@ -1129,7 +1105,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
 
                         dataType v;
                         v = (sign ? -*valIt : *valIt);
-                        dest(0,j) += src(0,i) * v;
+                        dest[j] += src[i] * v;
 
                     }
                 }

@@ -352,19 +352,19 @@ int main(int argc, char *argv[])
         realNumType Energy;
 
         auto time1 = std::chrono::high_resolution_clock::now();
-        constexpr int numLoops = 10000;
+        constexpr int numLoops = 5;
         for (int i = 0; i < numLoops; i++)
             FE->evolveDerivative(dest,deriv,angles,&Energy);
         auto time2 = std::chrono::high_resolution_clock::now();
-        long duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time2-time1).count();
-        logger().log("Benchmark Derivative Time per derivative (us)", (double)duration1/numLoops);
+        long duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+        logger().log("Benchmark Derivative Time per derivative (ms)", (double)duration1/numLoops);
         
         time1 = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < numLoops; i++)
             Energy = FE->getEnergy(dest);
         time2 = std::chrono::high_resolution_clock::now();
-        duration1 = std::chrono::duration_cast<std::chrono::microseconds>(time2-time1).count();
-        logger().log("Benchmark getEnergy (us)", (double)duration1/numLoops);
+        duration1 = std::chrono::duration_cast<std::chrono::milliseconds>(time2-time1).count();
+        logger().log("Benchmark getEnergy (ms)", (double)duration1/numLoops);
 
         return 0;     
     }
