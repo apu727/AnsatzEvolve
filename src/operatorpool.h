@@ -205,7 +205,8 @@ public:
             __m512i spinDownIndex = _mm512_cvtepu32_epi64(spinDownIndex256);
 
             // compressedIdx = spinUpIndex*m_spinDownSize + spinDownIndex;
-            compressedIdx = _mm512_mask_add_epi64(neg1,valid,_mm512_mullo_epi64(spinUpIndex,_mm512_set1_epi64(m_spinDownSize)),spinDownIndex);
+            compressedIdx = _mm512_maskz_madd52lo_epu64(valid,spinDownIndex,spinUpIndex,_mm512_set1_epi64(m_spinDownSize));
+            compressedIdx = _mm512_mask_mov_epi64(neg1,valid,compressedIdx); // if !valid set to neg1
 
             return true;
         }
