@@ -199,12 +199,10 @@ public:
         __m512i neg1 = _mm512_set1_epi64(-1);
         if (valid)
         {
-            //This will potentially overread by 1.
-            __m512i spinUpIndex = _mm512_mask_i64gather_epi64(neg1,valid,spinUpBlock,m_compressedSpinUpLookup.data(),sizeof(uint32_t));//m_compressedSpinUpLookup[spinUpBlock];
-            spinUpIndex = _mm512_and_epi64(spinUpIndex,_mm512_set1_epi64(0xFFFF)); // zero the upper 32 bits
-            //This will potentially overread by 1. Practically the highest index is 0b1111111 which is unlikely to be in the spin space
-            __m512i spinDownIndex = _mm512_mask_i64gather_epi64(neg1,valid,spinDownBlock,m_compressedSpinDownLookup.data(),sizeof(uint32_t));//m_compressedSpinDownLookup[spinDownBlock];
-            spinDownIndex = _mm512_and_epi64(spinDownIndex,_mm512_set1_epi64(0xFFFF)); // zero the upper 32 bits
+            __m256i spinUpIndex256 = _mm512_mask_i64gather_epi32(_mm512_castsi512_si256(neg1),valid,spinUpBlock,m_compressedSpinUpLookup.data(),sizeof(uint32_t));//m_compressedSpinUpLookup[spinUpBlock];
+            __m512i spinUpIndex = _mm512_cvtepu32_epi64(spinUpIndex256);
+            __m256i spinDownIndex256 = _mm512_mask_i64gather_epi32(_mm512_castsi512_si256(neg1),valid,spinDownBlock,m_compressedSpinDownLookup.data(),sizeof(uint32_t));//m_compressedSpinDownLookup[spinDownBlock];
+            __m512i spinDownIndex = _mm512_cvtepu32_epi64(spinDownIndex256);
 
             // compressedIdx = spinUpIndex*m_spinDownSize + spinDownIndex;
             compressedIdx = _mm512_mask_add_epi64(neg1,valid,_mm512_mullo_epi64(spinUpIndex,_mm512_set1_epi64(m_spinDownSize)),spinDownIndex);
