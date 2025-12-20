@@ -1099,23 +1099,18 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                             }
                         }
 
-                        bool canCreate;
-                        for (uint_fast8_t idx = 0; idx < 4; idx++)
-                        {
-                            canCreate =  (destroy & opIt->destroy) == 0;
-                        }
+                        bool canCreate =  (destroy & opIt->destroy) == 0;
+
                         if (!canCreate)
-                        {
                             continue;
-                        }
+
                         i  = destroy | opIt->destroy;
                         sign = popcount(jBasisState & opIt->signBitMask) & 1;
 
                         bool OutOfSpace = false;
                         if (m_isCompressed)
-                        {
                             OutOfSpace = !m_compressor->compressIndex(i,i);
-                        }
+
                         if (m_isCompressed && OutOfSpace)
                             continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
