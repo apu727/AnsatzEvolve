@@ -936,6 +936,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                 assert((endJ8-startj)%8 == 0);
                 for (long j = startj; j < endJ8; j+=8)
                 {//across
+                    //Do 8 JBasisStates at a time
                     uint32_t jBasisStates[8];
                     jBasisStates[0] = j;
                     jBasisStates[1] = j+1;
@@ -947,6 +948,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                     jBasisStates[7] = j+7;
 
                     if (m_isCompressed)
+                        //Find the bit strings for the JBasisStates
                         m_compressor->deCompressIndex(jBasisStates,jBasisStates);
 
                     auto opIt = m_operators.cbegin();
@@ -964,15 +966,18 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                     {
                         //Yes yes these are backwards to the way it was defined however for real hamiltonians it doesnt matter because theyre Hermitian. see comments on a,b,c,d
                         goodCreate = opIt->create;
-
+                        //Apply the Creation operator on the right, (Destroy)
                         destroys = JBasisStatesVec ^ BCastCreate;
+                        //Check that the bits have been destroyed, Same as checking they were 1 before
                         canDestroys = _mm256_testn_epi32_mask(destroys, BCastCreate);
+                        //Check that this did something
                         if (canDestroys == 0)
                             badCreate = opIt->create;
                     }
                     //The j loop
                     for (;valIt != valItEnd; ++valIt,++opIt)
                     {
+                        //Skip if known that it does nothing
                         if (opIt->create == badCreate)
                             continue;
                         badCreate = 0;
@@ -983,10 +988,14 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
 
                         if (opIt->create != goodCreate)
                         {
+                            //Broadcast the create op to the whole vector
                             BCastCreate = _mm256_set1_epi32(opIt->create);
                             goodCreate = opIt->create;
+                            //Apply the Creation operator on the right, (Destroy)
                             destroys = JBasisStatesVec ^ BCastCreate;
+                            //Check that the bits have been destroyed, Same as checking they were 1 before
                             canDestroys = _mm256_testn_epi32_mask(destroys, BCastCreate);
+                            //Check that this did something
                             if (canDestroys == 0)
                             {
                                 badCreate = opIt->create;
@@ -997,35 +1006,44 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         //destroyOp
                         __mmask8 canCreates;
                         __m256i BCastDestroy = _mm256_set1_epi32(opIt->destroy);
-
+                        //Check that the bits can be created
                         canCreates =  _mm256_testn_epi32_mask(destroys, BCastDestroy);
-
+                        //Check that this did something
                         if (canCreates == 0)
-                        {
                             continue;
-                        }
 
                         __m256i is;
+                        //Setup the signmask as a vector
                         __m256i BCastSignBitMask = _mm256_set1_epi32(opIt->signBitMask);
+                        //Create the bits
                         is = destroys | BCastDestroy;
                         __m256i BCast1s = _mm256_set1_epi32(1);
+                        //Compute the signs. bool signs =  popcount(JBasisStatesVec & signBitMask) & 1. sign = 1 => negative
                         signs = _mm256_test_epi32_mask(_mm256_popcnt_epi32(JBasisStatesVec & BCastSignBitMask),BCast1s);
 
 
                         __mmask8 valid = -1;
+                        //Compress the indices if needed
                         if (m_isCompressed)
                             m_compressor->compressIndex(is,is,valid);
+                        //check that we need to do something
                         valid = valid & canCreates & canDestroys;
                         if (valid == 0)
                             continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
+                        //Load the value vector
                         __m512d vs = _mm512_set1_pd(*valIt);
                         __m512d negZero = _mm512_set1_pd(-0.0);
+                        //Negate the terms indicated by signs
                         vs = _mm512_mask_xor_pd(vs,signs,vs,negZero);
 
+                        //Load the dest vector for FMA
                         __m512d destVec = _mm512_loadu_pd(dest + j);
+                        //Load the src vector for FMA, Mask out any invalids with negZero. (exact value doesnt matter)
                         __m512d srcVec = _mm512_mask_i32gather_pd(negZero,valid,is,src,sizeof(double));
+                        //FMA, Mask means that if valid == 0 then FMA copies from destVec. i.e. does nothing
                         destVec = _mm512_mask3_fmadd_pd(srcVec,vs,destVec,valid);
+                        //Store the result. Take care of unaligned accesses potentially.
                         _mm512_storeu_pd(dest + j,destVec);
 
                     }
