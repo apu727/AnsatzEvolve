@@ -196,19 +196,20 @@ public:
         __mmask8 spinUpActive = _mm512_cmpeq_epi64_mask(_mm512_popcnt_epi64(spinUpBlock), _mm512_set1_epi64(m_spinUp));
         __mmask8 spinDownActive = _mm512_cmpeq_epi64_mask(_mm512_popcnt_epi64(spinDownBlock), _mm512_set1_epi64(m_spinDown));
         valid = spinUpActive & spinDownActive;
+        __m512i neg1 = _mm512_set1_epi64(-1);
         if (valid)
         {
-            __m512i spinUpIndex = _mm512_i64gather_epi64(spinUpBlock,m_compressedSpinUpLookup.data(),sizeof(uint64_t));//m_compressedSpinUpLookup[spinUpBlock];
-            __m512i spinDownIndex = _mm512_i64gather_epi64(spinDownBlock,m_compressedSpinDownLookup.data(),sizeof(uint64_t));//m_compressedSpinDownLookup[spinDownBlock];
+            __m512i spinUpIndex = _mm512_mask_i64gather_epi64(neg1,valid,spinUpBlock,m_compressedSpinUpLookup.data(),sizeof(uint64_t));//m_compressedSpinUpLookup[spinUpBlock];
+            __m512i spinDownIndex = _mm512_mask_i64gather_epi64(neg1,valid,spinDownBlock,m_compressedSpinDownLookup.data(),sizeof(uint64_t));//m_compressedSpinDownLookup[spinDownBlock];
 
             // compressedIdx = spinUpIndex*m_spinDownSize + spinDownIndex;
-            compressedIdx = _mm512_add_epi64(_mm512_mullo_epi64(spinUpIndex,_mm512_set1_epi64(m_spinDownSize)),spinDownIndex);
+            compressedIdx = _mm512_mask_add_epi64(neg1,valid,_mm512_mullo_epi64(spinUpIndex,_mm512_set1_epi64(m_spinDownSize)),spinDownIndex);
 
             return true;
         }
         else
         {
-            compressedIdx = _mm512_set1_epi64(-1);
+            compressedIdx = neg1;
             return false;
         }
     }
