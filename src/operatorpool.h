@@ -193,8 +193,8 @@ public:
     {
         __m512i spinUpBlock = _mm512_srl_epi64(index,_mm_set1_epi64x(m_numberOfQubits/2));
         __m512i spinDownBlock = _mm512_and_epi64(index,_mm512_set1_epi64(m_spinDownBitMask));
-        __mmask8 spinUpActive = _mm512_testn_epi64_mask(_mm512_popcnt_epi64(spinUpBlock), _mm512_set1_epi64(m_spinUp));
-        __mmask8 spinDownActive = _mm512_testn_epi64_mask(_mm512_popcnt_epi64(spinDownBlock), _mm512_set1_epi64(m_spinDown));
+        __mmask8 spinUpActive = _mm512_cmpeq_epi64_mask(_mm512_popcnt_epi64(spinUpBlock), _mm512_set1_epi64(m_spinUp));
+        __mmask8 spinDownActive = _mm512_cmpeq_epi64_mask(_mm512_popcnt_epi64(spinDownBlock), _mm512_set1_epi64(m_spinDown));
         valid = spinUpActive & spinDownActive;
         if (valid)
         {
