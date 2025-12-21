@@ -189,35 +189,35 @@ public:
         }
     }
 
-    bool compressIndex(__m512i index, __m512i& compressedIdx, __mmask8& valid)
+    void compressIndex(__m512i index, __m512i& compressedIdx, __mmask8& valid)
     {
+        //Compute the Spin up/Down indexes
         __m512i spinUpBlock = _mm512_srl_epi64(index,_mm_set1_epi64x(m_numberOfQubits/2));
         __m512i spinDownBlock = _mm512_and_epi64(index,_mm512_set1_epi64(m_spinDownBitMask));
+        
+        //Compute whether it is needed to load the index
         __mmask8 spinUpActive = _mm512_cmpeq_epi64_mask(_mm512_popcnt_epi64(spinUpBlock), _mm512_set1_epi64(m_spinUp));
         __mmask8 spinDownActive = _mm512_cmpeq_epi64_mask(_mm512_popcnt_epi64(spinDownBlock), _mm512_set1_epi64(m_spinDown));
         valid = spinUpActive & spinDownActive;
+
         __m512i neg1 = _mm512_set1_epi64(-1);
-        if (valid)
-        {
-            __m256i spinUpIndex256 = _mm512_mask_i64gather_epi32(_mm512_castsi512_si256(neg1),valid,spinUpBlock,m_compressedSpinUpLookup.data(),sizeof(uint32_t));//m_compressedSpinUpLookup[spinUpBlock];
-            __m512i spinUpIndex = _mm512_cvtepu32_epi64(spinUpIndex256);
-            __m256i spinDownIndex256 = _mm512_mask_i64gather_epi32(_mm512_castsi512_si256(neg1),valid,spinDownBlock,m_compressedSpinDownLookup.data(),sizeof(uint32_t));//m_compressedSpinDownLookup[spinDownBlock];
-            __m512i spinDownIndex = _mm512_cvtepu32_epi64(spinDownIndex256);
 
-            // compressedIdx = spinUpIndex*m_spinDownSize + spinDownIndex;
+        //load the indexes
+        __m256i spinUpIndex256 = _mm512_mask_i64gather_epi32(_mm512_castsi512_si256(neg1),valid,spinUpBlock,m_compressedSpinUpLookup.data(),sizeof(uint32_t));//m_compressedSpinUpLookup[spinUpBlock];
+        __m512i spinUpIndex = _mm512_cvtepu32_epi64(spinUpIndex256);
+        __m256i spinDownIndex256 = _mm512_mask_i64gather_epi32(_mm512_castsi512_si256(neg1),valid,spinDownBlock,m_compressedSpinDownLookup.data(),sizeof(uint32_t));//m_compressedSpinDownLookup[spinDownBlock];
+        __m512i spinDownIndex = _mm512_cvtepu32_epi64(spinDownIndex256);
 
-            // compressedIdx = _mm512_maskz_madd52lo_epu64(valid,spinDownIndex,spinUpIndex,_mm512_set1_epi64(m_spinDownSize));
-            // compressedIdx = _mm512_mask_mov_epi64(neg1,valid,compressedIdx); // if !valid set to neg1
-            compressedIdx = _mm512_mask_add_epi64(neg1,valid,_mm512_mullo_epi64(spinUpIndex,_mm512_set1_epi64(m_spinDownSize)),spinDownIndex);
+        // compressedIdx = spinUpIndex*m_spinDownSize + spinDownIndex;
+
+        // compressedIdx = _mm512_maskz_madd52lo_epu64(valid,spinDownIndex,spinUpIndex,_mm512_set1_epi64(m_spinDownSize));
+        // compressedIdx = _mm512_mask_mov_epi64(neg1,valid,compressedIdx); // if !valid set to neg1
+        
+        //Compute the index
+        compressedIdx = _mm512_mask_add_epi64(neg1,valid,_mm512_mullo_epi64(spinUpIndex,_mm512_set1_epi64(m_spinDownSize)),spinDownIndex);
 
 
-            return true;
-        }
-        else
-        {
-            compressedIdx = neg1;
-            return false;
-        }
+        return;
     }
     SZAndnumberOperatorCompressor(uint64_t stateVectorSize, int spinUp, int spinDown);
     size_t getUnCompressedSize() override { return m_decompressedSize; }
