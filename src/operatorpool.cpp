@@ -254,7 +254,7 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
     threadpool& pool = threadpool::getInstance(NUM_CORES);
     std::vector<std::future<void>> futs;
     uint64_t totalSteps = (1u <<(numberOfQubits/2));
-    uint64_t stepSize = std::max(totalSteps/NUM_CORES,1ul);
+    uint64_t stepSize = std::max(totalSteps/NUM_CORES,(uint64_t)1ul);
     for (uint64_t starti = 0; starti < totalSteps; starti+= stepSize)
     {
         uint64_t endi = std::min(starti+stepSize,totalSteps);
@@ -286,7 +286,7 @@ SZAndnumberOperatorCompressor::SZAndnumberOperatorCompressor(uint64_t stateVecto
     futs.clear();
 
     totalSteps = stateVectorSize;
-    stepSize = std::max(totalSteps/NUM_CORES,1ul);
+    stepSize = std::max(totalSteps/NUM_CORES,(uint64_t)1ul);
     for (uint64_t starti = 0; starti < totalSteps; starti+= stepSize)
     {
         uint64_t endi = std::min(starti+stepSize,totalSteps);

@@ -12,8 +12,9 @@
 #include "globals.h"
 #include "linalg.h"
 #include "sparsematrix.h"
-
-
+#if defined(__i386__) || defined(__x86_64__)
+#include <immintrin.h>
+#endif
 
 constexpr char bitwiseDot(const uint64_t a, const uint64_t b, int dim)
 {
@@ -189,6 +190,7 @@ public:
         }
     }
 
+#if defined(__AVX512F__)
     void compressIndex(__m512i index, __m512i& compressedIdx, __mmask8& valid)
     {
         //Compute the Spin up/Down indexes
@@ -220,6 +222,8 @@ public:
 
         return;
     }
+#endif
+
     SZAndnumberOperatorCompressor(uint64_t stateVectorSize, int spinUp, int spinDown);
     size_t getUnCompressedSize() override { return m_decompressedSize; }
     virtual void dummyImplement() override{}

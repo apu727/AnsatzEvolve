@@ -1057,7 +1057,7 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
             bool isCompressed = (bool)workData.comp;
             vectorType* dest = ret.dest.get();
             SZAndnumberOperatorCompressor* SZComp = dynamic_cast<SZAndnumberOperatorCompressor*>(workData.comp.get());
-
+#if defined(__AVX512F__) && defined(__AVX512VPOPCNTDQ__)
             long endJ8 = ((endj-startj)/8)*8 + startj;
             assert((endJ8-startj)%8 == 0);
             for (long j = startj; j < endJ8; j+=8)
@@ -1177,6 +1177,9 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
 
                 }
             }
+#else
+            long endJ8 = startj;
+#endif
             for (long j = endJ8; j < endj; j++)
             {//across
                 uint64_t jBasisState = j;
