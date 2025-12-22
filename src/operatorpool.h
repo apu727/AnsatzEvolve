@@ -194,7 +194,7 @@ public:
     void compressIndex(__m512i index, __m512i& compressedIdx, __mmask8& valid)
     {
         //Compute the Spin up/Down indexes
-        __m512i spinUpBlock = _mm512_srl_epi64(index,_mm_set1_epi64x(m_numberOfQubits/2));
+        __m512i spinUpBlock = _mm512_srli_epi64(index,m_numberOfQubits/2);
         __m512i spinDownBlock = _mm512_and_epi64(index,_mm512_set1_epi64(m_spinDownBitMask));
         
         //Compute whether it is needed to load the index
