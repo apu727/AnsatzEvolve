@@ -1057,7 +1057,7 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
             bool isCompressed = (bool)workData.comp;
             vectorType* dest = ret.dest.get();
             SZAndnumberOperatorCompressor* SZComp = dynamic_cast<SZAndnumberOperatorCompressor*>(workData.comp.get());
-#if defined(__AVX512F__) && defined(__AVX512VPOPCNTDQ__)
+#if defined(__AVX512F__)
             long endJ8 = ((endj-startj)/8)*8 + startj;
             assert((endJ8-startj)%8 == 0);
             for (long j = startj; j < endJ8; j+=8)
@@ -1142,13 +1142,18 @@ HamiltonianReplyData<dataType,vectorType> applyVectorHamiltonianKernel(Hamiltoni
                     __m512i is;
                     //Setup the signmask as a vector
                     __m512i BCastSignBitMask = _mm512_set1_epi64(opIt->signBitMask);
+
                     //Create the bits
                     is = destroys | BCastDestroy;
                     __m512i BCast1s = _mm512_set1_epi64(1);
                     //Compute the signs. bool signs =  popcount(JBasisStatesVec & signBitMask) & 1. sign = 1 => negative
-                    signs = _mm512_test_epi64_mask(_mm512_popcnt_epi64(JBasisStatesVec & BCastSignBitMask),BCast1s);
 
-
+#if defined(__AVX512VPOPCNTDQ__)
+                    __m512i popCounted = _mm512_popcnt_epi64(JBasisStatesVec & BCastSignBitMask);
+#else
+                    __m512i popCounted = explicitPopcountAVX512(JBasisStatesVec & BCastSignBitMask);
+#endif
+                    signs = _mm512_test_epi64_mask(popCounted,BCast1s);
                     __mmask8 valid = -1;
                     //Compress the indices if needed
                     if constexpr (isSZCompressor)
