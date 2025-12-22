@@ -38,6 +38,20 @@
 #    define popcount(i) __builtin_popcount(i)
 #  endif
 #endif
+
+#if defined(__AVX512F__) && !defined(__AVX512VPOPCNTDQ__)
+inline __m512i explicitPopcountAVX512(__m512i i)
+{
+#warning Explicit AVX512POPCount
+    //Adapted from Magic code that compiles to popcnt https://stackoverflow.com/questions/109023/count-the-number-of-set-bits-in-a-32-bit-integer
+    i = _mm512_sub_epi64(i, (_mm512_and_epi64(_mm512_srl_epi64(i, _mm_set1_epi64x(1)), _mm512_set1_epi64(0x5555555555555555))));        // add pairs of bits
+    i = _mm512_and_epi64(i, _mm512_set1_epi64(0x3333333333333333)) + _mm512_and_epi64(_mm512_srl_epi64(i, _mm_set1_epi64x(2)), _mm512_set1_epi64(0x3333333333333333));  // quads
+    i = _mm512_and_epi64(_mm512_add_epi64(i, _mm512_srl_epi64(i, _mm_set1_epi64x(4))), _mm512_set1_epi64(0x0F0F0F0F0F0F0F0F));        // groups of 8
+    i = _mm512_mullox_epi64(i,_mm512_set1_epi64(0x0101010101010101));                        // horizontal sum of bytes
+    return  _mm512_srl_epi64(i, _mm_set1_epi64x(56));               // return just that top byte
+}
+#endif
+
 #ifndef popcount
 #    define popcount(i) explicitPopcount(i)
 //popcount for machines without it

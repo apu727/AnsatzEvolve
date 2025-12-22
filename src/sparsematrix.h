@@ -74,13 +74,14 @@ public:
         compressedIdx = compressPerm[index];
         return compressPerm[index] >= 0;
     };
-
+#if defined(__AVX2__)
     inline void compressIndex(const __m256i indexes, __m256i& compressedIdxs, __mmask8& valid) const
     {
         compressedIdxs = _mm256_i32gather_epi32(compressPerm.data(),indexes,sizeof(int32_t));
 
         valid = _mm256_cmpge_epi32_mask(compressedIdxs,_mm256_set1_epi32(0));
     };
+#endif
 
     bool deCompressIndex(uint32_t index, uint32_t& decompressedIdx)
     {

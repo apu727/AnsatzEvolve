@@ -932,6 +932,7 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         {
             long endj = std::min(startj + stepSize,numberOfCols);
             futs.push_back(pool.queueWork([this,src = src.data(),dest = dest.data(),startj,endj](){
+#if defined(__AVX512F__)
                 long endJ8 = ((endj-startj)/8)*8 + startj;
                 assert((endJ8-startj)%8 == 0);
                 for (long j = startj; j < endJ8; j+=8)
@@ -1019,9 +1020,12 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         is = destroys | BCastDestroy;
                         __m256i BCast1s = _mm256_set1_epi32(1);
                         //Compute the signs. bool signs =  popcount(JBasisStatesVec & signBitMask) & 1. sign = 1 => negative
-                        signs = _mm256_test_epi32_mask(_mm256_popcnt_epi32(JBasisStatesVec & BCastSignBitMask),BCast1s);
-
-
+#if defined(__AVX512VPOPCNTDQ__)
+                        __m512i popCounted = _mm512_popcnt_epi64(JBasisStatesVec & BCastSignBitMask);
+#else
+                        __m512i popCounted = explicitPopcountAVX512(JBasisStatesVec & BCastSignBitMask);
+#endif
+                        signs = _mm512_test_epi64_mask(popCounted,BCast1s);
                         __mmask8 valid = -1;
                         //Compress the indices if needed
                         if (m_isCompressed)
@@ -1048,6 +1052,9 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
 
                     }
                 }
+#else
+                long endJ8 = startj;
+#endif
                 for (long j = endJ8; j < endj; j++)
                 {//across
                     uint32_t jBasisState = j;
