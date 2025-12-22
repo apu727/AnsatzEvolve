@@ -39,7 +39,7 @@
 #  endif
 #endif
 #if defined(__AVX512F__) && !defined(__AVX512VPOPCNTDQ__)
-__m512i explicitPopcountAVX512(__m512i i)
+inline __m512i explicitPopcountAVX512(__m512i i)
 {
 #warning Explicit AVX512POPCount
     //Adapted from Magic code that compiles to popcnt https://stackoverflow.com/questions/109023/count-the-number-of-set-bits-in-a-32-bit-integer
@@ -53,7 +53,7 @@ __m512i explicitPopcountAVX512(__m512i i)
 #ifndef popcount
 #    define popcount(i) explicitPopcount(i)
 //popcount for machines without it
-char explicitPopcount(uint64_t i)
+inline char explicitPopcount(uint64_t i)
 {
 #warning Explicity uint64_t popcount
     //Magic code that compiles to popcnt https://stackoverflow.com/questions/109023/count-the-number-of-set-bits-in-a-32-bit-integer
