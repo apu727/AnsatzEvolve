@@ -40,15 +40,14 @@
 #endif
 
 #if defined(__AVX512F__) && !defined(__AVX512VPOPCNTDQ__)
-inline __m512i explicitPopcountAVX512(__m512i i)
+inline __m256i explicitPopcountAVX2(__m256i i)
 {
-#warning Explicit AVX512POPCount
     //Adapted from Magic code that compiles to popcnt https://stackoverflow.com/questions/109023/count-the-number-of-set-bits-in-a-32-bit-integer
-    i = _mm512_sub_epi64(i, (_mm512_and_epi64(_mm512_srl_epi64(i, _mm_set1_epi64x(1)), _mm512_set1_epi64(0x5555555555555555))));        // add pairs of bits
-    i = _mm512_and_epi64(i, _mm512_set1_epi64(0x3333333333333333)) + _mm512_and_epi64(_mm512_srl_epi64(i, _mm_set1_epi64x(2)), _mm512_set1_epi64(0x3333333333333333));  // quads
-    i = _mm512_and_epi64(_mm512_add_epi64(i, _mm512_srl_epi64(i, _mm_set1_epi64x(4))), _mm512_set1_epi64(0x0F0F0F0F0F0F0F0F));        // groups of 8
-    i = _mm512_mullox_epi64(i,_mm512_set1_epi64(0x0101010101010101));                        // horizontal sum of bytes
-    return  _mm512_srl_epi64(i, _mm_set1_epi64x(56));               // return just that top byte
+    i = _mm256_sub_epi32(i, (_mm256_and_si256(_mm256_srli_epi32(i, (1)), _mm256_set1_epi32(0x55555555))));        // add pairs of bits
+    i = _mm256_and_si256(i, _mm256_set1_epi32(0x33333333)) + _mm256_and_si256(_mm256_srli_epi32(i, (2)), _mm256_set1_epi32(0x33333333));  // quads
+    i = _mm256_and_si256(_mm256_add_epi32(i, _mm256_srli_epi32(i, (4))), _mm256_set1_epi32(0x0F0F0F0F));        // groups of 8
+    i = _mm256_mul_epi32(i,_mm256_set1_epi32(0x01010101));                        // horizontal sum of bytes
+    return  _mm256_srli_epi32(i, (24));               // return just that top byte
 }
 #endif
 

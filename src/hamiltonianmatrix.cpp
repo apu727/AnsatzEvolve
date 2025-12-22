@@ -1021,11 +1021,11 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         __m256i BCast1s = _mm256_set1_epi32(1);
                         //Compute the signs. bool signs =  popcount(JBasisStatesVec & signBitMask) & 1. sign = 1 => negative
 #if defined(__AVX512VPOPCNTDQ__)
-                        __m512i popCounted = _mm512_popcnt_epi64(JBasisStatesVec & BCastSignBitMask);
+                        __m256i popCounted = _mm256_popcnt_epi32(JBasisStatesVec & BCastSignBitMask);
 #else
-                        __m512i popCounted = explicitPopcountAVX512(JBasisStatesVec & BCastSignBitMask);
+                        __m256i popCounted = explicitPopcountAVX2(JBasisStatesVec & BCastSignBitMask);
 #endif
-                        signs = _mm512_test_epi64_mask(popCounted,BCast1s);
+                        signs = _mm256_test_epi32_mask(popCounted,BCast1s);
                         __mmask8 valid = -1;
                         //Compress the indices if needed
                         if (m_isCompressed)
