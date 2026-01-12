@@ -71,8 +71,8 @@ public:
     void evolve(vector<numType>& dest, const std::vector<realNumType>& angles, vector<numType>* specifiedStart  = nullptr);
     void evolveMultiple(Matrix<numType>& dest, const Matrix<realNumType>::EigenMatrix& angles, vector<numType>* specifiedStart  = nullptr);
     //finalVector is the result of an evolve operation. Since we dont cache the angles this is up to the user to provide correctly.
-    void evolveDerivative(const vector<numType>& finalVector,vector<realNumType>& deriv,const std::vector<realNumType>& angles, realNumType* Energy = nullptr);
-    void evolveHessian(Eigen::MatrixXd& Hessian,vector<realNumType>& derivCompressed,const std::vector<realNumType>& angles, Eigen::Matrix<numType,-1,-1>* Ts = nullptr, realNumType* Energy = nullptr);
+    void evolveDerivative(const vector<numType>& finalVector,vector<realNumType>& deriv,const std::vector<realNumType>& angles, realNumType* Energy = nullptr, numType* projectedEnergy = nullptr);
+    void evolveHessian(Eigen::MatrixXd& Hessian,vector<realNumType>& derivCompressed,const std::vector<realNumType>& angles, Eigen::Matrix<numType,-1,-1>* Ts = nullptr, realNumType* Energy = nullptr, numType* projectedEnergy = nullptr);
     realNumType getEnergy(const vector<numType> &psi);
     vector<realNumType> getEnergies(const Matrix<numType> &psi);
 

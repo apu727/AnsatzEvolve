@@ -161,6 +161,8 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     std::vector<realNumType> Energies(rotationPaths.size(),0);
     std::vector<realNumType> RealEnergies(rotationPaths.size(),0);
     std::vector<realNumType> EnergiesAndNucEnergy(rotationPaths.size(),0);
+    std::vector<realNumType> ProjectedRealEnergies(rotationPaths.size(),0);
+    std::vector<realNumType> ProjectedRealEnergiesAndNucEnergy(rotationPaths.size(),0);
 
     std::vector<realNumType> NumberOfNegativeHessianEValues(rotationPaths.size(),0);
     std::vector<realNumType> NumberOfNearZeroHessianEValues(rotationPaths.size(),0);
@@ -283,16 +285,23 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         {
             if (opts.hessian)
             {
-                FE->evolveHessian(Hmunu,gradVectorCalc,anglesV,&derivTangentSpaceEM,&Energies[rpIndex]);
+                numType PE;
+                FE->evolveHessian(Hmunu,gradVectorCalc,anglesV,&derivTangentSpaceEM,&Energies[rpIndex],&PE);
+                ProjectedRealEnergies[rpIndex] = std::real(PE);
+                realNumType E2;
                 vector<realNumType> gradVectorCalc2;
-                FE->evolveDerivative(dest,gradVectorCalc2,anglesV);
+                FE->evolveDerivative(dest,gradVectorCalc2,anglesV,&E2,&PE);
                 logger().log("1.1",(gradVectorCalc.dot(gradVectorCalc)));
                 logger().log("1.2",(gradVectorCalc.dot(gradVectorCalc2)));
                 logger().log("2.2",(gradVectorCalc2.dot(gradVectorCalc2)));
+                logger().log("PEH/PED",ProjectedRealEnergies[rpIndex]/std::real(PE));
+                logger().log("EH/ED",Energies[rpIndex]/E2);
             }
             else
             {
-                FE->evolveDerivative(dest,gradVectorCalc,anglesV,&Energies[rpIndex]);
+                numType PE;
+                FE->evolveDerivative(dest,gradVectorCalc,anglesV,&Energies[rpIndex],&PE);
+                ProjectedRealEnergies[rpIndex] = std::real(PE);
             }
         }
         else
@@ -358,6 +367,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 #endif
         }
         EnergiesAndNucEnergy[rpIndex] = Energies[rpIndex]+m_NuclearEnergy;
+        ProjectedRealEnergiesAndNucEnergy[rpIndex] = ProjectedRealEnergies[rpIndex]+m_NuclearEnergy;
 
 
         if (opts.hessian)
@@ -463,6 +473,9 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     printOutputLine(Energies,"Elec. Energy");
     printOutputLine(RealEnergies,"Real Elec. Energy");
     printOutputLine(EnergiesAndNucEnergy,"Elec. + Nuc. Energy");
+
+    printOutputLine(ProjectedRealEnergies,"Projected Real Elec. Energy");
+    printOutputLine(ProjectedRealEnergiesAndNucEnergy,"Proj. Real Elec. + Nuc. Energy");
 
     printOutputLine(NumberOfNegativeHessianEValues,"NumberOfNegativeHessianEValues");
     printOutputLine(NumberOfNearZeroHessianEValues,"NumberOfNearZeroHessianEValues");

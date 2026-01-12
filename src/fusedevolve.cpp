@@ -3470,7 +3470,7 @@ case -N:\
     }\
     break;\
 }
-void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<realNumType>& deriv, const std::vector<realNumType> &angles, realNumType* Energy)
+void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<realNumType>& deriv, const std::vector<realNumType> &angles, realNumType* Energy, numType* projectedEnergy)
 {
     static_assert(std::is_same_v<realNumType,numType> || std::is_same_v<std::complex<realNumType>,numType>);//we do magic bithacking so need to assure this
     if (!m_excsCached)
@@ -3503,6 +3503,14 @@ void FusedEvolve::evolveDerivative(const vector<numType> &finalVector, vector<re
     }
     if (Energy)
         *Energy = hPsi.dot(finalVector);
+    if (projectedEnergy)
+    {
+#ifdef useComplex
+        *projectedEnergy = hPsi.cdot(m_start)/(finalVector.cdot(m_start));
+#else
+        *projectedEnergy = hPsi.dot(m_start)/(finalVector.dot(m_start));
+#endif
+    }
 
 
 
@@ -3699,7 +3707,7 @@ case -N:\
     break;\
 }
 
-void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& derivCompressed,const std::vector<realNumType> &angles, Eigen::Matrix<numType,-1,-1>* TsCopy, realNumType* Energy)
+void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& derivCompressed,const std::vector<realNumType> &angles, Eigen::Matrix<numType,-1,-1>* TsCopy, realNumType* Energy, numType* projectedEnergy)
 {
     //TODO
     // constexpr bool isComplex = !std::is_same_v<realNumType,numType>;
@@ -3949,6 +3957,14 @@ void FusedEvolve::evolveHessian(Eigen::MatrixXd &Hessian, vector<realNumType>& d
         }
         if (Energy)
             *Energy = temp(temp.rows()-1,temp.cols()-1)/2;
+        if (projectedEnergy)
+        {
+#ifdef useComplex
+            *projectedEnergy = hPsi.cdot(m_start)/psi.cdot(m_start.getView());
+#else
+            *projectedEnergy = hPsi.dot(m_start)/psi.dot(m_start.getView());
+#endif
+        }
         assert(THT.rows() == m_compressMatrix.rows() && THT.cols() == m_compressMatrix.rows());
     }
     auto time4 = std::chrono::high_resolution_clock::now();
