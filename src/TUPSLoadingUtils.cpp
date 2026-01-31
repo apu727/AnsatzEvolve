@@ -41,122 +41,7 @@ bool loadParameters(std::string filePath,
                     std::vector<std::pair<int,realNumType>> &orders/*the fixed relation between parameters*/,
                     int& numberOfUniqueParameters)
 {
-    FILE *fp;
-    FILE *fp2;
-
-    fp = fopen((filePath+"_Parameters.dat").c_str(), "r");
-    if(fp == nullptr)
-    {
-        fprintf(stderr,"\nError in opening file.");
-        fprintf(stderr,"fileGiven: %s\n",(filePath+"_Parameters.dat").c_str());
-        return 0;
-    }
-
-    fp2 = fopen((filePath+"_Order.dat").c_str(), "r");
-    if(fp2 == nullptr)
-    {
-        fprintf(stderr,"\nError in opening file.");
-        fprintf(stderr,"fileGiven: %s\n",(filePath+"_Order.dat").c_str());
-        return 0;
-    }
-
-
-
-
-    /* Hardcoded parsing of a file of the format
-     *
-           9
-Energy of minimum      1=  -2.844887240192929 first found at step        5 after                  245 function calls
-        0.182710385127496
-        1.657072388288146
-        0.110549543159596
-        0.878483796766535
-        0.225437898626115
-        1.095597930656243
-       -0.000000000027978
-        0.797060942289907
-       -1.570796326773916
-           9
-Energy of minimum      2=  -2.809247486912495 first found at step       12 after                  681 function calls
-       -0.869149415717867
-       -0.702644479156458
-        2.760870118766821
-       -1.013671622127060
-        1.314899820469964
-       -1.097762093300513
-        1.570796326889411
-       -0.087609819576141
-       -0.000000000090040
-...etc
-*/
-    int ret = 0;
-    int numberOfParameters = 0;
-    realNumType parameter = realNumType();
-    std::vector<std::vector<realNumType>> parameters;
-
-    while(EOF != ret)
-    {
-        ret = fscanf(fp, "%i", &numberOfParameters);
-
-        if (EOF == ret)
-            break;
-
-        if (ret != 1)
-            fprintf(stderr,"Format Invalid, Number of Parameters");
-
-        realNumType Energy = realNumType();
-        ret = fscanf(fp,"%*[^=]= " realNumTypeCode " %*[^\n]",&Energy);
-        // fprintf(stderr,"Path: %zu has energy " realNumTypeCode "\n",parameters.size()+1,Energy);
-
-        parameters.push_back(std::vector<realNumType>());
-        for (int i = 0; i < numberOfParameters; i++)
-        {
-            ret = fscanf(fp,  realNumTypeCode,&parameter);
-            parameters.back().push_back(parameter);
-            // fprintf(stderr,"Read Angle: " numTypeCode "\n ", parameter);
-        }
-    }
-    numberOfUniqueParameters = numberOfParameters;
-
-    int order = 0;
-    realNumType scaleFactor = 1;
-    int ret2 = fscanf(fp2,  "%i," realNumTypeCode,&order,&scaleFactor);
-    order = order-1;
-
-
-    size_t pathIndex = 0; // which element in the path
-    rotationPaths.assign(parameters.size()+1,rotationPath); // adding in the 0 angle path
-    int maxOrder = 0;
-
-    while(ret2 != EOF)
-    {
-        // fill all the paths with the different parameter sequences according
-        // to the parameter -> position mapping given
-        if (order < 0)
-            fprintf(stderr,"Order cannot be negative\n");
-        orders.push_back({order,scaleFactor});
-        maxOrder = std::max(maxOrder,order);
-        if (order < numberOfParameters && pathIndex < rotationPath.size())
-        {
-            for (size_t i = 0; i < parameters.size(); i++)
-            {
-                rotationPaths[i+1][pathIndex].second = parameters[i][order]*scaleFactor;
-            }
-        }
-        pathIndex++;
-        scaleFactor = 1;
-        ret2 = fscanf(fp2,  "%i," realNumTypeCode ,&order,&scaleFactor);
-        order = order-1;
-    }
-    numberOfUniqueParameters = std::max(maxOrder+1,numberOfUniqueParameters);
-    fclose(fp2);
-    fclose(fp);
-    if (pathIndex != rotationPath.size())
-    {
-        fprintf(stderr, "More operators in path than relations given\n");
-        return 0;
-    }
-    return 1;
+    return loadParameters(filePath+"_Order.dat",filePath+"_Parameters.dat",rotationPath,rotationPaths,orders,numberOfUniqueParameters);
 }
 
 
@@ -287,3 +172,124 @@ void LoadNuclearEnergy(realNumType& NuclearEnergy, std::string filePath)
     fclose(fp);
 }
 
+
+bool loadParameters(const std::string &orderFilePath, const std::string &parameterFilePath, std::vector<baseAnsatz::rotationElement> &rotationPath, std::vector<std::vector<baseAnsatz::rotationElement> > &rotationPaths, std::vector<std::pair<int, realNumType> > &orders, int &numberOfUniqueParameters)
+{
+    FILE *fp;
+    FILE *fp2;
+
+    fp = fopen(parameterFilePath.c_str(), "r");
+    if(fp == nullptr)
+    {
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",parameterFilePath.c_str());
+        return 0;
+    }
+
+    fp2 = fopen(orderFilePath.c_str(), "r");
+    if(fp2 == nullptr)
+    {
+        fclose(fp);
+        fprintf(stderr,"\nError in opening file.");
+        fprintf(stderr,"fileGiven: %s\n",orderFilePath.c_str());
+        return 0;
+    }
+
+
+
+
+    /* Hardcoded parsing of a file of the format
+     *
+           9
+Energy of minimum      1=  -2.844887240192929 first found at step        5 after                  245 function calls
+        0.182710385127496
+        1.657072388288146
+        0.110549543159596
+        0.878483796766535
+        0.225437898626115
+        1.095597930656243
+       -0.000000000027978
+        0.797060942289907
+       -1.570796326773916
+           9
+Energy of minimum      2=  -2.809247486912495 first found at step       12 after                  681 function calls
+       -0.869149415717867
+       -0.702644479156458
+        2.760870118766821
+       -1.013671622127060
+        1.314899820469964
+       -1.097762093300513
+        1.570796326889411
+       -0.087609819576141
+       -0.000000000090040
+...etc
+*/
+    int ret = 0;
+    int numberOfParameters = 0;
+    realNumType parameter = realNumType();
+    std::vector<std::vector<realNumType>> parameters;
+
+    while(EOF != ret)
+    {
+        ret = fscanf(fp, "%i", &numberOfParameters);
+
+        if (EOF == ret)
+            break;
+
+        if (ret != 1)
+            fprintf(stderr,"Format Invalid, Number of Parameters");
+
+        realNumType Energy = realNumType();
+        ret = fscanf(fp,"%*[^=]= " realNumTypeCode " %*[^\n]",&Energy);
+        // fprintf(stderr,"Path: %zu has energy " realNumTypeCode "\n",parameters.size()+1,Energy);
+
+        parameters.push_back(std::vector<realNumType>());
+        for (int i = 0; i < numberOfParameters; i++)
+        {
+            ret = fscanf(fp,  realNumTypeCode,&parameter);
+            parameters.back().push_back(parameter);
+            // fprintf(stderr,"Read Angle: " numTypeCode "\n ", parameter);
+        }
+    }
+    numberOfUniqueParameters = numberOfParameters;
+
+    int order = 0;
+    realNumType scaleFactor = 1;
+    int ret2 = fscanf(fp2,  "%i," realNumTypeCode,&order,&scaleFactor);
+    order = order-1;
+
+
+    size_t pathIndex = 0; // which element in the path
+    rotationPaths.assign(parameters.size()+1,rotationPath); // adding in the 0 angle path
+    int maxOrder = 0;
+
+    while(ret2 != EOF)
+    {
+        // fill all the paths with the different parameter sequences according
+        // to the parameter -> position mapping given
+        if (order < 0)
+            fprintf(stderr,"Order cannot be negative\n");
+        orders.push_back({order,scaleFactor});
+        maxOrder = std::max(maxOrder,order);
+        if (order < numberOfParameters && pathIndex < rotationPath.size())
+        {
+            for (size_t i = 0; i < parameters.size(); i++)
+            {
+                rotationPaths[i+1][pathIndex].second = parameters[i][order]*scaleFactor;
+            }
+        }
+        pathIndex++;
+        scaleFactor = 1;
+        ret2 = fscanf(fp2,  "%i," realNumTypeCode ,&order,&scaleFactor);
+        order = order-1;
+    }
+    numberOfUniqueParameters = std::max(maxOrder+1,numberOfUniqueParameters);
+    fclose(fp2);
+    fclose(fp);
+    if (pathIndex != rotationPath.size())
+    {
+        fprintf(stderr, "More operators in path than relations given\n");
+        return 0;
+    }
+    return 1;
+}

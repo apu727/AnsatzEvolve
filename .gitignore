@@ -1,6 +1,11 @@
+
 lib64
 lib
 bin
 include
 pyvenv.cfg
-
+Hams
+*.dat
+*.bin
+share/
+python
