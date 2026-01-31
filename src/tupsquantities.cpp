@@ -348,9 +348,8 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
             gradVector = gradVectorCalc;
 
 
-        // writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Hessian",Hmunu);
-        // if (!useFusedEvolve)
-        //     writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric",metricTensor);
+        writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Hessian",Hmunu);
+        writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric",metricTensor);
 
         Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> esH(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
         vector<std::complex<realNumType>>::EigenVector hessianEigVal = esH.eigenvalues();
@@ -1002,7 +1001,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                     break;
 
 
-                if (energyTrial > Energy && gradVector_mu.norm() > 1e-8)
+                if (energyTrial-Energy > 1e-10 && gradVector_mu.norm() > 1e-8 && (newT*updateAngles).norm() > 1e-8)
                 {
                     if (doingForwardsSteps)
                     {
@@ -1056,6 +1055,8 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             // logger().log("Energy Trial", energyTrial);
             // logger().log("initialDirectionalDeriv",initialDirectionalDeriv);
             // logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
+            // logger().log("(newT*updateAngles).norm()",(newT*updateAngles).norm());
+            // logger().log("updateAnglesNorm", updateAngles.norm());
             // if (!(abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
             //     logger().log("Failed to meet wolfe condition",searchCount);
 
