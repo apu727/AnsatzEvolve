@@ -122,7 +122,8 @@ set_source_files_properties(test.F90 PROPERTIES COMPILE_FLAGS -ffree-line-length
 #Python Interface
 set(PYTHON_MODULE_SOURCES PyAnsatzEvolve.cpp)
 
-if (COMPILE_PYTHON_LIBS)
+option(ANSATZEVOLVE_COMPILE_PYTHON_LIBS "Compile the python libraries" OFF)
+if (ANSATZEVOLVE_COMPILE_PYTHON_LIBS)
     set(pybind11_DIR ${CMAKE_SOURCE_DIR}/../share/cmake/pybind11/)
     set(PYBIND11_FINDPYTHON ON)
     find_package(pybind11 CONFIG REQUIRED)
