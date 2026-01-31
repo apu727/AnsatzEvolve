@@ -299,9 +299,9 @@ bool stateAnsatzManager::storeInitial(int numberOfQubits, const std::vector<int>
             m_start[indexes[i]] = coeffs[i];
         }
         realNumType mag = std::sqrt(m_start.dot(m_start));
-        if (abs(mag-1) > 1e-14)
+        if (std::abs(mag-1) > 1e-14)
         {
-            logger().log("Warning: Initial vector is not normalised, the error is", abs(mag-1));
+            logger().log("Warning: Initial vector is not normalised, the error is", std::abs(mag-1));
         }
         m_numberOfQubits = numberOfQubits;
 
@@ -810,7 +810,7 @@ bool stateAnsatzManager::generatePathsForSubspace(size_t numberOfPaths)
             Energy = m_TUPSQuantities->OptimiseTups(*m_FA,rotationPaths.back(),true); // this is broken
         else
             Energy = m_TUPSQuantities->OptimiseTups(*m_ansatz,rotationPaths.back(),true);
-        if (std::find_if(Energies.begin(),Energies.end(), [=](realNumType E){return std::abs(E-Energy) < 1e-10;}) == Energies.end())
+        if (std::find_if(Energies.begin(), Energies.end(), [=](realNumType E) { return std::abs(E - Energy) < 1e-10; }) == Energies.end())
         {
             Energies.push_back(Energy);
             if (!useFused)
