@@ -202,6 +202,8 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     vector<numType> temp; //temporary
     vector<numType> dest;
     Eigen::MatrixXd FCIEigenVectors;
+    bool MAYBE_UNUSED HaveAllEigenVectors = false;
+    bool HaveLowestEigenVector = false;
 
     if (m_Ham->canGetSparse() && m_Ham->rows() < 5000 && computeLowestEigenValue)
     {
@@ -215,11 +217,36 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         for (long i = 0; i < TrueEigenValues.rows() && i < 10; i++)
             fprintf(stderr,"%20.10lg",TrueEigenValues[i]);
         fprintf(stderr,"\n");
+        HaveAllEigenVectors = HaveLowestEigenVector = true;
     }
     else
     {
-        if (computeLowestEigenValue)
-            logger().log("Hamiltonian too big to fully construct");
+        if (m_Ham->rows() < 100000 && computeLowestEigenValue)
+        {
+            fprintf(stderr, "Finding lowest EigenValue\n");
+            vector<numType> start;
+            if (useFusedEvolve)
+                start.copy(FE->getStart());
+            else
+                start.copy(myAnsatz->getStart());
+            vector<numType> next;
+            m_Ham->apply(start, next);
+            while (std::abs(next.dot(start) + 1) > 1e-10)
+            {
+                static_cast<Matrix<numType> &>(start) = std::move(next);
+                m_Ham->apply(start, next);
+                // fprintf(stderr,"NExtNorm: %lg\n", next.norm());
+                next.normalize();
+                // fprintf(stderr,"error: %lg\n", std::abs(next.dot(start) + 1));
+            }
+            fprintf(stderr, "Largest E Value,%.16lg\n", (m_Ham->apply(next).dot(next)));
+            FCIEigenVectors = (typename vector<numType>::EigenVector) next;
+            HaveLowestEigenVector = true;
+        }
+        else
+        {
+            if (computeLowestEigenValue) logger().log("Hamiltonian too big to diagonalise here");
+        }
     }
 
 
@@ -455,8 +482,11 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         }
 
         NormOfGradVector[rpIndex] = gradVector.norm();
-        OverlapWithGroundState[rpIndex] = destEM.conjugate().transpose() * FCIEigenVectors.col(0);
-        MagOfOverlapWithGroundState[rpIndex] = std::abs(OverlapWithGroundState[rpIndex]);
+        if (HaveLowestEigenVector)
+        {
+            OverlapWithGroundState[rpIndex] = destEM.conjugate().transpose() * FCIEigenVectors.col(0);
+            MagOfOverlapWithGroundState[rpIndex] = std::abs(OverlapWithGroundState[rpIndex]);
+        }
         realNumType Mag = dest.dot(dest);
         if (std::fabs(Mag-1.) > 1e-5)
             fprintf(stderr,"Magnitude for path %zu is not 1 but " realNumTypeCode "\n",rpIndex,Mag);
@@ -486,10 +516,12 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    printOutputLine(OverlapWithGroundState,"OverlapWithGroundState");
-    printOutputLine(MagOfOverlapWithGroundState,"MagOfOverlapWithGroundState");
-    writeVector(m_runPath + "_MagOfOverlapWithGroundState",MagOfOverlapWithGroundState);
-
+    if (HaveLowestEigenVector)
+    {
+        printOutputLine(OverlapWithGroundState, "OverlapWithGroundState");
+        printOutputLine(MagOfOverlapWithGroundState, "MagOfOverlapWithGroundState");
+        writeVector(m_runPath + "_MagOfOverlapWithGroundState", MagOfOverlapWithGroundState);
+    }
 }
 
 void TUPSQuantities::calculateNumericalSecondDerivative(const std::vector<ansatz::rotationElement> &rp, realNumType startEnergy, const sparseMatrix<realNumType,numType> &Ham, const vector<numType>::EigenVector &direction, stateAnsatz *myAnsatz)
@@ -730,12 +762,12 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         bool allPositiveEigenvalues = true;
         for (long int i = 0; i < hessianEigVal.rows(); i++)
         {
-            if(abs(hessianEigVal[i]) >= zeroThreshold)
+            if (std::abs(hessianEigVal[i]) >= zeroThreshold)
             {
                 if (avoidNegativeHessianValues)
                 {
-                    InvhessianEigVal[i] = curveDamp(abs(1./(hessianEigVal[i])));
-                    /*if (hessianEigVal[i].real() < 0 && abs(gradVector_mu.dot(hessianEigVec.col(i))) < zeroThreshold)
+                    InvhessianEigVal[i] = curveDamp(std::abs(1. / (hessianEigVal[i])));
+                    /*if (hessianEigVal[i].real() < 0 && std::abs(gradVector_mu.dot(hessianEigVec.col(i))) < zeroThreshold)
                         negativeEigenValueDirections += hessianEigVec.col(i) * 0.1;*/
                     // if (hessianEigVal[i].real() < 0)
                     // {
@@ -803,8 +835,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                 newAlpha = alpha1 - (alpha1-alpha0)*((directionalDeriv1 + d2 - d1)/(directionalDeriv1 - directionalDeriv0 + 2*d2));
 
                 bool tobreak = false;
-                if (abs(alpha1-alpha0) < 1e-10)
-                    tobreak = true;
+                if (std::abs(alpha1 - alpha0) < 1e-10) tobreak = true;
 
                 if (!std::isfinite(newAlpha))
                 {
@@ -840,7 +871,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                     tobreak = true;
                 }
 
-                if (abs(newAlpha) < 1e-3) // without doing complicated things this should be safe ish
+                if (std::abs(newAlpha) < 1e-3) // without doing complicated things this should be safe ish
                 {
                     newAlpha = 1e-3; // force progress
                     tobreak = true;
@@ -871,8 +902,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
                 }
                 else
                 {
-                    if (abs(directionalDerivTrial) <= -c2*directionalDerivAt0)
-                        break; // set angles to newAlpha
+                    if (std::abs(directionalDerivTrial) <= -c2 * directionalDerivAt0) break; // set angles to newAlpha
                     if (directionalDerivTrial*(alpha1-alpha0) >= 0)
                     {
                         alpha1 = alpha0;
@@ -1057,9 +1087,8 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
             // logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
             // logger().log("(newT*updateAngles).norm()",(newT*updateAngles).norm());
             // logger().log("updateAnglesNorm", updateAngles.norm());
-            // if (!(abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
+            // if (!(std::abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
             //     logger().log("Failed to meet wolfe condition",searchCount);
-
         }
 
 
@@ -1108,7 +1137,7 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         //     vector<realNumType>::EigenVector updateAnglesCopy = updateAngles;
         //     realNumType biggestAngle  = updateAnglesCopy[0];
         //     for (auto a : updateAnglesCopy)
-        //         biggestAngle = std::max(biggestAngle,abs(a));
+        //         biggestAngle = std::max(biggestAngle,std::abs(a));
         //     // logger().log("Biggest Angle at start",biggestAngle);
         //     while(true)
         //     {
@@ -1124,12 +1153,12 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         //         if (EnergyTrial > lastEnergyTrial)
         //         {//Backtracking
         //             // logger().log("Backtracking",BacktrackCount);
-        //             biggestAngle  = abs(updateAnglesCopy[0]/2);
+        //             biggestAngle  = std::abs(updateAnglesCopy[0]/2);
         //             for (size_t i = 0; i < angles.size();i++)
         //             {
         //                 updateAnglesCopy[i] /=2;
         //                 angles[i] -= updateAnglesCopy[i];
-        //                 biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
+        //                 biggestAngle = std::max(biggestAngle,std::abs(updateAnglesCopy[i]));
         //             }
         //             tBackTrackStepSize /= 2;
         //             tBacktrack -= tBackTrackStepSize;
@@ -1140,12 +1169,12 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         //             break;
         //             // logger().log("Forwardtracking",BacktrackCount);
         //             lastEnergyTrial = EnergyTrial;
-        //             biggestAngle  = abs(updateAnglesCopy[0]/2);
+        //             biggestAngle  = std::abs(updateAnglesCopy[0]/2);
         //             for (size_t i = 0; i < angles.size();i++)
         //             {
         //                 updateAnglesCopy[i] /=2;
         //                 angles[i] += updateAnglesCopy[i];
-        //                 biggestAngle = std::max(biggestAngle,abs(updateAnglesCopy[i]));
+        //                 biggestAngle = std::max(biggestAngle,std::abs(updateAnglesCopy[i]));
         //             }
         //             tBackTrackStepSize /= 2;
         //             tBacktrack += tBackTrackStepSize;
@@ -1154,7 +1183,6 @@ void TUPSQuantities::runNewtonMethod(FusedEvolve *myAnsatz,std::vector<realNumTy
         //     }
         //     logger().log("Backtracked t",tBacktrack);
         // }
-
 
         auto stop = std::chrono::high_resolution_clock::now();
         fprintf(stderr,"Energy: %.10lg GradNorm: " realNumTypeCode " Time (ms): %li, Energy Evals: %zu, Hess Evals: %zu\n",
@@ -1229,11 +1257,11 @@ void TUPSQuantities::runNewtonMethodProjected(FusedEvolve *myAnsatz,std::vector<
 
         for (long int i = 0; i < hessianEigVal.rows(); i++)
         {
-            if(abs(hessianEigVal[i].real()) >= zeroThreshold)
+            if (std::abs(hessianEigVal[i].real()) >= zeroThreshold)
             {
                 if (avoidNegativeHessianValues)
                 {
-                    InvhessianEigVal[i] = abs(1./(hessianEigVal[i].real()));
+                    InvhessianEigVal[i] = std::abs(1. / (hessianEigVal[i].real()));
                 }
                 else
                     InvhessianEigVal[i] = 1./(hessianEigVal[i].real());
@@ -1379,9 +1407,8 @@ void TUPSQuantities::runNewtonMethodProjected(FusedEvolve *myAnsatz,std::vector<
             // logger().log("Energy Trial", energyTrial);
             // logger().log("initialDirectionalDeriv",initialDirectionalDeriv);
             // logger().log("foundDirectionalDeriv",foundDirectionalDeriv);
-            // if (!(abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
+            // if (!(std::abs(foundDirectionalDeriv) < -c2*initialDirectionalDeriv) && searchCount != 1)
             //     logger().log("Failed to meet wolfe condition",searchCount);
-
         }
 
         auto stop = std::chrono::high_resolution_clock::now();
