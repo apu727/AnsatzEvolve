@@ -59,5 +59,6 @@ extern unsigned long NUM_CORES;
 
 #define Bool2String(x) (x ? "True" : "False")
 
+#define MAYBE_UNUSED __attribute__((unused))
 
 #endif // GLOBALS_H

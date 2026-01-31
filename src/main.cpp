@@ -66,6 +66,7 @@ struct options
     bool noCompress = false;
     bool onlyEvolve = false;
     bool noLowestEigenValue = false;
+    int numberOfPathsToLoad = -1;
     static void printHelp()
     {
         logger().log("Help:");
@@ -78,6 +79,7 @@ struct options
         logger().log("'filepath XX/YY' ----------- Set the file path to search for resources. filepath should be the complete prefix. E.g. for Hams/H10_Paramaters.dat supply 'filepath Hams/H10'");
         logger().log("'benchmark' ---------------- Benchmarks various operations. Used for development and subject to change");
         logger().log("'NoLowestEigenValue'-------- Don't compute the lowest eigenvalue of the Hamiltonian");
+        logger().log("'loadpaths N' ---------------- Only load the N lowest paths");
         logger().log("'help' --------------------- Print this");
     }
     static options parse(int argc, char* argv[])
@@ -145,6 +147,24 @@ struct options
             else if (!strcmp(arg,"NoLowestEigenValue"))
             {
                 o.noLowestEigenValue = true;
+            }
+            else if (!strcmp(arg,"loadpaths"))
+            {
+                if (count+1 < argc)
+                {
+                    o.numberOfPathsToLoad = atoi(argv[count+1]);
+                    if (o.numberOfPathsToLoad == 0)
+                    {
+                        logger().log("Could not parse integer. Loading all paths");
+                        o.numberOfPathsToLoad = -1;
+                    }
+                    count++;
+                }
+                else
+                {
+                    logger().log("`loadpaths' specified but integer N not provided");
+                    o.ok = false;
+                }
             }
             else if (!strcmp(arg,"help"))
             {
@@ -300,7 +320,10 @@ int main(int argc, char *argv[])
     if (!loadParameters(filePath,rotationPath,rotationPaths,order,numberOfUniqueParameters))
         return 1;
 
-
+    if (opt.numberOfPathsToLoad > -1)
+    {
+        rotationPaths.resize(opt.numberOfPathsToLoad);
+    }
 
     // sparseMatrix<realNumType,numType> Ham;
     // if (!Ham.loadMatrix(filePath,numberOfQubits,comp))

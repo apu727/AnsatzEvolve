@@ -15,11 +15,30 @@ if(NOT CMAKE_BUILD_TYPE)
 endif(NOT CMAKE_BUILD_TYPE)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  # using regular Clang or AppleClang
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -march=native")
-  add_compile_definitions(APPLECLANG)
+    # using regular Clang or AppleClang
+    if (CMAKE_OSX_SYSROOT)
+        #Apple specific configs
+        message("COMPILER IDENTIFIED AS APPLE CLANG")
+
+        set(COMPILER_IS_APPLECLANG On)
+        add_compile_definitions(APPLECLANG)
+    else()
+        #Clang specific configs - Not Apple
+        message("COMPILER IDENTIFIED AS CLANG")
+        set(COMPILER_IS_CLANG On)
+    endif()
+elseif(CMAKE_COMPILER_IS_GNUCXX)
+    add_compile_options(-Wall -Wextra -march=native -Wmaybe-uninitialized -Wno-stringop-overflow)
+    message("COMPILER IDENTIFIED AS GNU")
 else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -march=native -fopenmp -Wmaybe-uninitialized -fuse-ld=gold")
+    message(WARNING "UNKNOWN COMPILER ${CMAKE_CXX_COMPILER_ID}")
+endif()
+
+if (COMPILER_IS_CLANG OR COMPILER_IS_APPLECLANG)
+    # using regular Clang or AppleClang
+    set(CMAKE_CXX_FLAGS "-Wall -Wextra -march=native -Wno-unused-parameter")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -march=native -fopenmp -Wmaybe-uninitialized -fuse-ld=gold -Wno-unused-parameter")
 endif()
 
 if (COMPILE_PYTHON_LIBS)

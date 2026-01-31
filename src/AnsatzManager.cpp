@@ -810,7 +810,7 @@ bool stateAnsatzManager::generatePathsForSubspace(size_t numberOfPaths)
             Energy = m_TUPSQuantities->OptimiseTups(*m_FA,rotationPaths.back(),true); // this is broken
         else
             Energy = m_TUPSQuantities->OptimiseTups(*m_ansatz,rotationPaths.back(),true);
-        if (std::find_if(Energies.begin(),Energies.end(), [=](realNumType E){return std::abs(E-Energy) < 1e-10;}) == Energies.end())
+        if (std::find_if(Energies.begin(), Energies.end(), [=](realNumType E) { return std::abs(E - Energy) < 1e-10; }) == Energies.end())
         {
             Energies.push_back(Energy);
             if (!useFused)
