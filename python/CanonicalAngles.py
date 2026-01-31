@@ -11,7 +11,7 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
     """ 
 
     assert(len(InitialStateCoeffs) == len(InitialStateIndices) and len(InitialStateIndices) == 1)
-
+    managedToInvertWaveFuctionSign = False
     Angles = np.array(Angles).copy()
 
     man.setAngles(Angles)
@@ -61,7 +61,25 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
             startVector[0,0] = 1.
         elif InitialStateBitstring == (InitialStateBitstringUnset | (1<<SpinDownAOs[0]) | (1<<SpinUpAOs[0])): #Z state
             startVector[2,0] = 1.
+        elif InitialStateBitstring == (InitialStateBitstringUnset | (1<<SpinDownAOs[0]) | (1<<SpinUpAOs[1])) or \
+            InitialStateBitstring == (InitialStateBitstringUnset | (1<<SpinDownAOs[1]) | (1<<SpinUpAOs[0])) : #Part of Y state
+            assert(False) #Y state is not handled. 
+        elif InitialStateBitstring == InitialStateBitstringUnset or \
+            InitialStateBitstring == (InitialStateBitstring | ((1<<SpinDownAOs[0]) | (1<<SpinDownAOs[1]) | (1<<SpinUpAOs[0]) | (1<<SpinUpAOs[0]))):
+            # if the bitstring is 0000 or 1111 then all the angles do nothing so set them to zero. 
+            Angles[L[0][0]] = 0 #S Down
+            Angles[L[0][1]] = 0 #S up
+            Angles[L[1][0]] = 0 #D
+            Angles[L[2][0]] = 0 #S Down
+            Angles[L[2][1]] = 0 #S up
+            continue
         else:
+            #1 or 3 are set. Only the singles have an effect. Condense them down. 
+            Angles[L[0][0]] += Angles[L[2][0]] #S Down
+            Angles[L[0][1]] += Angles[L[2][1]] #S up
+            Angles[L[1][0]] = 0 #D
+            Angles[L[2][0]] = 0 #S Down
+            Angles[L[2][1]] = 0 #S up
             continue
         
         #find the resultant vector:
@@ -69,7 +87,7 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
         Kappa1 = np.array([[0,-np.sqrt(2),0],[np.sqrt(2),0,-np.sqrt(2)],[0,np.sqrt(2),0]]) # single exc
         Kappa2 = np.array([[0,0,-2],[0,0,0],[2,0,0]],dtype=np.float64) # double exc
         resultVector = np.array(startVector.copy())
-        if invertSignOfWavefunction and i == 0:
+        if invertSignOfWavefunction and not managedToInvertWaveFuctionSign:
             resultVector *= -1
 
         resultVector += 0.5*np.sin(2*Angle1)*Kappa1@resultVector + 0.25*(1-np.cos(2*Angle1)) * Kappa1 @ Kappa1 @ resultVector
@@ -114,6 +132,7 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
         Angles[L[1][0]] = -theta2 #D
         Angles[L[2][0]] = theta1 #S Down
         Angles[L[2][1]] = theta1 #S up
+        managedToInvertWaveFuctionSign = True
                 
 
 
@@ -123,6 +142,7 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
     
     # print(f"Energy before: {EnergyBefore} Energy after: {EnergyAfter} Diff: {EnergyAfter - EnergyBefore}")
     if invertSignOfWavefunction:
+        assert(managedToInvertWaveFuctionSign)
         stateAfter = man.getFinalState()
         assert(np.isclose(np.dot(stateBefore,stateAfter),-1))
     else:
@@ -131,7 +151,7 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
     return Angles
 
 if __name__ == "__main__":
-    PathBase = "/home/bence/AnsatzEvolve/Hams/H4/L1/H4"
+    PathBase = "/users/bence/AnsatzEvolve/Hams/H4/L1/H4"
     
     #Load a template path to know how long it will be.
     templatePath = loadPath(PathBase + "_Operators.dat") # AKA qc_ucc.dat
@@ -158,7 +178,7 @@ if __name__ == "__main__":
             InitialStateCoeffs.append(v)
             InitialStateIndices.append(i)
     assert(len(InitialStateCoeffs) == 1)
-
+    # InitialStateIndices[0] = 0b00110011
     numberOfQubits = round(np.log2(len(InitialState)))
 
     #Load the ansatz,
