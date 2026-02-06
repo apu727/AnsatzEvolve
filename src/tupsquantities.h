@@ -20,6 +20,7 @@ struct TUPSQuantitiesOptions
 {
     bool computeLowestEigenValue = true;
     int numberOfOverlapsToCompute = 1;
+    bool noHess = false;
 };
 
 class TUPSQuantities

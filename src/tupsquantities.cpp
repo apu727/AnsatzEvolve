@@ -221,6 +221,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
             fprintf(stderr,"%20.10lg",TrueEigenValues[i]);
         fprintf(stderr,"\n");
         HaveAllEigenVectors = HaveLowestEigenVector = true;
+        opt.numberOfOverlapsToCompute = std::min(opt.numberOfOverlapsToCompute, (int) m_Ham->rows());
     }
     else
     {
@@ -356,12 +357,17 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
         Matrix<numType>::EigenMatrix derivTangentSpaceEM;
         if (useFusedEvolve)
         {
-            FE->evolveHessian(Hmunu,gradVectorCalc,anglesV,&derivTangentSpaceEM,&Energies[rpIndex]);
-            vector<realNumType> gradVectorCalc2;
-            FE->evolveDerivative(dest,gradVectorCalc2,anglesV);
-            logger().log("1.1",(gradVectorCalc.dot(gradVectorCalc)));
-            logger().log("1.2",(gradVectorCalc.dot(gradVectorCalc2)));
-            logger().log("2.2",(gradVectorCalc2.dot(gradVectorCalc2)));
+            if (!opt.noHess)
+            {
+                FE->evolveHessian(Hmunu, gradVectorCalc, anglesV, &derivTangentSpaceEM, &Energies[rpIndex]);
+                vector<realNumType> gradVectorCalc2;
+                FE->evolveDerivative(dest, gradVectorCalc2, anglesV);
+                logger().log("1.1", (gradVectorCalc.dot(gradVectorCalc)));
+                logger().log("1.2", (gradVectorCalc.dot(gradVectorCalc2)));
+                logger().log("2.2", (gradVectorCalc2.dot(gradVectorCalc2)));
+            }
+            else
+                FE->evolveDerivative(dest, gradVectorCalc, anglesV, &Energies[rpIndex]);
         }
         else
         {
@@ -373,8 +379,10 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
         {
             derivTangentSpaceEM = convert(derivTangentSpace).transpose();
         }
-        Matrix<numType>::EigenMatrix derivTangentSpaceEMCondensed =  derivTangentSpaceEM * m_compressMatrix.transpose();
-        Matrix<numType>::EigenMatrix metricTensor = (derivTangentSpaceEMCondensed.adjoint() * derivTangentSpaceEMCondensed).real();
+        Matrix<numType>::EigenMatrix derivTangentSpaceEMCondensed;
+        if (!opt.noHess) derivTangentSpaceEMCondensed = derivTangentSpaceEM * m_compressMatrix.transpose();
+        Matrix<numType>::EigenMatrix metricTensor;
+        if (!opt.noHess) metricTensor = (derivTangentSpaceEMCondensed.adjoint() * derivTangentSpaceEMCondensed).real();
 
         vector<realNumType>::EigenVector gradVector;
         if (!useFusedEvolve)
@@ -382,111 +390,109 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
         else
             gradVector = gradVectorCalc;
 
-
-        writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Hessian",Hmunu);
-        writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric",metricTensor);
-
-        Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> esH(Hmunu,Eigen::DecompositionOptions::ComputeEigenvectors);
-        vector<std::complex<realNumType>>::EigenVector hessianEigVal = esH.eigenvalues();
-        auto hessianEigVec = esH.eigenvectors();
-        vector<std::complex<realNumType>>::EigenVector hessianDiagVals = Hmunu.diagonal();
-
-        Eigen::SelfAdjointEigenSolver<Matrix<numType>::EigenMatrix> esM(metricTensor,Eigen::DecompositionOptions::ComputeEigenvectors);
-        vector<std::complex<realNumType>>::EigenVector metricEigVal = esM.eigenvalues();
-
-        auto metricEigenVectors = esM.eigenvectors();
-        vector<std::complex<realNumType>>::EigenVector metricDiagVals = metricTensor.diagonal();
-
-
-        std::vector<vector<std::complex<realNumType>>::EigenVector> metricZeroEigenVectors;
+        if (!opt.noHess) writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Hessian", Hmunu);
+        if (!opt.noHess) writeMatrix(m_runPath + "_Path_" + std::to_string(rpIndex) + "_Metric", metricTensor);
 
         // Energies[rpIndex] = m_Ham.braket(dest, dest, &temp);
         // logger().log("Mag2",dest.dot(dest));
         if (!useFusedEvolve)
             Energies[rpIndex] = m_Ham->apply(dest,temp).dot(dest);
 
-        {
-            vector<realNumType> r = dest.real();
-            vector<realNumType> hr = m_Ham->apply(dest).real();
-            RealEnergies[rpIndex] = hr.dot(r);
-            RealEnergies[rpIndex] /= r.dot(r);
-        }
+#ifdef useComplex
+        vector<realNumType> r = dest.real();
+        vector<realNumType> hr = m_Ham->apply(dest).real();
+        RealEnergies[rpIndex] = hr.dot(r);
+        RealEnergies[rpIndex] /= r.dot(r);
+#else
+        RealEnergies[rpIndex] = Energies[rpIndex];
+#endif
         EnergiesAndNucEnergy[rpIndex] = Energies[rpIndex]+m_NuclearEnergy;
-
-        // es.compute(Hij,true);
-        // for (int i = 0; i < 15; i++)
-        // {
-        //     vector<std::complex<realNumType>>::EigenVector offendingEigVec = es.eigenvectors().col(i);
-        //     fprintf(stderr,"HessianEigVal: %lg\n",es.eigenvalues()[i].real());
-        //     calculateNumericalSecondDerivative(rp, Energies[rpIndex], Ham, offendingEigVec, myAnsatz);
-        // }
 
         realNumType zeroThreshold = 1e-10;
 
-        for (long int i = 0; i < hessianEigVal.rows(); i++)
+        if (!opt.noHess)
         {
-            auto he  = hessianEigVal[i];
-            realNumType e = he.real();
-            if (e > zeroThreshold)
-                NumberOfPositiveHessianEValues[rpIndex]++;
-            else if (e < -zeroThreshold)
+            Eigen::SelfAdjointEigenSolver<Matrix<realNumType>::EigenMatrix> esH(Hmunu, Eigen::DecompositionOptions::ComputeEigenvectors);
+            vector<std::complex<realNumType>>::EigenVector hessianEigVal = esH.eigenvalues();
+            auto hessianEigVec = esH.eigenvectors();
+            vector<std::complex<realNumType>>::EigenVector hessianDiagVals = Hmunu.diagonal();
+
+            Eigen::SelfAdjointEigenSolver<Matrix<numType>::EigenMatrix> esM(metricTensor, Eigen::DecompositionOptions::ComputeEigenvectors);
+            vector<std::complex<realNumType>>::EigenVector metricEigVal = esM.eigenvalues();
+
+            auto metricEigenVectors = esM.eigenvectors();
+            vector<std::complex<realNumType>>::EigenVector metricDiagVals = metricTensor.diagonal();
+
+            // es.compute(Hij,true);
+            // for (int i = 0; i < 15; i++)
+            // {
+            //     vector<std::complex<realNumType>>::EigenVector offendingEigVec = es.eigenvectors().col(i);
+            //     fprintf(stderr,"HessianEigVal: %lg\n",es.eigenvalues()[i].real());
+            //     calculateNumericalSecondDerivative(rp, Energies[rpIndex], Ham, offendingEigVec, myAnsatz);
+            // }
+
+            std::vector<vector<std::complex<realNumType>>::EigenVector> metricZeroEigenVectors;
+            for (long int i = 0; i < hessianEigVal.rows(); i++)
             {
-                NumberOfNegativeHessianEValues[rpIndex]++;
-                fprintf(stderr,"NHE: " realNumTypeCode ", Path:%zu\n",e,rpIndex);
-                const vector<numType>::EigenVector &evCondensed = hessianEigVec.col(i);
-                vector<numType>::EigenVector ev(evCondensed.rows());
-                ev = m_deCompressMatrix * evCondensed;
-                // calculateNumericalSecondDerivative(anglesV,Energies[rpIndex],m_Ham,ev,FE);
-
+                auto he = hessianEigVal[i];
+                realNumType e = he.real();
+                if (e > zeroThreshold)
+                    NumberOfPositiveHessianEValues[rpIndex]++;
+                else if (e < -zeroThreshold)
+                {
+                    NumberOfNegativeHessianEValues[rpIndex]++;
+                    fprintf(stderr, "NHE: " realNumTypeCode ", Path:%zu\n", e, rpIndex);
+                    const vector<numType>::EigenVector &evCondensed = hessianEigVec.col(i);
+                    vector<numType>::EigenVector ev(evCondensed.rows());
+                    ev = m_deCompressMatrix * evCondensed;
+                    // calculateNumericalSecondDerivative(anglesV,Energies[rpIndex],m_Ham,ev,FE);
+                }
+                else if (e >= -zeroThreshold && e <= zeroThreshold)
+                    NumberOfNearZeroHessianEValues[rpIndex]++;
+                else
+                    fprintf(stderr, "Problem with HEigenvalue: " realNumTypeCode "\n", e);
+                if (std::fabs(he.imag()) > zeroThreshold)
+                    fprintf(stderr, "Problem with Imag HEigenvalue: (" realNumTypeCode "," realNumTypeCode ")\n", he.real(), he.imag());
             }
-            else if (e >= -zeroThreshold && e <= zeroThreshold)
-                NumberOfNearZeroHessianEValues[rpIndex]++;
-            else
-                fprintf(stderr,"Problem with HEigenvalue: " realNumTypeCode "\n",e);
-            if (std::fabs(he.imag()) > zeroThreshold)
-                fprintf(stderr,"Problem with Imag HEigenvalue: (" realNumTypeCode "," realNumTypeCode ")\n",he.real(),he.imag());
-        }
 
-        for (auto he : hessianDiagVals)
-        {
-            realNumType e = he.real();
-            if (e > zeroThreshold)
-                NumberOfPositiveHessianDiagValues[rpIndex]++;
-            else if (e < -zeroThreshold)
-                NumberOfNegativeHessianDiagValues[rpIndex]++;
-            else if (e >= -zeroThreshold && e <= zeroThreshold)
-                NumberOfNearZeroHessianDiagValues[rpIndex]++;
-            else
-                fprintf(stderr,"Problem with HDiagvalue: " realNumTypeCode "\n",e);
-            if (std::fabs(he.imag()) > zeroThreshold)
-                fprintf(stderr,"Problem with Imag HDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n",he.real(),he.imag());
-        }
-
-
-
-        for (long int i =0; i < metricEigVal.rows();i++)
-        {
-            auto me = metricEigVal[i];
-            realNumType e = me.real();
-            if (e > zeroThreshold)
-                NumberOfPositiveMetricEValues[rpIndex]++;
-            else if (e >= -zeroThreshold && e <= zeroThreshold)
+            for (auto he : hessianDiagVals)
             {
-                NumberOfZeroMetricEValues[rpIndex]++;
-                metricZeroEigenVectors.push_back(metricEigenVectors.col(i));
+                realNumType e = he.real();
+                if (e > zeroThreshold)
+                    NumberOfPositiveHessianDiagValues[rpIndex]++;
+                else if (e < -zeroThreshold)
+                    NumberOfNegativeHessianDiagValues[rpIndex]++;
+                else if (e >= -zeroThreshold && e <= zeroThreshold)
+                    NumberOfNearZeroHessianDiagValues[rpIndex]++;
+                else
+                    fprintf(stderr, "Problem with HDiagvalue: " realNumTypeCode "\n", e);
+                if (std::fabs(he.imag()) > zeroThreshold)
+                    fprintf(stderr, "Problem with Imag HDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n", he.real(), he.imag());
             }
-            else
-                fprintf(stderr,"Problem with MEigenvalue: " realNumTypeCode "\n",e);
-            if (std::fabs(me.imag()) > zeroThreshold)
-                fprintf(stderr,"Problem with Imag MEigenvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
-        }
-        for (auto me : metricDiagVals)
-        {
-            realNumType e = me.real();
-            if (e >= -zeroThreshold && e <= zeroThreshold)
-                NumberOfZeroMetricDiagonalValues[rpIndex]++;
-            if (std::fabs(me.imag()) > zeroThreshold)
-                fprintf(stderr,"Problem with Imag MDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n",me.real(),me.imag());
+
+            for (long int i = 0; i < metricEigVal.rows(); i++)
+            {
+                auto me = metricEigVal[i];
+                realNumType e = me.real();
+                if (e > zeroThreshold)
+                    NumberOfPositiveMetricEValues[rpIndex]++;
+                else if (e >= -zeroThreshold && e <= zeroThreshold)
+                {
+                    NumberOfZeroMetricEValues[rpIndex]++;
+                    metricZeroEigenVectors.push_back(metricEigenVectors.col(i));
+                }
+                else
+                    fprintf(stderr, "Problem with MEigenvalue: " realNumTypeCode "\n", e);
+                if (std::fabs(me.imag()) > zeroThreshold)
+                    fprintf(stderr, "Problem with Imag MEigenvalue: (" realNumTypeCode "," realNumTypeCode ")\n", me.real(), me.imag());
+            }
+            for (auto me : metricDiagVals)
+            {
+                realNumType e = me.real();
+                if (e >= -zeroThreshold && e <= zeroThreshold) NumberOfZeroMetricDiagonalValues[rpIndex]++;
+                if (std::fabs(me.imag()) > zeroThreshold)
+                    fprintf(stderr, "Problem with Imag MDiagvalue: (" realNumTypeCode "," realNumTypeCode ")\n", me.real(), me.imag());
+            }
         }
 
         NormOfGradVector[rpIndex] = gradVector.norm();
@@ -500,6 +506,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
                 MagOfOverlapsWithStates[stateIdx][rpIndex] = std::abs(OverlapsWithStates[stateIdx][rpIndex]);
             }
         }
+
         realNumType Mag = dest.dot(dest);
         if (std::fabs(Mag-1.) > 1e-5)
             fprintf(stderr,"Magnitude for path %zu is not 1 but " realNumTypeCode "\n",rpIndex,Mag);
@@ -515,20 +522,22 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
     printOutputLine(RealEnergies,"Real Elec. Energy");
     printOutputLine(EnergiesAndNucEnergy,"Elec. + Nuc. Energy");
 
-    printOutputLine(NumberOfNegativeHessianEValues,"NumberOfNegativeHessianEValues");
-    printOutputLine(NumberOfNearZeroHessianEValues,"NumberOfNearZeroHessianEValues");
-    printOutputLine(NumberOfPositiveHessianEValues,"NumberOfPositiveHessianEValues");
+    if (!opt.noHess)
+    {
+        printOutputLine(NumberOfNegativeHessianEValues, "NumberOfNegativeHessianEValues");
+        printOutputLine(NumberOfNearZeroHessianEValues, "NumberOfNearZeroHessianEValues");
+        printOutputLine(NumberOfPositiveHessianEValues, "NumberOfPositiveHessianEValues");
 
-    printOutputLine(NumberOfNegativeHessianDiagValues,"NumberOfNegativeHessianDiagValues");
-    printOutputLine(NumberOfNearZeroHessianDiagValues,"NumberOfNearZeroHessianDiagValues");
-    printOutputLine(NumberOfPositiveHessianDiagValues,"NumberOfPositiveHessianDiagValues");
+        printOutputLine(NumberOfNegativeHessianDiagValues, "NumberOfNegativeHessianDiagValues");
+        printOutputLine(NumberOfNearZeroHessianDiagValues, "NumberOfNearZeroHessianDiagValues");
+        printOutputLine(NumberOfPositiveHessianDiagValues, "NumberOfPositiveHessianDiagValues");
 
-    printOutputLine(NumberOfPositiveMetricEValues,"NumberOfPositiveMetricEValues");
-    printOutputLine(NumberOfZeroMetricEValues,"NumberOfZeroMetricEValues");
-    printOutputLine(NumberOfZeroMetricDiagonalValues,"NumberOfZeroMetricDiagonalValues");
+        printOutputLine(NumberOfPositiveMetricEValues, "NumberOfPositiveMetricEValues");
+        printOutputLine(NumberOfZeroMetricEValues, "NumberOfZeroMetricEValues");
+        printOutputLine(NumberOfZeroMetricDiagonalValues, "NumberOfZeroMetricDiagonalValues");
+    }
 
-
-    printOutputLine(NormOfGradVector,"NormOfGradVector");
+    printOutputLine(NormOfGradVector, "NormOfGradVector");
     if (HaveLowestEigenVector || HaveAllEigenVectors)
     {
         for (size_t stateIdx = 0; stateIdx < OverlapsWithStates.size(); stateIdx++)
