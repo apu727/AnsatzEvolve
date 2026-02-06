@@ -67,6 +67,7 @@ struct options
     bool onlyEvolve = false;
     bool noLowestEigenValue = false;
     int numberOfPathsToLoad = -1;
+    int numberOfOverlapsToCompute = 1;
     static void printHelp()
     {
         logger().log("Help:");
@@ -79,7 +80,8 @@ struct options
         logger().log("'filepath XX/YY' ----------- Set the file path to search for resources. filepath should be the complete prefix. E.g. for Hams/H10_Paramaters.dat supply 'filepath Hams/H10'");
         logger().log("'benchmark' ---------------- Benchmarks various operations. Used for development and subject to change");
         logger().log("'NoLowestEigenValue'-------- Don't compute the lowest eigenvalue of the Hamiltonian");
-        logger().log("'loadpaths N' ---------------- Only load the N lowest paths");
+        logger().log("'loadpaths N' -------------- Only load the N lowest paths");
+        logger().log("'NOverlap' ----------------- Compute the overlap of the result with the N Lowest eigenvectors");
         logger().log("'help' --------------------- Print this");
     }
     static options parse(int argc, char* argv[])
@@ -153,7 +155,7 @@ struct options
                 if (count+1 < argc)
                 {
                     o.numberOfPathsToLoad = atoi(argv[count+1]);
-                    if (o.numberOfPathsToLoad == 0)
+                    if (o.numberOfPathsToLoad <= 0)
                     {
                         logger().log("Could not parse integer. Loading all paths");
                         o.numberOfPathsToLoad = -1;
@@ -163,6 +165,24 @@ struct options
                 else
                 {
                     logger().log("`loadpaths' specified but integer N not provided");
+                    o.ok = false;
+                }
+            }
+            else if (!strcmp(arg, "NOverlap"))
+            {
+                if (count + 1 < argc)
+                {
+                    o.numberOfOverlapsToCompute = atoi(argv[count + 1]);
+                    if (o.numberOfOverlapsToCompute <= 0)
+                    {
+                        logger().log("Could not parse integer. Computing 1 overlap");
+                        o.numberOfOverlapsToCompute = 1;
+                    }
+                    count++;
+                }
+                else
+                {
+                    logger().log("`NOverlap' specified but integer N not provided");
                     o.ok = false;
                 }
             }
@@ -477,6 +497,11 @@ int main(int argc, char *argv[])
 
 
     if (opt.writeProperties)
-        quantityCalc.writeProperties(myAnsatz,FE,rotationPaths, !opt.noLowestEigenValue);
+    {
+        TUPSQuantitiesOptions TUPSOpts;
+        TUPSOpts.computeLowestEigenValue = !opt.noLowestEigenValue;
+        TUPSOpts.numberOfOverlapsToCompute = opt.numberOfOverlapsToCompute;
+        quantityCalc.writeProperties(myAnsatz, FE, rotationPaths, TUPSOpts);
+    }
     return 0;
 }

@@ -170,7 +170,10 @@ TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,num
     buildCompressionMatrices(numberOfUniqueParameters, order, m_deCompressMatrix,m_compressMatrix);
 }
 
-void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, bool computeLowestEigenValue)
+void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
+                                     std::shared_ptr<FusedEvolve> FE,
+                                     std::vector<std::vector<ansatz::rotationElement>> &rotationPaths,
+                                     TUPSQuantitiesOptions opt)
 {
     bool useFusedEvolve = false;
     if (!myAnsatz)
@@ -194,8 +197,8 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     std::vector<realNumType> NumberOfZeroMetricDiagonalValues(rotationPaths.size());
 
     std::vector<realNumType> NormOfGradVector(rotationPaths.size());
-    std::vector<numType> OverlapWithGroundState(rotationPaths.size());
-    std::vector<numType> MagOfOverlapWithGroundState(rotationPaths.size());
+    std::vector<std::vector<numType>> OverlapsWithStates; //OverlapsWithStates[state][path]
+    std::vector<std::vector<numType>> MagOfOverlapsWithStates;
     Matrix<realNumType>::EigenMatrix FrechetDistance(rotationPaths.size(),rotationPaths.size());
     //Jacobian?
 
@@ -205,7 +208,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     bool MAYBE_UNUSED HaveAllEigenVectors = false;
     bool HaveLowestEigenVector = false;
 
-    if (m_Ham->canGetSparse() && m_Ham->rows() < 5000 && computeLowestEigenValue)
+    if (m_Ham->canGetSparse() && m_Ham->rows() < 5000 && opt.computeLowestEigenValue)
     {
         fprintf(stderr,"Finding all eigenvectors\n");
         Eigen::MatrixXd h = m_Ham->getSparse().toDense();
@@ -221,8 +224,9 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
     }
     else
     {
-        if (m_Ham->rows() < 100000 && computeLowestEigenValue)
+        if (m_Ham->rows() < 100000 && opt.computeLowestEigenValue)
         {
+            opt.numberOfOverlapsToCompute = 1;
             fprintf(stderr, "Finding lowest EigenValue\n");
             vector<numType> start;
             if (useFusedEvolve)
@@ -245,10 +249,14 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         }
         else
         {
-            if (computeLowestEigenValue) logger().log("Hamiltonian too big to diagonalise here");
+            if (opt.computeLowestEigenValue) logger().log("Hamiltonian too big to diagonalise here");
         }
     }
-
+    if (HaveAllEigenVectors || HaveLowestEigenVector)
+    {
+        OverlapsWithStates.resize(opt.numberOfOverlapsToCompute, std::vector<numType>(rotationPaths.size()));
+        MagOfOverlapsWithStates.resize(opt.numberOfOverlapsToCompute, std::vector<numType>(rotationPaths.size()));
+    }
 
     for (size_t rpIndex = 0; rpIndex < rotationPaths.size(); rpIndex++)
     {
@@ -482,10 +490,15 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
         }
 
         NormOfGradVector[rpIndex] = gradVector.norm();
-        if (HaveLowestEigenVector)
+        if (HaveLowestEigenVector || HaveAllEigenVectors)
         {
-            OverlapWithGroundState[rpIndex] = destEM.conjugate().transpose() * FCIEigenVectors.col(0);
-            MagOfOverlapWithGroundState[rpIndex] = std::abs(OverlapWithGroundState[rpIndex]);
+            Matrix<numType>::EigenMatrix ovlps = destEM.adjoint() * FCIEigenVectors.leftCols(OverlapsWithStates.size());
+
+            for (size_t stateIdx = 0; stateIdx < OverlapsWithStates.size(); stateIdx++)
+            {
+                OverlapsWithStates[stateIdx][rpIndex] = ovlps(0, stateIdx);
+                MagOfOverlapsWithStates[stateIdx][rpIndex] = std::abs(OverlapsWithStates[stateIdx][rpIndex]);
+            }
         }
         realNumType Mag = dest.dot(dest);
         if (std::fabs(Mag-1.) > 1e-5)
@@ -516,11 +529,14 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std:
 
 
     printOutputLine(NormOfGradVector,"NormOfGradVector");
-    if (HaveLowestEigenVector)
+    if (HaveLowestEigenVector || HaveAllEigenVectors)
     {
-        printOutputLine(OverlapWithGroundState, "OverlapWithGroundState");
-        printOutputLine(MagOfOverlapWithGroundState, "MagOfOverlapWithGroundState");
-        writeVector(m_runPath + "_MagOfOverlapWithGroundState", MagOfOverlapWithGroundState);
+        for (size_t stateIdx = 0; stateIdx < OverlapsWithStates.size(); stateIdx++)
+        {
+            printOutputLine(OverlapsWithStates[stateIdx], "OverlapWithState_" + std::to_string(stateIdx));
+            printOutputLine(MagOfOverlapsWithStates[stateIdx], "MagOfOverlapWithState_" + std::to_string(stateIdx));
+            writeVector(m_runPath + "_MagOfOverlapWithGroundState_" + std::to_string(stateIdx), MagOfOverlapsWithStates[stateIdx]);
+        }
     }
 }
 
@@ -643,7 +659,7 @@ void TUPSQuantities::asyncHij(const sparseMatrix<realNumType,numType> &Ham, cons
         }
         std::atomic_fetch_add_explicit(&finishCount,1,std::memory_order_release);
     };
-    const size_t stepSize = 2;std::max((size_t)iSize/NUM_CORES,1ul);
+    const size_t stepSize = 2; //std::max((size_t)iSize/NUM_CORES,1ul);
     std::vector<std::future<void>> futures;
     auto& pool = threadpool::getInstance(NUM_CORES);
 

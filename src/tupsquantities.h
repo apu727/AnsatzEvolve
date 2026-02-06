@@ -16,6 +16,11 @@
 #include <vector>
 #include <string>
 
+struct TUPSQuantitiesOptions
+{
+    bool computeLowestEigenValue = true;
+    int numberOfOverlapsToCompute = 1;
+};
 
 class TUPSQuantities
 {
@@ -61,7 +66,10 @@ public:
     TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::vector<std::pair<int,realNumType>> order,
                    int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile = nullptr);
 
-    void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz, std::shared_ptr<FusedEvolve> FE, std::vector<std::vector<ansatz::rotationElement>>& rotationPaths, bool computeLowestEigenValue = true);
+    void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
+                         std::shared_ptr<FusedEvolve> FE,
+                         std::vector<std::vector<ansatz::rotationElement>> &rotationPaths,
+                         TUPSQuantitiesOptions opt);
     void OptimiseTupsLBFGS(sparseMatrix<realNumType,numType> &Ham, std::vector<ansatz::rotationElement> &rotationPath,
                       stateAnsatz& myAnsatz, bool blanking = false);
 
