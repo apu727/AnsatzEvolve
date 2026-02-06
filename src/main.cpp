@@ -69,6 +69,7 @@ struct options
     int numberOfPathsToLoad = -1;
     int numberOfOverlapsToCompute = 1;
     bool noHess = false;
+    bool NoHFPath = false;
     static void printHelp()
     {
         logger().log("Help:");
@@ -84,6 +85,7 @@ struct options
         logger().log("'loadpaths N' -------------- Only load the N lowest paths");
         logger().log("'NOverlap' ----------------- Compute the overlap of the result with the N Lowest eigenvectors");
         logger().log("'NoHess' ------------------- Don't compute the Hessian and metric");
+        logger().log("'NoHFPath' ----------------- Don't autogenerate the zero angle path");
         logger().log("'help' --------------------- Print this");
     }
     static options parse(int argc, char* argv[])
@@ -191,6 +193,10 @@ struct options
             else if (!strcmp(arg, "NoHess"))
             {
                 o.noHess = true;
+            }
+            else if (!strcmp(arg, "NoHFPath"))
+            {
+                o.NoHFPath = true;
             }
             else if (!strcmp(arg,"help"))
             {
@@ -508,6 +514,7 @@ int main(int argc, char *argv[])
         TUPSOpts.computeLowestEigenValue = !opt.noLowestEigenValue;
         TUPSOpts.numberOfOverlapsToCompute = opt.numberOfOverlapsToCompute;
         TUPSOpts.noHess = opt.noHess;
+        TUPSOpts.NoHFPath = opt.NoHFPath;
         quantityCalc.writeProperties(myAnsatz, FE, rotationPaths, TUPSOpts);
     }
     return 0;

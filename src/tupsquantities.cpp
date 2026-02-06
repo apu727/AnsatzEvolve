@@ -172,9 +172,14 @@ TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,num
 
 void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
                                      std::shared_ptr<FusedEvolve> FE,
-                                     std::vector<std::vector<ansatz::rotationElement>> &rotationPaths,
+                                     std::vector<std::vector<ansatz::rotationElement>> &rotationPathsIn,
                                      TUPSQuantitiesOptions opt)
 {
+    std::vector<std::vector<ansatz::rotationElement>> rotationPaths;
+
+    for (size_t rpIndex = opt.NoHFPath ? 1 : 0; rpIndex < rotationPathsIn.size(); rpIndex++)
+        rotationPaths.push_back(rotationPathsIn[rpIndex]);
+
     bool useFusedEvolve = false;
     if (!myAnsatz)
         useFusedEvolve = true;
@@ -516,7 +521,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
 
     // writeMatrix(m_runPath + "_FrechetDistance",FrechetDistance);
 
-    printOutputHeaders(rotationPaths.size()-1);
+    printOutputHeaders(opt.NoHFPath ? rotationPaths.size() : rotationPaths.size() - 1, !opt.NoHFPath);
 
     printOutputLine(Energies,"Elec. Energy");
     printOutputLine(RealEnergies,"Real Elec. Energy");
@@ -2171,14 +2176,14 @@ void TUPSQuantities::printOutputLine(std::vector<long double>& toPrint, std::str
     fprintf(m_file,"\n");
 
 }
-void TUPSQuantities::printOutputHeaders(size_t numberOfPathsExHF)
+void TUPSQuantities::printOutputHeaders(size_t numberOfPathsExHF, bool haveHF)
 {
 
 
     fprintf(m_file,"\n");
     fprintf(m_file,"%-" textColumnSize "s %40s \n","Results:", "Path Number");
     fprintf(m_file,"%-" textColumnSize "s",""); //placeholder for type of printout
-    fprintf(m_file,"%-" columnSize "s","HF");
+    if (haveHF) fprintf(m_file, "%-" columnSize "s", "HF");
     for (size_t i = 1; i <= numberOfPathsExHF;i++)
     {
         fprintf(m_file,"%-" columnSize "zu", i);

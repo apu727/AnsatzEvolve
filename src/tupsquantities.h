@@ -21,6 +21,7 @@ struct TUPSQuantitiesOptions
     bool computeLowestEigenValue = true;
     int numberOfOverlapsToCompute = 1;
     bool noHess = false;
+    bool NoHFPath = false;
 };
 
 class TUPSQuantities
@@ -28,7 +29,7 @@ class TUPSQuantities
     void printOutputLine(std::vector<double>& toPrint, std::string name);
     void printOutputLine(std::vector<std::complex<double>>& toPrint, std::string name);
     void printOutputLine(std::vector<long double>& toPrint, std::string name);
-    void printOutputHeaders(size_t numberOfPathsExHF);
+    void printOutputHeaders(size_t numberOfPathsExHF, bool haveHF = true);
 
     FILE* m_file = nullptr;
     // sparseMatrix<realNumType,numType> m_Ham;
