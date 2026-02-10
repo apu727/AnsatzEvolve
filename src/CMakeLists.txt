@@ -44,7 +44,7 @@ else()
     set (ANSATZEVOLVE_CXX_FLAGS -Wall -Wextra -march=native -Wmaybe-uninitialized -Wno-stringop-overflow)
 endif()
 
-if (COMPILE_PYTHON_LIBS)
+if (ANSATZEVOLVE_COMPILE_PYTHON_LIBS)
     set (ANSATZEVOLVE_CXX_FLAGS ${ANSATZEVOLVE_CXX_FLAGS} -fPIC -fvisibility=hidden)
 endif()
 
