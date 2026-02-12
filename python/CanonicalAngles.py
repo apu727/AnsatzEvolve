@@ -136,7 +136,7 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
             XZPrimeAngleEnd = np.atan2(VZ,VX)
             theta2 = XZPrimeAngleEnd - XZPrimeAngleStart
             if theta2 > np.pi:
-                theta2 = 2*np.pi - theta2
+                theta2 = theta2 - 2*np.pi 
             elif theta2 < -np.pi:
                 theta2 = theta2 + 2*np.pi 
 

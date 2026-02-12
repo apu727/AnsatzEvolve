@@ -9,3 +9,4 @@ Hams
 *.bin
 share/
 python
+build*
