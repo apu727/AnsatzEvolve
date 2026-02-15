@@ -57,6 +57,7 @@ if (ANSATZEVOLVE_OPENMP)
 endif()
 
 include_directories(./third-party/eigen-3.4.0)
+option (COMPLEX_MODE OFF)
 if (COMPLEX_MODE)
     add_compile_definitions(useComplex)
 endif()

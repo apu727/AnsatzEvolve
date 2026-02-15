@@ -203,13 +203,13 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
 
     std::vector<realNumType> NormOfGradVector(rotationPaths.size());
     std::vector<std::vector<numType>> OverlapsWithStates; //OverlapsWithStates[state][path]
-    std::vector<std::vector<numType>> MagOfOverlapsWithStates;
+    std::vector<std::vector<realNumType>> MagOfOverlapsWithStates;
     Matrix<realNumType>::EigenMatrix FrechetDistance(rotationPaths.size(),rotationPaths.size());
     //Jacobian?
 
     vector<numType> temp; //temporary
     vector<numType> dest;
-    Eigen::MatrixXd FCIEigenVectors;
+    Matrix<numType>::EigenMatrix FCIEigenVectors;
     bool MAYBE_UNUSED HaveAllEigenVectors = false;
     bool HaveLowestEigenVector = false;
 
@@ -261,7 +261,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
     if (HaveAllEigenVectors || HaveLowestEigenVector)
     {
         OverlapsWithStates.resize(opt.numberOfOverlapsToCompute, std::vector<numType>(rotationPaths.size()));
-        MagOfOverlapsWithStates.resize(opt.numberOfOverlapsToCompute, std::vector<numType>(rotationPaths.size()));
+        MagOfOverlapsWithStates.resize(opt.numberOfOverlapsToCompute, std::vector<realNumType>(rotationPaths.size()));
     }
 
     for (size_t rpIndex = 0; rpIndex < rotationPaths.size(); rpIndex++)
