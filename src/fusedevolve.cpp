@@ -79,18 +79,39 @@ std::pair<uint32_t,bool> applyExcToBasisState_(uint32_t state, const stateRotate
 
     uint32_t maskedBasisState = basisState & activeBits;
 
-    if (createBits == annihilateBits) // number operator
+    if (createBits == annihilateBits || a.isHermitian) // number operator
     {
 #ifdef useComplex
-        if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0)
+        if (createBits == annihilateBits)
         {
-            phase *= iu;
+            if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0)
+            {
+                phase *= iu;
+            }
+            else
+            {
+                phase = 0;
+            }
+            resultState = basisState;
         }
         else
         {
-            phase = 0;
+            // excitation operator but hermitian
+            if (((maskedBasisState & annihilateBits) ^ annihilateBits) == 0 && (((maskedBasisState ^ annihilateBits) & createBits)) == 0)
+            { // This allows operators like a^+_4 a^+_3 a_3 a_2 to be handled properly
+                phase *= iu;
+                resultState = (basisState ^ annihilateBits) ^ createBits;
+            }
+            else if (((maskedBasisState & createBits) ^ createBits) == 0 && (((maskedBasisState ^ createBits) & annihilateBits)) == 0)
+            {
+                phase *= iu;
+                resultState = (basisState ^ createBits) ^ annihilateBits;
+            }
+            else
+            {
+                phase = 0;
+            }
         }
-        resultState = basisState;
 #else
         logger().log("Complex number not supported in this build, please rebuild");
         __builtin_trap();

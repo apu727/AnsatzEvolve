@@ -652,7 +652,10 @@ HamiltonianMatrix<dataType, vectorType>::HamiltonianMatrix(const std::vector<dat
         maxJ = std::max(j,maxJ);
     }
     assert(maxI == maxJ);
-    m_fullyConstructedMatrix.resize(maxI+1,maxJ+1);
+    if (comp)
+        m_fullyConstructedMatrix.resize(comp->getCompressedSize(), comp->getCompressedSize());
+    else
+        m_fullyConstructedMatrix.resize(maxI + 1, maxJ + 1);
     m_fullyConstructedMatrix.setFromTriplets(triplets.begin(),triplets.end());
     m_isFullyConstructed = true;
 
