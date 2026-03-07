@@ -65,8 +65,14 @@ public:
     sparseMatrix<realNumType,numType>::EigenSparseMatrix m_deCompressMatrix;
     sparseMatrix<realNumType,numType>::EigenSparseMatrix m_normCompressMatrix;
     sparseMatrix<realNumType,numType>::EigenSparseMatrix m_compressMatrix;
-    TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::vector<std::pair<int,realNumType>> order,
-                   int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile = nullptr);
+    vector<realNumType> m_constantOffset;
+    TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType, numType>> Ham,
+                   std::vector<std::pair<int, realNumType>> order,
+                   const std::vector<realNumType> &ConstantOffset,
+                   int numberOfUniqueParameters,
+                   realNumType NuclearEnergy,
+                   std::string runPath,
+                   FILE *logfile = nullptr);
 
     void writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
                          std::shared_ptr<FusedEvolve> FE,

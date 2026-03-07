@@ -114,7 +114,15 @@ bool stateAnsatzManager::construct()
                 compressor::compressVector<numType>(m_start,compStart,m_compressor);
                 static_cast<Matrix<numType>&>(m_start) = std::move(compStart);
             }
-            m_TUPSQuantities = std::make_shared<TUPSQuantities>(m_Ham,m_parameterDependency,m_numberOfUniqueParameters, m_nuclearEnergy,m_runPath); //TODO allow for a output file path
+            std::vector<realNumType> constantOffset; // TODO make this configurable
+            constantOffset.assign(m_parameterDependency.size(), 0);
+
+            m_TUPSQuantities = std::make_shared<TUPSQuantities>(m_Ham,
+                                                                m_parameterDependency,
+                                                                constantOffset,
+                                                                m_numberOfUniqueParameters,
+                                                                m_nuclearEnergy,
+                                                                m_runPath); //TODO allow for a output file path
             m_compressMatrix = m_TUPSQuantities->m_compressMatrix;
             m_deCompressMatrix = m_TUPSQuantities->m_deCompressMatrix;
             m_FA = std::make_shared<FusedEvolve>(m_start,m_Ham,m_compressMatrix,m_deCompressMatrix);

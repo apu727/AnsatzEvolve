@@ -70,6 +70,8 @@ struct options
     int numberOfOverlapsToCompute = 1;
     bool noHess = false;
     bool NoHFPath = false;
+    bool DecConstOffToZero = false;
+    double DecConstOffRatio = 0.9;
     static void printHelp()
     {
         logger().log("Help:");
@@ -86,6 +88,8 @@ struct options
         logger().log("'NOverlap' ----------------- Compute the overlap of the result with the N Lowest eigenvectors");
         logger().log("'NoHess' ------------------- Don't compute the Hessian and metric");
         logger().log("'NoHFPath' ----------------- Don't autogenerate the zero angle path");
+        logger().log("'DecConstOffToZero' -------- Decreases constantOffset slowly to zero");
+        logger().log("'DecConstOffRatio' --------- Ratio to scale the constant offset by when decreasing");
         logger().log("'help' --------------------- Print this");
     }
     static options parse(int argc, char* argv[])
@@ -197,6 +201,31 @@ struct options
             else if (!strcmp(arg, "NoHFPath"))
             {
                 o.NoHFPath = true;
+            }
+            else if (!strcmp(arg, "DecConstOffToZero"))
+            {
+                o.DecConstOffToZero = true;
+            }
+            else if (!strcmp(arg, "DecConstOffRatio"))
+            {
+                if (count + 1 < argc)
+                {
+                    try
+                    {
+                        o.DecConstOffRatio = std::stod(argv[count + 1]);
+                    }
+                    catch (const std::invalid_argument &e)
+                    {
+                        logger().log("Could not parse double in DecConstOffRatio. Computing with 0.9 ratio");
+                        o.DecConstOffRatio = 0.9;
+                    }
+                    count++;
+                }
+                else
+                {
+                    logger().log("`DecConstOffRatio' specified but double 'ratio' not provided");
+                    o.ok = false;
+                }
             }
             else if (!strcmp(arg,"help"))
             {
@@ -348,9 +377,9 @@ int main(int argc, char *argv[])
 
     std::vector<std::vector<ansatz::rotationElement>> rotationPaths;
     std::vector<std::pair<int,realNumType>> order;
+    std::vector<realNumType> ConstantOffset;
     int numberOfUniqueParameters = 0;
-    if (!loadParameters(filePath,rotationPath,rotationPaths,order,numberOfUniqueParameters))
-        return 1;
+    if (!loadParameters(filePath, rotationPath, rotationPaths, order, ConstantOffset, numberOfUniqueParameters)) return 1;
 
     if (opt.numberOfPathsToLoad > -1)
     {
@@ -373,7 +402,7 @@ int main(int argc, char *argv[])
     realNumType NuclearEnergy = 0;
     LoadNuclearEnergy(NuclearEnergy, filePath);
 
-    TUPSQuantities quantityCalc(Ham,order,numberOfUniqueParameters, NuclearEnergy,filePath); // Can also optimise
+    TUPSQuantities quantityCalc(Ham, order, ConstantOffset, numberOfUniqueParameters, NuclearEnergy, filePath); // Can also optimise
     if (!opt.makeLie)
     {
         FE = std::make_shared<FusedEvolve>(start,Ham,quantityCalc.m_compressMatrix,quantityCalc.m_deCompressMatrix);
@@ -385,6 +414,8 @@ int main(int argc, char *argv[])
             vector<numType> dest;
             std::vector<realNumType> angles(rotationPath.size());
             std::transform(rotationPaths[1].begin(),rotationPaths[1].end(), angles.begin(),[](baseAnsatz::rotationElement r){return r.second;});
+            for (size_t i = 0; i < angles.size(); i++)
+                angles[i] += ConstantOffset[i];
             // logger().log("angles:",angles);
             FE->evolve(dest,angles);
             return 0;
@@ -400,6 +431,8 @@ int main(int argc, char *argv[])
         vector<numType> dest;
         std::vector<realNumType> angles(rotationPath.size());
         std::transform(rotationPaths[1].begin(),rotationPaths[1].end(), angles.begin(),[](baseAnsatz::rotationElement r){return r.second;});
+        for (size_t i = 0; i < angles.size(); i++)
+            angles[i] += ConstantOffset[i];
         // logger().log("angles:",angles);
 
         FE->evolve(dest,angles);
@@ -478,15 +511,49 @@ int main(int argc, char *argv[])
 
     if (opt.optimise)
     {
-        logger().log("Start Optimise");
         rotationPaths.push_back(rotationPaths[1]);
-        if (opt.makeLie)
+        if (opt.DecConstOffToZero)
         {
-            quantityCalc.OptimiseTups(*myAnsatz,rotationPaths.back(),true);
+            releaseAssert(opt.makeLie == false, "must use Fused Ansatz when reducing constant to zero. Not implemented");
+            logger().log("Start decreasing Constant to zero");
+            while (quantityCalc.m_constantOffset.dot(quantityCalc.m_constantOffset) > 1e-12)
+            {
+                quantityCalc.OptimiseTups(*FE, rotationPaths.back(), true);
+                quantityCalc.m_constantOffset *= 0.9;
+            }
+            logger().log("Final Optimise");
+            quantityCalc.m_constantOffset *= 0;
+            quantityCalc.OptimiseTups(*FE, rotationPaths.back(), true);
         }
         else
         {
-            quantityCalc.OptimiseTups(*FE,rotationPaths.back(),true);
+            logger().log("Start Optimise");
+            if (opt.makeLie)
+            {
+                quantityCalc.OptimiseTups(*myAnsatz, rotationPaths.back(), true);
+            }
+            else
+            {
+                quantityCalc.OptimiseTups(*FE, rotationPaths.back(), true);
+            }
+        }
+        std::vector<realNumType> anglesV(rotationPaths.back().size());
+        std::transform(rotationPaths.back().begin(),
+                       rotationPaths.back().end(),
+                       anglesV.begin(),
+                       [](const ansatz::rotationElement &r) { return r.second; });
+        logger(filePath + "_FinalAngles.dat", false).logAccurate("FinalAngles", anglesV);
+        {
+            Eigen::Vector<realNumType, Eigen::Dynamic> angles(anglesV.size());
+            for (size_t i = 0; i < anglesV.size(); i++)
+                angles[i] = anglesV[i];
+
+            vector<realNumType>::EigenVector angles2 = quantityCalc.m_normCompressMatrix * angles;
+            std::vector<realNumType> compAngles(angles2.rows());
+            for (size_t i = 0; i < compAngles.size(); i++)
+                compAngles[i] = angles2[i];
+
+            logger(filePath + "_FinalCompressedAngles.dat", false).logAccurate("FinalAngles", compAngles);
         }
     }
     if (opt.iterativeOptimise)

@@ -97,14 +97,25 @@ PYBIND11_MODULE(PyAnsatzEvolve, m) {
         // .def("generatePathsForSubspace",&stateAnsatzManager::generatePathsForSubspace);
         ;
 
-
-    m.def("loadParameters",[](const std::string &orderFilePath, const std::string &parameterFilepath, std::vector<ansatz::rotationElement>& templatePath)
+    m.def("loadParameters",
+          [](const std::string &orderFilePath,
+             const std::string &parameterFilepath,
+             const std::string &ConstantOffsetFilePath,
+             std::vector<ansatz::rotationElement> &templatePath)
           {
               std::vector<std::vector<ansatz::rotationElement>> rotationPaths;
               std::vector<std::pair<int,realNumType>> order;
+              std::vector<realNumType> ConstantOffset;
               int numberOfUniqueParameters;
-              loadParameters(orderFilePath,parameterFilepath,templatePath,rotationPaths,order,numberOfUniqueParameters);
-              return py::make_tuple(rotationPaths,order,numberOfUniqueParameters);
+              loadParameters(orderFilePath,
+                             parameterFilepath,
+                             ConstantOffsetFilePath,
+                             templatePath,
+                             rotationPaths,
+                             order,
+                             ConstantOffset,
+                             numberOfUniqueParameters);
+              return py::make_tuple(rotationPaths, order, ConstantOffset, numberOfUniqueParameters);
           });
 
     m.def("loadPath",[](const std::string& filepath)

@@ -51,23 +51,24 @@ public:
             fprintf(m_file, "%s, ", std::to_string(o).c_str());
         fprintf(m_file, "]\n");
     }
-    void log(std::string name, const std::vector<numType>& object)
-    {
-        fprintf(m_file, "%s: [", name.c_str());
-        for (auto& o :object)
-            fprintf(m_file, numTypeCode ", ", PRINTABLENUMTYPE(o));
-        fprintf(m_file, "]\n");
-    }
-    void log(std::string name, void* ptr) {fprintf(m_file,"%s: %p\n",name.c_str(),ptr);}
+
+    void log(std::string name, void *ptr) { fprintf(m_file, "%s: %p\n", name.c_str(), ptr); }
     void logAccurate(std::string name, const std::vector<double>& object)
     {
-        fprintf(m_file, "%s: [", name.c_str());
+        fprintf(m_file, "%s: [\n", name.c_str());
         for (auto& o :object)
-            fprintf(m_file,  "%.16lf, ", o);
+            fprintf(m_file, "%.16lf\n", o);
         fprintf(m_file, "]\n");
     }
 
 };
+
+template<>
+void logger::log(std::string name, const std::vector<numType> &object);
+#ifdef useComplex
+template<>
+void logger::log(std::string name, const std::vector<realNumType> &object);
+#endif
 
 void writeVector(std::string filename, const vector<numType>& vec,stateRotate&);
 

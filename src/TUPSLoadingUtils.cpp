@@ -36,12 +36,20 @@ bool loadPath(std::shared_ptr<stateRotate> sr, std::string filePath, std::vector
 }
 
 bool loadParameters(std::string filePath,
-                    std::vector<ansatz::rotationElement>& rotationPath,
+                    std::vector<ansatz::rotationElement> &rotationPath,
                     std::vector<std::vector<ansatz::rotationElement>> &rotationPaths,
-                    std::vector<std::pair<int,realNumType>> &orders/*the fixed relation between parameters*/,
-                    int& numberOfUniqueParameters)
+                    std::vector<std::pair<int, realNumType>> &orders /*the fixed relation between parameters*/,
+                    std::vector<realNumType> &ConstantOffset,
+                    int &numberOfUniqueParameters)
 {
-    return loadParameters(filePath+"_Order.dat",filePath+"_Parameters.dat",rotationPath,rotationPaths,orders,numberOfUniqueParameters);
+    return loadParameters(filePath + "_Order.dat",
+                          filePath + "_Parameters.dat",
+                          filePath + "_OffsetParameters.dat",
+                          rotationPath,
+                          rotationPaths,
+                          orders,
+                          ConstantOffset,
+                          numberOfUniqueParameters);
 }
 
 
@@ -172,11 +180,16 @@ void LoadNuclearEnergy(realNumType& NuclearEnergy, std::string filePath)
     fclose(fp);
 }
 
-
-bool loadParameters(const std::string &orderFilePath, const std::string &parameterFilePath, std::vector<baseAnsatz::rotationElement> &rotationPath, std::vector<std::vector<baseAnsatz::rotationElement> > &rotationPaths, std::vector<std::pair<int, realNumType> > &orders, int &numberOfUniqueParameters)
+bool loadParameters(const std::string &orderFilePath,
+                    const std::string &parameterFilePath,
+                    const std::string &ConstantOffsetFilePath,
+                    std::vector<baseAnsatz::rotationElement> &rotationPath,
+                    std::vector<std::vector<baseAnsatz::rotationElement>> &rotationPaths,
+                    std::vector<std::pair<int, realNumType>> &orders,
+                    std::vector<realNumType> &ConstantOffset,
+                    int &numberOfUniqueParameters)
 {
-    FILE *fp;
-    FILE *fp2;
+    FILE *fp, *fp2, *fp3;
 
     fp = fopen(parameterFilePath.c_str(), "r");
     if(fp == nullptr)
@@ -195,8 +208,12 @@ bool loadParameters(const std::string &orderFilePath, const std::string &paramet
         return 0;
     }
 
-
-
+    fp3 = fopen(ConstantOffsetFilePath.c_str(), "r");
+    if (fp3 == nullptr)
+    {
+        fprintf(stderr, "\nError in opening file.");
+        fprintf(stderr, "fileGiven: %s\n", ConstantOffsetFilePath.c_str());
+    }
 
     /* Hardcoded parsing of a file of the format
      *
@@ -284,6 +301,29 @@ Energy of minimum      2=  -2.809247486912495 first found at step       12 after
         order = order-1;
     }
     numberOfUniqueParameters = std::max(maxOrder+1,numberOfUniqueParameters);
+
+    //Load the constant offset terms. These are automatically decompressed
+    ConstantOffset.clear();
+    if (fp3 != nullptr)
+    {
+        realNumType ConstantAngle = 0;
+        int ret3 = fscanf(fp3, realNumTypeCode, &ConstantAngle);
+        while (ret3 != EOF)
+        {
+            ConstantOffset.push_back(ConstantAngle);
+            ret3 = fscanf(fp3, realNumTypeCode, &ConstantAngle);
+        }
+    }
+
+    while (ConstantOffset.size() < orders.size())
+        ConstantOffset.push_back(0);
+    if (ConstantOffset.size() > orders.size())
+    {
+        logger().log("Constant offset has too many angles, throwing away", ConstantOffset.size() - orders.size());
+        ConstantOffset.resize(orders.size());
+    }
+
+    if (fp3 != nullptr) fclose(fp3);
     fclose(fp2);
     fclose(fp);
     if (pathIndex != rotationPath.size())

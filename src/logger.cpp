@@ -59,9 +59,24 @@ void logger::log(const std::string& message)
 
 }
 
-
-
-
+template<>
+void logger::log(std::string name, const std::vector<numType> &object)
+{
+    fprintf(m_file, "%s: [\n", name.c_str());
+    for (auto &o : object)
+        fprintf(m_file, numTypeCode "\n", PRINTABLENUMTYPE(o));
+    fprintf(m_file, "]\n");
+}
+#ifdef useComplex
+template<>
+void logger::log(std::string name, const std::vector<realNumType> &object)
+{
+    fprintf(m_file, "%s: [\n", name.c_str());
+    for (auto &o : object)
+        fprintf(m_file, realNumTypeCode "\n", o);
+    fprintf(m_file, "]\n");
+}
+#endif
 
 void logger::log(std::string name, std::string value)
 {

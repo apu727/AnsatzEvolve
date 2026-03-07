@@ -19,14 +19,17 @@ bool loadPath(std::shared_ptr<stateRotate> sr, std::string filePath,
               std::vector<ansatz::rotationElement>& rotationPath);
 
 bool loadParameters(std::string filePath,
-                    std::vector<ansatz::rotationElement>& rotationPath,
+                    std::vector<ansatz::rotationElement> &rotationPath,
                     std::vector<std::vector<ansatz::rotationElement>> &rotationPaths,
-                    std::vector<std::pair<int,realNumType>> &order,
-                    int& numberOfUniqueParameters);
+                    std::vector<std::pair<int, realNumType>> &order,
+                    std::vector<realNumType> &ConstantOffset,
+                    int &numberOfUniqueParameters);
 
-bool loadParameters(const std::string& orderFilePath, const std::string& parameterFilePath,
-                    std::vector<ansatz::rotationElement>& rotationPath,
+bool loadParameters(const std::string &orderFilePath,
+                    const std::string &parameterFilePath,
+                    const std::string &constantOffsetFilePath,
+                    std::vector<ansatz::rotationElement> &rotationPath,
                     std::vector<std::vector<ansatz::rotationElement>> &rotationPaths,
-                    std::vector<std::pair<int,realNumType>> &orders/*the fixed relation between parameters*/,
-                    int& numberOfUniqueParameters);
-
+                    std::vector<std::pair<int, realNumType>> &orders /*the fixed relation between parameters*/,
+                    std::vector<realNumType> &ConstantOffset,
+                    int &numberOfUniqueParameters);

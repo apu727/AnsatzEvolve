@@ -151,8 +151,14 @@ void writeVector(std::string filename, std::vector<double> &vec)
     fclose(fp);
 }
 
-TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType,numType>> Ham, std::vector<std::pair<int,realNumType>> order,
-                               int numberOfUniqueParameters, realNumType NuclearEnergy, std::string runPath,  FILE* logfile)
+TUPSQuantities::TUPSQuantities(std::shared_ptr<HamiltonianMatrix<realNumType, numType>> Ham,
+                               std::vector<std::pair<int, realNumType>> order,
+                               const std::vector<realNumType> &ConstantOffset,
+                               int numberOfUniqueParameters,
+                               realNumType NuclearEnergy,
+                               std::string runPath,
+                               FILE *logfile)
+    : m_constantOffset(ConstantOffset)
 {
     m_file = logfile;
     if (m_file == nullptr)
@@ -278,9 +284,9 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
             myAnsatz->setCalculateSecondDerivatives(false);
             myAnsatz->resetPath();
             const std::vector<ansatz::rotationElement> &rp = rotationPaths[rpIndex];
-            for (auto rpe : rp)
+            for (size_t i = 0; i < rp.size(); i++)
             {
-                myAnsatz->addRotation(rpe.first,rpe.second);
+                myAnsatz->addRotation(rp[i].first, rp[i].second + m_constantOffset[i]);
                 //todo calculate quantities along path?
             }
         }
@@ -291,7 +297,10 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
         if (useFusedEvolve)
         {
             std::transform(rotationPaths[rpIndex].begin(),rotationPaths[rpIndex].end(),anglesV.begin(),[](const ansatz::rotationElement& r){return r.second;});
-            FE->evolve(dest,anglesV);
+            if (opt.NoHFPath || rpIndex != 0)
+                for (size_t i = 0; i < anglesV.size(); i++)
+                    anglesV[i] += m_constantOffset[i];
+            FE->evolve(dest, anglesV);
         }
         else
             dest.copy(myAnsatz->getVec());
@@ -1917,6 +1926,7 @@ realNumType TUPSQuantities::OptimiseTups(stateAnsatz &myAnsatz, std::vector<base
             anglesV[i] = angles[i];
         }
     }
+    releaseAssert(false, "This is broken! - Angles not set properly");
     FusedEvolve FE(myAnsatz.getStart(),m_Ham,m_compressMatrix,m_deCompressMatrix);
     FE.updateExc(excs);
     realNumType Energy = OptimiseTups(FE,rp,avoidNegativeHessianValues);
@@ -1929,6 +1939,8 @@ realNumType TUPSQuantities::OptimiseTups(FusedEvolve& FE, std::vector<baseAnsatz
 
     std::vector<realNumType> anglesV(rp.size());
     std::transform(rp.begin(),rp.end(),anglesV.begin(),[](const ansatz::rotationElement& r){return r.second;});
+    for (size_t i = 0; i < anglesV.size(); i++)
+        anglesV[i] += m_constantOffset[i];
 
     realNumType normOfGradVector = 1;
     realNumType Energy = 0;
@@ -1980,6 +1992,12 @@ realNumType TUPSQuantities::OptimiseTups(FusedEvolve& FE, std::vector<baseAnsatz
     {
         angles[i] = anglesV[i];
         fprintf(stderr,"%.15lg\n",(double)anglesV[i]);
+    }
+    fprintf(stderr, "Constant Angles: \n");
+    for (size_t i = 0; i < anglesV.size(); i++)
+    {
+        anglesV[i] -= m_constantOffset[i];
+        fprintf(stderr, "%.15lg\n", (double) m_constantOffset[i]);
     }
     fprintf(stderr,"Condensed Angles: \n");
     vector<realNumType>::EigenVector angles2 = m_normCompressMatrix * angles;
