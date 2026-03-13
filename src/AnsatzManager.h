@@ -91,6 +91,7 @@ public:
     //external Usage functions
     bool setAngles(std::vector<realNumType> angles);
     vector<realNumType>::EigenVector getAngles();
+    vector<realNumType>::EigenVector getUncompressedAngles();
 
     bool getExpectationValue(realNumType& exptValue);
     bool getFinalState(vector<numType>& finalState);

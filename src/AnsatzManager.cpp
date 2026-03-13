@@ -530,6 +530,22 @@ vector<realNumType>::EigenVector stateAnsatzManager::getAngles()
     return vector<realNumType>::EigenVector();
 }
 
+vector<realNumType>::EigenVector stateAnsatzManager::getUncompressedAngles()
+{
+    bool success = true;
+    if (!validateToRun())
+    {
+        success = false;
+    }
+    if (success)
+    {
+        vector<realNumType> v(m_angles);
+        vector<realNumType>::EigenVector ev = v;
+        return ev;
+    }
+    return vector<realNumType>::EigenVector();
+}
+
 bool stateAnsatzManager::getExpectationValue(realNumType &exptValue)
 {
     bool success = true;

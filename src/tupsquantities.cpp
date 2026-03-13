@@ -1986,24 +1986,25 @@ realNumType TUPSQuantities::OptimiseTups(FusedEvolve& FE, std::vector<baseAnsatz
         else
             amStuck = false;
     }
-    fprintf(stderr,"Optimised Angles: \n");
+    bool printAngles = false;
+    if (printAngles) fprintf(stderr, "Optimised Angles: \n");
     Eigen::Vector<realNumType,Eigen::Dynamic> angles(anglesV.size());
     for(size_t i =0; i < anglesV.size(); i++)
     {
         angles[i] = anglesV[i];
-        fprintf(stderr,"%.15lg\n",(double)anglesV[i]);
+        if (printAngles) fprintf(stderr, "%.15lg\n", (double) anglesV[i]);
     }
-    fprintf(stderr, "Constant Angles: \n");
+    if (printAngles) fprintf(stderr, "Constant Angles: \n");
     for (size_t i = 0; i < anglesV.size(); i++)
     {
         anglesV[i] -= m_constantOffset[i];
-        fprintf(stderr, "%.15lg\n", (double) m_constantOffset[i]);
+        if (printAngles) fprintf(stderr, "%.15lg\n", (double) m_constantOffset[i]);
     }
-    fprintf(stderr,"Condensed Angles: \n");
+    if (printAngles) fprintf(stderr, "Condensed Angles: \n");
     vector<realNumType>::EigenVector angles2 = m_normCompressMatrix * angles;
     for(long i =0; i < angles2.rows(); i++)
     {
-        fprintf(stderr,"%.15lg\n",(double)angles2[i]);
+        if (printAngles) fprintf(stderr, "%.15lg\n", (double) angles2[i]);
     }
     for (size_t i = 0; i < rp.size(); i++)
     {
