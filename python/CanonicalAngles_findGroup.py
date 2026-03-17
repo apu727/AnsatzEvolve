@@ -1,6 +1,7 @@
 from PyAnsatzEvolve import stateAnsatzManager, loadPath, loadParameters,readCsvState,loadOperators,loadNuclearEnergy
 import numpy as np
 import os
+import math
 
 
 def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, InitialStateIndices, invertSignOfWavefunction = False):
@@ -171,15 +172,111 @@ def CanonicaliseAngles(man,Angles,operators, SDSPositions, InitialStateCoeffs, I
         assert(np.isclose(np.dot(stateBefore,stateAfter),1))
     return Angles
 
-if __name__ == "__main__":
-    DoH4 = False
-    if DoH4:
-        PathBase = os.path.dirname(os.path.realpath(__file__)) + "/../Hams/H4/L1/H4"
-    else:
-        PathBase = os.path.dirname(os.path.realpath(__file__)) + "/../Hams/H6/L1/H6"
+def readFile(PathBase,NumParameters):
+    FILEName = PathBase + "DeDuplicatedMinima"
+    ParameterList = []
+    pos = NumParameters
+    with open(FILEName) as f:
+        for line in f:
+            if pos == NumParameters:
+                ParameterList.append([])
+                pos = 0
+            ParameterList[-1].append(float(line))
+            pos += 1
+
+    return ParameterList
+class AngleOp:
+    """Apply y=mx + b*pi"""
+    def __init__(self,m,bNum,bDenom):
+        self.m = m
+        self.bNum = bNum
+        self.bDenom = bDenom
+        #cap to -pi to pi
+        if self.bNum > self.bDenom:
+            self.bNum -= 2*self.bDenom
+        elif self.bNum <= -self.bDenom:
+            self.bNum += 2*self.bDenom
+
+    def apply(self,Angle):
+        return Angle * self.m + (self.bNum*np.pi)/self.bDenom
     
+    def combine(self,other):
+        """Apply this after other
+           y1 = other.m *x + other.b
+           y2 = self.m * y1 + self.b
+        """
+
+        newM = self.m * other.m
+        # newB = self.m*other.bNum/other.bDenom + self.bNum/self.bDenom
+        newBNum = self.m*other.bNum*self.bDenom + self.bNum*other.bDenom
+        newBDenom = self.bDenom * other.bDenom
+        divisor = math.gcd(newBNum,newBDenom)
+        if divisor != 1:
+            newBNum = newBNum // divisor
+            newBDenom = newBDenom // divisor
+        #cap to -pi to pi
+        if newBNum > newBDenom:
+            newBNum -= 2*newBDenom
+        elif newBNum <= -newBDenom:
+            newBNum += 2*newBDenom
+        return AngleOp(newM,newBNum,newBDenom)
+
+    def __eq__(self, other):
+        return self.m == other.m and self.bNum == other.bNum and self.bDenom == other.bDenom
+    
+    def __repr__(self):
+        return f"{self.m}x+{self.bNum/self.bDenom}"
+
+class SymmetryElement:
+    def __init__(self,length):
+        self.length = length
+        self.Ops = [AngleOp(1,0,1)]*length
+    def getOps(self):
+        return self.Ops
+    def apply(self,Angles):
+        newAngles = Angles.copy()
+        for i in range(self.length):
+            newAngles[i] = self.Ops[i].apply(newAngles[i])
+        return newAngles
+    def combine(self,other):
+        newOps = [op1.combine(op2) for op1,op2 in zip(self.Ops,other.Ops)]
+        sym = SymmetryElement(self.length)
+        sym.Ops = newOps
+        return sym
+
+    def __eq__(self, other):
+        return self.length == other.length and self.Ops == other.Ops
+    
+    def __repr__(self):
+        return str([str(op) for op in self.Ops])
+
+def genGroup(Generators : list[SymmetryElement], maxElements = None):
+    if maxElements is None:
+        maxElements = 1000000000
+    Group = Generators.copy()
+    while True:
+        foundOne = False
+        for g1 in Group:
+            for g2 in Group:
+                newG = g1.combine(g2)
+                if not newG in Group:
+                    Group.append(newG)
+            if len(Group) >= maxElements:
+                return Group
+            print(f"Length so far {len(Group)}")
+        if foundOne == False:
+            break
+        
+    return Group
+
+
+if __name__ == "__main__":
+    PathBase = os.path.dirname(os.path.realpath(__file__)) + "/../Hams/refine/"
+    NumParameters = 15
+
+
     #Load a template path to know how long it will be.
-    templatePath = loadPath(PathBase + "_Operators.dat") # AKA qc_ucc.dat
+    templatePath = loadPath(PathBase + "qc_ucc.dat") # AKA qc_ucc.dat
     
     #Load all the paths from the files. returns a tuple with:
     # (rotationPaths,order,numberOfUniqueParameters)
@@ -188,12 +285,12 @@ if __name__ == "__main__":
     # numberOfUnique parameters represents the total number of free angles
 
     # AKA "qc_ucc_order.dat" and "lowest"
-    rotationPaths,order,ConstantOffset,numberOfUniqueParameters = loadParameters(PathBase + "_Order.dat",PathBase + "_Parameters.dat", PathBase + "_OffsetParameters.dat" ,templatePath)
+    rotationPaths,order,constantOffset, numberOfUniqueParameters = loadParameters(PathBase + "qc_ucc_order.dat",PathBase + "_Parameters.dat",PathBase + "_OFFSET.dat",templatePath)
     Angles = [[a[1] for a in p] for p in rotationPaths] # Extract the angles
 
     #Load the initial state
     # AKA qc_ucc_initial.dat
-    InitialState = readCsvState(PathBase + "_Initial.dat")
+    InitialState = readCsvState(PathBase + "qc_ucc_initial.dat")
     
     #Sparsify the initial state. Currently we can only deal with one basis state at the start
     InitialStateCoeffs = []
@@ -203,17 +300,15 @@ if __name__ == "__main__":
             InitialStateCoeffs.append(v)
             InitialStateIndices.append(i)
     assert(len(InitialStateCoeffs) == 1)
-    if DoH4:
-        InitialStateIndices[0] = 0b01010101
-    else:
-        InitialStateIndices[0] = 0b001011011001 # 00 10 11 | 01 10 01 <- Has all three cases. 
-    InitialStateIndices[0] = 0b010101010101
-
+    # if DoH4:
+    #     InitialStateIndices[0] = 0b01010011
+    # else:
+    #     InitialStateIndices[0] = 0b001011011001 # 00 10 11 | 01 10 01 <- Has all three cases. 
     numberOfQubits = round(np.log2(len(InitialState)))
 
     #Load the ansatz,
     #AKA qc_ucc.dat
-    Operators = loadOperators(PathBase + "_Operators.dat")
+    Operators = loadOperators(PathBase + "qc_ucc.dat")
 
     #Setup the ansatzManager to be able to run circuits
     man = stateAnsatzManager()
@@ -223,151 +318,147 @@ if __name__ == "__main__":
     man.storeOperators(Operators)
     #Setup nuclear energy - not needed for now
     # man.storeNuclearEnergy(loadNuclearEnergy("/home/bence/AnsatzEvolve/Hams/H4/L1/H4"))
+
     man.storeParameterDependencies(order)
+    
     #Set some initial angles, defaults to zero if not set
-    man.setAngles(Angles[1])
-
     #Hardcoded the SDS positions for the ansatz we are using, TODO determine this automatically its not trivial. 
-    if DoH4:
-        SDSPositions = [[[0,1],[2],[3,4]],[[5,6],[7],[8,9]]]
-    else:
-        SDSPositions = [[[0,1],[2],[3,4]],[[5,6],[7],[8,9]],[[10,11],[12],[13,14]]]
+    SDSPositions = [[[0,1],[2],[3,4]],[[5,6],[7],[8,9]],[[10,11],[12],[13,14]]]
+    ParameterList = readFile(PathBase,NumParameters)
+    for j in range(len(ParameterList)):
+        for i in range(len(ParameterList[j])):
+            while True:
+                if ParameterList[j][i] < -np.pi:
+                    ParameterList[j][i] += 2*np.pi
+                elif ParameterList[j][i] > np.pi:
+                    ParameterList[j][i] -= 2*np.pi
+                else:
+                    break
+    print(len(ParameterList))
+    states = []
+    for angleset in ParameterList:
+        man.setAngles(angleset)
+        states.append(man.getFinalState())
+    ovlps = np.einsum("il,jl->ij",states,states)
+    
+    def makeTrueEulerAngleOp(length,pos):
+        sym1 = SymmetryElement(length)
+        sym1.getOps()[pos+0] = AngleOp(1,1,2)
+        sym1.getOps()[pos+1] = AngleOp(-1,2,1)
+        sym1.getOps()[pos+2] = AngleOp(1,-1,2)
+        return sym1
+    def makeBadSinglesEulerAngleOp(length,pos):
+        sym2 = SymmetryElement(length)
+        sym2.getOps()[pos+0] = AngleOp(1,1,2)
+        sym2.getOps()[pos+1] = AngleOp(-1,2,1)
+        sym2.getOps()[pos+2] = AngleOp(1,1,2)
+        return sym2
+    def makeNegate(length):
+        sym3 = SymmetryElement(length)
+        for i in range(length):
+            sym3.getOps()[i] = AngleOp(-1,0,1)
+        return sym3
+    def makeAddPiFirstLayeSingles(length,pos):
+        sym2 = SymmetryElement(length)
+        sym2.getOps()[pos+0] = AngleOp(1,1,1)
+        sym2.getOps()[pos+2] = AngleOp(1,1,1)
+        return sym2
+    def makeSingletMirrorPlane(length,FirstLayerSDS1,FirstLayerSDS2,SecondLayerSDS):
+        sym = SymmetryElement(length)
+        sym.getOps()[FirstLayerSDS1] = AngleOp(-1,0,1)
+        sym.getOps()[FirstLayerSDS1+2] = AngleOp(-1,0,1)
+        sym.getOps()[FirstLayerSDS2] = AngleOp(-1,0,1)
+        sym.getOps()[FirstLayerSDS2+2] = AngleOp(-1,0,1)
 
+        sym.getOps()[SecondLayerSDS] = AngleOp(1,1,1)
+        return sym
+
+    length = 15
+    Genertors = []
+    # pos = 9
+    # Genertors.append(makeTrueEulerAngleOp(length,pos))
+    # Genertors.append(makeBadSinglesEulerAngleOp(length,pos))
+    # Genertors.append(makeAddPiFirstLayeSingles(length,pos))
+    for pos in [0,3,6]:
+        # Genertors.append(makeTrueEulerAngleOp(length,pos))
+        # Genertors.append(makeBadSinglesEulerAngleOp(length,pos))
+        # Genertors.append(makeAddPiFirstLayeSingles(length,pos))
+        pass
+    
+    for pos in [9,12]:
+        Genertors.append(makeTrueEulerAngleOp(length,pos))
+    Genertors.append(makeNegate(length))
+    Genertors.append(makeSingletMirrorPlane(length,3,6,12))
+    Genertors.append(makeSingletMirrorPlane(length,0,3,9))
+
+    group = genGroup(Genertors,int(128))
+    # target = SymmetryElement(length)
+    # target.getOps()[1] = AngleOp(-1,0,1)
+    # print(f"Target in group {target in group}")
+    print(f"Length {len(group)}")
+    # for g in group:
+    #     print(g)
+    NewParameterList = []
+    for g in group:
+        NewAngles = g.apply(ParameterList[0])
+        # foundOne = False
+        # for Index2,RawAngles2 in enumerate(NewParameterList):
+        #     if np.abs(np.max(np.array(RawAngles2)-np.array(NewAngles))) < 1e-10:
+        #         foundOne = True
+        #         break
+        # if not foundOne:
+        for i in range(len(NewAngles)):
+            while True:
+                if NewAngles[i] < -np.pi:
+                    NewAngles[i] += 2*np.pi
+                elif NewAngles[i] > np.pi:
+                    NewAngles[i] -= 2*np.pi
+                else:
+                    break
+        NewParameterList.append(NewAngles)
+    NotFoundParameterList = []
+    for Index2,RawAngles2 in enumerate(ParameterList):
+            foundOne = False
+            for p in NewParameterList:
+                if np.abs(np.max(np.array(RawAngles2)-np.array(p))) < 1e-10:
+                    foundOne = True
+                    break
+            if not foundOne:
+                NotFoundParameterList.append(RawAngles2)
+    print(f"Missing: {len(NotFoundParameterList)}")
+    
+    
+    for a in ParameterList[0]:
+        print(f"{a:8.5f}",end="")
+    print("")
+    man.setAngles(ParameterList[0])
+    state1 = man.getFinalState()
+    for angleset in NotFoundParameterList:
+        for a in angleset:
+            print(f"{a:8.5f}",end="")
+        man.setAngles(angleset)
+        state2 = man.getFinalState()
+        print(f"ovlp:{np.dot(state1,state2)}",end="")
+        print("")
+
+
+        
+            
+
+
+
+    
+
+
+
+    
+    
     #Compute the canonical angles for this wavefunction and check
-    Angles[2] = np.random.rand(12)
-    man.setAngles(Angles[2])
-    # man.optimise()
-    print(f"Energy Before-1:{man.getExpectationValue()}")
-    Angles[2] = man.getUncompressedAngles()
-    man.setAngles(Angles[2])
-    state1 = man.getFinalState()
     
-    if state1[InitialStateIndices[0]] > 0 or True:
-        CanAngles = CanonicaliseAngles(man,Angles[2],Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices)
-    else:
-        print("Sign bad")
-        CanAngles = CanonicaliseAngles(man,Angles[2],Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices,invertSignOfWavefunction = True)
-    CanAngles = [-0.0145884776106644, -0.1247704124773201, -0.2882533065194541, -0.4012116220754935, -2.2931851775e-05, -0.2677568031940356, 1.758429352450567, -0.0590830860828174, -1.7477552499794138, 1.4949652648905325, -0.0289661378324125, 1.6438456466440543]
-    man.setAngles(CanAngles)
-    # CanAngles = man.getUncompressedAngles()
-    # for i,c in enumerate(CanAngles):
-    #     while True:
-    #         if CanAngles[i] >= np.pi:
-    #             CanAngles[i] -= 2*np.pi
-    #         elif CanAngles[i] < -np.pi:
-    #             CanAngles[i] += 2*np.pi
-    #         else:
-    #             break
-    # print(f"Angles before:\n {np.array(Angles[2])}\n went to:\n {CanAngles}")
-    # man.setAngles(CanAngles)
-    for a in CanAngles:
-        if np.isclose(a,0):
-            print(f"{0.:7.5f} ",end="")
-        else:
-            print(f"{a:7.5f} ",end="")
-    print("")
-    state1 = man.getFinalState()
-    # print(f"Energy Before:{man.getExpectationValue()}")
-    # for i,v in enumerate(state1):
-    #     if not np.isclose(v,0):
-    #         print(f"i:{i}, v:{v}")
-    print("")
-    # multiple = -4
-    # for StartPos in range(0,21,5):
-    #     if CanAngles[2+StartPos] > 0:
-    #         CanAngles[0+StartPos] += multiple*(-np.pi/2)
-    #         CanAngles[1+StartPos] += multiple*(-np.pi/2)
-    #         CanAngles[2+StartPos] = 2*np.pi - CanAngles[2+StartPos] if multiple % 2 == 1 else CanAngles[2+StartPos]
-    #         CanAngles[3+StartPos] += multiple*(np.pi/2)
-    #         CanAngles[4+StartPos] += multiple*(np.pi/2)
-    # for i,c in enumerate(CanAngles):
-    #     while True:
-    #         if CanAngles[i] >= np.pi:
-    #             CanAngles[i] -= 2*np.pi
-    #         elif CanAngles[i] < -np.pi:
-    #             CanAngles[i] += 2*np.pi
-    #         else:
-    #             break
-#                 [-0.01459,-0.12477,-0.28825,-0.40121,-0.00002,-0.26776, 1.75843,-0.05908,-1.74776, 1.49497,         -0.02897, 1.64385 = -3.06854 - np.pi/2 + 2pi]
-    AimAngles = [-0.01459,-0.12477, 0.28825,-0.40121, 0.00002,-0.26776,-2.95396, 0.05908, 2.96463, 3.06576, 0.02897,-3.06854]
-    CanAngles[11] -=2*np.pi
-
-    CanAngles[9]  += np.pi/2
-    CanAngles[10] *= -1
-    CanAngles[11] -= np.pi/2
     
 
-    CanAngles[6] -= 3*np.pi/2
-    CanAngles[7] *= -1
-    CanAngles[8] += 3*np.pi/2
-    
-    #Singlet mirror plane
-    CanAngles[2] *= -1
-    CanAngles[4] *= -1
-    CanAngles[11] += np.pi
+    # print(f"Angles before:\n {np.array(Angles[1])}\n went to:\n {CanAngles}")
 
-    
-    print("Aim angles:")
-    for a in AimAngles:
-        if np.isclose(a,0):
-            print(f"{0.:7.5f} ",end="")
-        else:
-            print(f"{a:7.5f} ",end="")
-    print("")
-    for a in CanAngles:
-        if np.isclose(a,0):
-            print(f"{0.:7.5f} ",end="")
-        else:
-            print(f"{a:7.5f} ",end="")
-    print("")
-    man.setAngles(CanAngles)
-    state2 = man.getFinalState()
-    # for i,v in enumerate(state2):
-    #     if not np.isclose(v,0):
-    #         print(f"i:{i}, v:{v}")
 
-    # print("diff:")
-    # diffState = state2-state1
-    # for i,v in enumerate(diffState):
-    #     if not np.isclose(v,0):
-    #         print(f"i:{i}, v:{v}")
 
-    print(f"Overlap{np.dot(state1,state2)}")
-    # print(f"Angles after{CanAngles}")
-    print(f"Energy After:{man.getExpectationValue()}")
-    
-    print("Angles2")
-    for a in CanAngles:
-        if np.isclose(a,0):
-            print(f"{0.:7.5f} ",end="")
-        else:
-            print(f"{a:7.5f} ",end="")
-    print("")
-    
-    #Compute the canonical angles for the negative of this wavefunction and check    
-    # CanNegAngles = CanonicaliseAngles(man,Angles[2],Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices,True)
-    # print(f"Angles before:\n {np.array(Angles[2])}\n Went to:\n {CanNegAngles}")
-
-    #Fuzzing
-    def fuzzing():
-        numAngles = len(Angles[2])
-        for i in range(0,10000):
-            a = np.random.rand(numAngles)
-            #Enforce the orderfile
-            #This has been tacked on not the true order file as that has the SDS^{-1} structure already
-            if DoH4:
-                order = [(0,1),(0,1),(1,1),(2,1),(2,1),(3,1),(3,1),(4,1),(5,1),(5,1),(6,1),(6,1),(7,1),(8,1),(8,1)]
-                compA = np.zeros(9) # numUniqueParameters
-            else:
-                order = [(0,1),(0,1),(1,1),(2,1),(2,1),(3,1),(3,1),(4,1),(5,1),(5,1),(6,1),(6,1),(7,1),(8,1),(8,1),(9,1),(9,1),(10,1),(11,1),(11,1),(12,1),(12,1),(13,1),(14,1),(14,1)]
-                compA = np.zeros(15) # numUniqueParameters
-
-            for j,o in enumerate(order):
-                compA[o[0]] = a[j]
-            for j in range(len(a)):
-                a[j] = compA[order[j][0]]*order[j][1]
-
-            CanAngles = CanonicaliseAngles(man,a,Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices)
-            CanNegAngles = CanonicaliseAngles(man,a,Operators,SDSPositions,InitialStateCoeffs,InitialStateIndices,True)
-    # fuzzing()
 
