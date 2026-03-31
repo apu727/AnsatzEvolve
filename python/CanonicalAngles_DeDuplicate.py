@@ -181,6 +181,13 @@ def readFile(PathBase,NumParameters):
                 ParameterList.append([])
                 pos = 0
             ParameterList[-1].append(float(line))
+            while True:
+                if ParameterList[-1][-1] < -np.pi:
+                    ParameterList[-1][-1] += 2*np.pi
+                elif ParameterList[-1][-1] > np.pi:
+                    ParameterList[-1][-1] -= 2*np.pi
+                else:
+                    break
             pos += 1
 
     return ParameterList

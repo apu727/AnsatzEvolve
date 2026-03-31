@@ -192,10 +192,13 @@ class AngleOp:
         self.bNum = bNum
         self.bDenom = bDenom
         #cap to -pi to pi
-        if self.bNum > self.bDenom:
-            self.bNum -= 2*self.bDenom
-        elif self.bNum <= -self.bDenom:
-            self.bNum += 2*self.bDenom
+        while True:
+            if self.bNum > self.bDenom:
+                self.bNum -= 2*self.bDenom
+            elif self.bNum <= -self.bDenom:
+                self.bNum += 2*self.bDenom
+            else:
+                break
 
     def apply(self,Angle):
         return Angle * self.m + (self.bNum*np.pi)/self.bDenom
@@ -214,11 +217,7 @@ class AngleOp:
         if divisor != 1:
             newBNum = newBNum // divisor
             newBDenom = newBDenom // divisor
-        #cap to -pi to pi
-        if newBNum > newBDenom:
-            newBNum -= 2*newBDenom
-        elif newBNum <= -newBDenom:
-            newBNum += 2*newBDenom
+        
         return AngleOp(newM,newBNum,newBDenom)
 
     def __eq__(self, other):
@@ -387,11 +386,11 @@ if __name__ == "__main__":
     
     for pos in [9,12]:
         Genertors.append(makeTrueEulerAngleOp(length,pos))
-    Genertors.append(makeNegate(length))
+    # Genertors.append(makeNegate(length))
     Genertors.append(makeSingletMirrorPlane(length,3,6,12))
     Genertors.append(makeSingletMirrorPlane(length,0,3,9))
 
-    group = genGroup(Genertors,int(128))
+    group = genGroup(Genertors,int(64))
     # target = SymmetryElement(length)
     # target.getOps()[1] = AngleOp(-1,0,1)
     # print(f"Target in group {target in group}")
@@ -399,8 +398,14 @@ if __name__ == "__main__":
     # for g in group:
     #     print(g)
     NewParameterList = []
+    man.setAngles(ParameterList[0])
+    state1 = man.getFinalState()
     for g in group:
         NewAngles = g.apply(ParameterList[0])
+        man.setAngles(NewAngles)
+        state2 = man.getFinalState()
+        if not np.isclose(np.dot(state1,state2),1):
+            print(f"Not symmetry!!!:{np.dot(state1,state2)}",end="")
         # foundOne = False
         # for Index2,RawAngles2 in enumerate(NewParameterList):
         #     if np.abs(np.max(np.array(RawAngles2)-np.array(NewAngles))) < 1e-10:
@@ -431,8 +436,7 @@ if __name__ == "__main__":
     for a in ParameterList[0]:
         print(f"{a:8.5f}",end="")
     print("")
-    man.setAngles(ParameterList[0])
-    state1 = man.getFinalState()
+    
     for angleset in NotFoundParameterList:
         for a in angleset:
             print(f"{a:8.5f}",end="")
