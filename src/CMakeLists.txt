@@ -16,7 +16,7 @@ endif(NOT CMAKE_BUILD_TYPE)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # using regular Clang or AppleClang
-    if (CMAKE_OSX_SYSROOT)
+    if (CMAKE_OSX_SYSROOT OR CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
         #Apple specific configs
         message("COMPILER IDENTIFIED AS APPLE CLANG")
 
