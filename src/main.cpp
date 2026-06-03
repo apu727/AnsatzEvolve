@@ -70,6 +70,7 @@ struct options
     int numberOfOverlapsToCompute = 1;
     bool noHess = false;
     bool NoHFPath = false;
+    bool loadExtractedMin = false;
     static void printHelp()
     {
         logger().log("Help:");
@@ -86,6 +87,7 @@ struct options
         logger().log("'NOverlap' ----------------- Compute the overlap of the result with the N Lowest eigenvectors");
         logger().log("'NoHess' ------------------- Don't compute the Hessian and metric");
         logger().log("'NoHFPath' ----------------- Don't autogenerate the zero angle path");
+        logger().log("'loadExtractedMin'---------- load the paths from the ExtractedMin file");
         logger().log("'help' --------------------- Print this");
     }
     static options parse(int argc, char* argv[])
@@ -197,6 +199,10 @@ struct options
             else if (!strcmp(arg, "NoHFPath"))
             {
                 o.NoHFPath = true;
+            }
+            else if (!strcmp(arg, "loadExtractedMin"))
+            {
+                o.loadExtractedMin = true;
             }
             else if (!strcmp(arg,"help"))
             {
@@ -344,13 +350,17 @@ int main(int argc, char *argv[])
 
 
     std::vector<ansatz::rotationElement> rotationPath;
-    loadPath(lie,filePath + "_Operators.dat",rotationPath);
+    if (!loadPath(lie, filePath + "_Operators.dat", rotationPath)) return 1;
 
     std::vector<std::vector<ansatz::rotationElement>> rotationPaths;
     std::vector<std::pair<int,realNumType>> order;
     int numberOfUniqueParameters = 0;
     if (!loadParameters(filePath,rotationPath,rotationPaths,order,numberOfUniqueParameters))
         return 1;
+    if (opt.loadExtractedMin)
+    {
+        loadExtractedMin(filePath + "_extractedmin", rotationPath, order, numberOfUniqueParameters, rotationPaths);
+    }
 
     if (opt.numberOfPathsToLoad > -1)
     {

@@ -129,7 +129,7 @@ void writeMatrix(std::string filename, Matrix<std::complex<long double>>::EigenM
     }
     fclose(fp);
 }
-
+//writes a vector as a .Vecbin and .Vecsv Vector is written as a row
 void writeVector(std::string filename, std::vector<double> &vec)
 {
     FILE* fp = fopen((filename + ".Vecbin").c_str(),"wb");
@@ -148,6 +148,18 @@ void writeVector(std::string filename, std::vector<double> &vec)
         fprintf(fp,"%.16lg,",vec[i]);
     }
     fprintf(fp,"\n");
+    fclose(fp);
+}
+
+//same as writeVector but only the csv and as a col vector.
+void writeColumnVector(std::string filename, std::vector<double> &vec)
+{
+    FILE *fp = fopen((filename + ".ColVeccsv").c_str(), "w");
+    if (!fp) return;
+    for (size_t i = 0; i < vec.size(); i++)
+    {
+        fprintf(fp, "%.16lg\n", vec[i]);
+    }
     fclose(fp);
 }
 
@@ -550,6 +562,7 @@ void TUPSQuantities::writeProperties(std::shared_ptr<stateAnsatz> myAnsatz,
             printOutputLine(OverlapsWithStates[stateIdx], "OverlapWithState_" + std::to_string(stateIdx));
             printOutputLine(MagOfOverlapsWithStates[stateIdx], "MagOfOverlapWithState_" + std::to_string(stateIdx));
             writeVector(m_runPath + "_MagOfOverlapWithGroundState_" + std::to_string(stateIdx), MagOfOverlapsWithStates[stateIdx]);
+            writeColumnVector(m_runPath + "_MagOfOverlapWithGroundState_" + std::to_string(stateIdx), MagOfOverlapsWithStates[stateIdx]);
         }
     }
 }

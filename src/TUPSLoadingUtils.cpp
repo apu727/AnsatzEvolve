@@ -182,8 +182,9 @@ bool loadParameters(const std::string &orderFilePath, const std::string &paramet
     if(fp == nullptr)
     {
         fprintf(stderr,"\nError in opening file.");
-        fprintf(stderr,"fileGiven: %s\n",parameterFilePath.c_str());
-        return 0;
+        fprintf(stderr, "fileGiven: %s\n", parameterFilePath.c_str());
+        fprintf(stderr, "Continuing with error\n");
+        // return 0;
     }
 
     fp2 = fopen(orderFilePath.c_str(), "r");
@@ -229,7 +230,7 @@ Energy of minimum      2=  -2.809247486912495 first found at step       12 after
     realNumType parameter = realNumType();
     std::vector<std::vector<realNumType>> parameters;
 
-    while(EOF != ret)
+    while ((fp != nullptr) && EOF != ret)
     {
         ret = fscanf(fp, "%i", &numberOfParameters);
 
@@ -285,11 +286,75 @@ Energy of minimum      2=  -2.809247486912495 first found at step       12 after
     }
     numberOfUniqueParameters = std::max(maxOrder+1,numberOfUniqueParameters);
     fclose(fp2);
-    fclose(fp);
+    if (fp != nullptr) fclose(fp);
     if (pathIndex != rotationPath.size())
     {
         fprintf(stderr, "More operators in path than relations given\n");
         return 0;
     }
     return 1;
+}
+
+bool loadExtractedMin(const std::string &extractedMinPath,
+                      const std::vector<baseAnsatz::rotationElement> &rotationPath,
+                      const std::vector<std::pair<int, realNumType>> &orders,
+                      int numberOfUniqueParameters,
+                      std::vector<std::vector<baseAnsatz::rotationElement>> &rotationPaths)
+{
+    FILE *fp;
+
+    fp = fopen(extractedMinPath.c_str(), "r");
+    if (fp == nullptr)
+    {
+        fprintf(stderr, "\nError in opening file. \n");
+        fprintf(stderr, "fileGiven: %s\n", extractedMinPath.c_str());
+        return 0;
+    }
+
+    int ret = 0;
+    realNumType parameter = realNumType();
+    std::vector<std::vector<realNumType>> parameters;
+
+    while (EOF != ret)
+    {
+        //Try a read
+        ret = fscanf(fp, realNumTypeCode, &parameter);
+        if (ret == EOF) break;
+        if (ret != 1) fprintf(stderr, "loadExtractedMin> Unable to read an angle when I expected an angle!!!!!!\n");
+        //read succeeded,
+        parameters.push_back(std::vector<realNumType>());
+        parameters.back().push_back(parameter);
+        for (int i = 1; i < numberOfUniqueParameters; i++)
+        {
+            ret = fscanf(fp, realNumTypeCode, &parameter);
+            if (ret != 1) fprintf(stderr, "loadExtractedMin> Unable to read an angle when I expected an angle!!!!!!\n");
+            parameters.back().push_back(parameter);
+        }
+    }
+
+    rotationPaths.clear();
+    //first is 0 angle path
+    rotationPaths.assign(parameters.size() + 1, rotationPath);
+
+    size_t numberOfParameters = std::min(orders.size(), rotationPath.size());
+    if (orders.size() != rotationPath.size())
+    {
+        fprintf(stderr, "loadExtractedMin> orders.size() != rotationPath.size() (%zu != %zu)", orders.size(), rotationPath.size());
+    }
+    for (size_t j = 0; j < orders.size(); j++)
+    {
+        int order = orders[j].first;
+        realNumType scaleFactor = orders[j].second;
+
+        if (order < numberOfUniqueParameters && j < numberOfParameters)
+        {
+            for (size_t i = 0; i < parameters.size(); i++)
+            {
+                rotationPaths[i + 1][j].second = parameters[i][order] * scaleFactor;
+            }
+        }
+    }
+    fclose(fp);
+
+    return true;
 }

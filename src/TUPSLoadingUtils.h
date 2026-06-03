@@ -30,3 +30,11 @@ bool loadParameters(const std::string& orderFilePath, const std::string& paramet
                     std::vector<std::pair<int,realNumType>> &orders/*the fixed relation between parameters*/,
                     int& numberOfUniqueParameters);
 
+//Loads the parameters from an extractedMin file. This is file with angles. one angle on each line,
+//numberOfUniqueParameters dictates how many angles to read in one go.
+//orders is used to decompress the angles.
+bool loadExtractedMin(const std::string &extractedMinPath,
+                      const std::vector<ansatz::rotationElement> &rotationPath,
+                      const std::vector<std::pair<int, realNumType>> &orders,
+                      int numberOfUniqueParameters,
+                      std::vector<std::vector<ansatz::rotationElement>> &rotationPaths);
