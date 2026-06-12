@@ -185,6 +185,28 @@ def readFile(PathBase,NumParameters):
             pos += 1
 
     return ParameterList
+
+def readGeneratorsFromFile(filename,length):
+    generators = []
+    state = "ReadNumber"
+    numGenerators = 0
+    with open(filename) as f:
+        for line in f:
+            if state == "ReadNumber":
+                generators.append(SymmetryElement(length))
+                numGenerators = int(line)
+                state = "LoadGens"
+            elif state == "LoadGens":
+                splitLine = line.split(" ")
+                splitLine = [int(s) for s in splitLine[:4]]
+                generators[-1].getOps()[splitLine[0]-1] = AngleOp(splitLine[1],splitLine[2],splitLine[3])
+                numGenerators -= 1
+                if numGenerators == 0:
+                    state = "ReadNumber"
+    assert(state == "ReadNumber")
+    return generators
+            
+
 class AngleOp:
     """Apply y=mx + b*pi"""
     def __init__(self,m,bNum,bDenom):
@@ -249,29 +271,63 @@ class SymmetryElement:
     def __repr__(self):
         return str([str(op) for op in self.Ops])
 
+# def genGroup(Generators : list[SymmetryElement], maxElements = None):
+#     if maxElements is None:
+#         maxElements = 1000000000
+#     Group = Generators.copy()
+#     while True:
+#         foundOne = False
+#         for g1 in Group:
+#             for g2 in Group:
+#                 newG = g1.combine(g2)
+#                 if not newG in Group:
+#                     Group.append(newG)
+#             if len(Group) >= maxElements:
+#                 return Group
+#             print(f"Length so far {len(Group)}")
+#         if foundOne == False:
+#             break
+        
+#     return Group
 def genGroup(Generators : list[SymmetryElement], maxElements = None):
-    if maxElements is None:
-        maxElements = 1000000000
-    Group = Generators.copy()
-    while True:
-        foundOne = False
-        for g1 in Group:
-            for g2 in Group:
-                newG = g1.combine(g2)
-                if not newG in Group:
-                    Group.append(newG)
-            if len(Group) >= maxElements:
-                return Group
-            print(f"Length so far {len(Group)}")
-        if foundOne == False:
-            break
+    orders = []
+    
+    Id = SymmetryElement(Genertors[0].length)
+    g = Id
+    GroupOrder = 1
+    for i in range(len(Generators)):
+        if g == Id:
+            orders.append(0)
+        while True:
+            g = g.combine(Generators[i])
+            orders[-1] += 1
+            if g == Id:
+                break
+        GroupOrder *= orders[-1]
+        g = Id
+    
+    Group = [Id]
+    g = Id
+    Pos = [0] * len(orders)
+    print(f"GroupOrder: {GroupOrder}")
+    for i in range(1,GroupOrder):
+        for j in range(len(Pos)):
+            Pos[j] += 1
+            g = g.combine(Generators[j])
+            if Pos[j] == orders[j]:
+                Pos[j] = 0
+            else:
+                break
+        Group.append(g)
+        if (i % 10000 == 0):
+            print(f"on: {i}")
+    
         
     return Group
 
-
 if __name__ == "__main__":
-    PathBase = os.path.dirname(os.path.realpath(__file__)) + "/../Hams/refine/"
-    NumParameters = 15
+    PathBase = os.path.dirname(os.path.realpath(__file__)) + "/../Hams/L1_oo_pp_28/"
+    NumParameters = 28
 
 
     #Load a template path to know how long it will be.
@@ -371,8 +427,30 @@ if __name__ == "__main__":
 
         sym.getOps()[SecondLayerSDS] = AngleOp(1,1,1)
         return sym
+    
+    def makeSingletMirrorPlaneSize4(length,Neg1,Neg2,PI1,PI2):
+        sym = SymmetryElement(length)
+        sym.getOps()[Neg1] = AngleOp(-1,0,1)
+        sym.getOps()[Neg2] = AngleOp(-1,0,1)
+        sym.getOps()[PI1] = AngleOp(1,1,1)
+        sym.getOps()[PI2] = AngleOp(1,1,1)
+        return sym
+    def makeSingletMirrorPlaneSize3(length,Neg1,Neg2,PI1):
+        sym = SymmetryElement(length)
+        sym.getOps()[Neg1] = AngleOp(-1,0,1)
+        sym.getOps()[Neg2] = AngleOp(-1,0,1)
+        sym.getOps()[PI1] = AngleOp(1,1,1)
+        return sym
+    def makeSingletMirrorPlaneSize5(length,Neg1,Neg2,PI1):
+        sym = SymmetryElement(length)
+        sym.getOps()[Neg1] = AngleOp(-1,0,1)
+        sym.getOps()[Neg1+2] = AngleOp(-1,0,1)
+        sym.getOps()[Neg2] = AngleOp(-1,0,1)
+        sym.getOps()[Neg2+2] = AngleOp(-1,0,1)
+        sym.getOps()[PI1] = AngleOp(1,1,1)
+        return sym
 
-    length = 15
+    length = NumParameters
     Genertors = []
     # pos = 9
     # Genertors.append(makeTrueEulerAngleOp(length,pos))
@@ -386,11 +464,15 @@ if __name__ == "__main__":
     
     for pos in [9,12]:
         Genertors.append(makeTrueEulerAngleOp(length,pos))
+        pass
     # Genertors.append(makeNegate(length))
     Genertors.append(makeSingletMirrorPlane(length,3,6,12))
     Genertors.append(makeSingletMirrorPlane(length,0,3,9))
+    
+    Genertors = readGeneratorsFromFile(PathBase + "qc_ucc_sym_gens.dat",length)
+    
 
-    group = genGroup(Genertors,int(64))
+    group = genGroup(Genertors,int(524288))
     # target = SymmetryElement(length)
     # target.getOps()[1] = AngleOp(-1,0,1)
     # print(f"Target in group {target in group}")
@@ -400,12 +482,15 @@ if __name__ == "__main__":
     NewParameterList = []
     man.setAngles(ParameterList[0])
     state1 = man.getFinalState()
-    for g in group:
+    Hessian = man.getHessianComp()
+    E,V = np.linalg.eigh(Hessian)
+    
+    for idx,g in enumerate(group):
         NewAngles = g.apply(ParameterList[0])
-        man.setAngles(NewAngles)
-        state2 = man.getFinalState()
-        if not np.isclose(np.dot(state1,state2),1):
-            print(f"Not symmetry!!!:{np.dot(state1,state2)}",end="")
+        # man.setAngles(NewAngles)
+        # state2 = man.getFinalState()
+        # if not np.isclose(np.dot(state1,state2),1):
+        #     print(f"Not symmetry!!!:{np.dot(state1,state2)}",end="")
         # foundOne = False
         # for Index2,RawAngles2 in enumerate(NewParameterList):
         #     if np.abs(np.max(np.array(RawAngles2)-np.array(NewAngles))) < 1e-10:
@@ -421,15 +506,27 @@ if __name__ == "__main__":
                 else:
                     break
         NewParameterList.append(NewAngles)
+        if (idx % 10000 == 0):
+            print(f"on:{idx}")
     NotFoundParameterList = []
     for Index2,RawAngles2 in enumerate(ParameterList):
+            #Check that we should find it:
+            man.setAngles(RawAngles2)
+            state2 = man.getFinalState()
+            ovlp = np.dot(state1,state2)
+            # print(f"ovlp:{ovlp}")
+            if not np.isclose(ovlp,1):
+                continue
             foundOne = False
             for p in NewParameterList:
-                if np.abs(np.max(np.array(RawAngles2)-np.array(p))) < 1e-10:
+                if np.abs(np.max(np.array(RawAngles2)-np.array(p))) < 1e-6:
                     foundOne = True
                     break
             if not foundOne:
                 NotFoundParameterList.append(RawAngles2)
+                
+            if (Index2 % 1 == 0):
+                print(f"on:{Index2}, foundOne:{foundOne}")
     print(f"Missing: {len(NotFoundParameterList)}")
     
     

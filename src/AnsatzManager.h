@@ -48,6 +48,8 @@ private:
     std::vector<stateRotate::exc> m_excitations;
     vector<numType> m_start; // Size != 0
     std::shared_ptr<HamiltonianMatrix<realNumType,numType>> m_Ham; // Size != 0
+    std::shared_ptr<RDM<realNumType, numType>> myRDM = nullptr;
+
     int m_numberOfParticles = -1;
     int m_spinUp = -1;
     int m_spinDown = -1;
@@ -99,6 +101,7 @@ public:
     bool getGradientComp(vector<realNumType>& gradient); // compressed format
     bool getHessian(Matrix<realNumType>::EigenMatrix& hessian);
     bool getHessianComp(Matrix<realNumType>::EigenMatrix& hessian);
+    bool get1RDM(Matrix<numType>::EigenMatrix &RDM1);
     //TODO get Hessian And Derivative in one
 
     //Allow providing the angle and update if needed

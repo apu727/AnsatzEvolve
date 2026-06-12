@@ -106,6 +106,7 @@ bool stateAnsatzManager::construct()
         logger().log("particleNumSym:",m_particleSym);
         if (!setHamiltonian())
             return false;
+        myRDM = std::make_shared<RDM<realNumType, numType>>(m_numberOfQubits, m_compressor);
         if constexpr(useFused)
         {
             if (m_compressStateVectors)
@@ -668,6 +669,22 @@ bool stateAnsatzManager::getHessianComp(Matrix<realNumType>::EigenMatrix &hessia
         }
     }
     return success;
+}
+
+bool stateAnsatzManager::get1RDM(Matrix<numType>::EigenMatrix &RDM1)
+{
+    if (!myRDM) return false;
+
+    bool success = true;
+    if (!validateToRun())
+    {
+        success = false;
+        return success;
+    }
+    const vector<numType> &dest = useFused ? m_current : m_ansatz->getVec();
+
+    RDM1 = myRDM->get1RDM(dest);
+    return true;
 }
 
 bool stateAnsatzManager::getExpectationValue(const std::vector<realNumType> &angles, realNumType &exptValue)

@@ -195,8 +195,8 @@ def readFile(PathBase,NumParameters):
         
 
 if __name__ == "__main__":
-    PathBase = os.path.dirname(os.path.realpath(__file__)) + "/../Hams/refine/"
-    NumParameters = 15
+    PathBase = os.path.dirname(os.path.realpath(__file__)) + "/../Hams/L1_oo_pp_28/"
+    NumParameters = 28
 
 
     #Load a template path to know how long it will be.

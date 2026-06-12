@@ -68,12 +68,66 @@ public:
 
 };
 
+template<typename dataType, typename vectorType>
+class RDM;
+//dest must be appropriately resized and zeroed
+template<typename dataType, typename vectorType, bool compressed>
+void opKernel(
+    Eigen::Matrix<vectorType, -1, -1> &ret,
+    const vectorType *src,
+    std::vector<typename RDM<dataType, vectorType>::RDMOp> ops,
+    std::shared_ptr<compressor> comp,
+    size_t numQubits
+);
+
+template<typename dataType, typename vectorType>
+class RDM
+{
+public:
+    struct RDMOp
+    {
+        excOp exc;
+        std::pair<long, long> idxs; // stores where this goes. either 2rdm, 1rdm etc.
+    };
+
+private:
+    //not adapted for Hermitian Sym!
+    std::vector<RDMOp> m_twoRDMOps; // a^\dagger_i a^\dagger_k a_j a_l, i > k && j < l
+    std::vector<RDMOp> m_oneRDMOps; // a^\dagger_i  a_j no restriction
+    //m_numberCorr2RDMOps = n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j = -a^\dagger_i a^\dagger_j a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum)
+    //                                                                 = a^\dagger_j a^\dagger_i a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum)
+    //Note that we require j>i or j<i in the two electron term. For it to be normal ordered (and therefore have the correct phase when applied to a basis state) the second swap must be performed.
+    // This gives two cases: a^\dagger_2 a^\dagger_1 a_1 a_2 - Correct normal ordered
+    //                       a^\dagger_1 a^\dagger_2 a_2 a_1 -- Wrong normal ordered but double error cancels.
+    // Therefore there are no extra signs to take care of.
+    std::vector<RDMOp> m_numberCorr2RDMOps;
+    std::vector<RDMOp> m_numberCorr1RDMOps; // n_i = a^\dagger_i  a_i no restriction
+
+    std::shared_ptr<compressor> m_comp;
+    bool m_isCompressed;
+    size_t m_numQubits;
+
+public:
+    RDM(size_t numberOfQubits, std::shared_ptr<compressor> comp);
+
+    // ret_{(ji)(kl)} = <a^\dagger_i a^\dagger_j a_k a_l> at (j*m_numQubits+i,k*m_numQubits+l)
+    // The (ji) ordering is such that when (kl) == (ji) there are no phases.
+    Eigen::Matrix<vectorType, -1, -1> get2RDM(const vector<vectorType> &src);
+    Eigen::Matrix<vectorType, -1, -1> get1RDM(const vector<vectorType> &src);           // ret_{ik} = <a^\dagger_i a_k>
+    Eigen::Matrix<vectorType, -1, -1> getNumberCorr2RDM(const vector<vectorType> &src); // ret_{ik} = n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j
+    Eigen::Matrix<vectorType, -1, 1> getNumberCorr1RDM(const vector<vectorType> &src);  // ret_{ik} = n_i = a^\dagger_i  a_i
+};
+
 #ifdef useComplex
 extern template class HamiltonianMatrix<realNumType,realNumType>;
 extern template class HamiltonianMatrix<realNumType,numType>;
 extern template class HamiltonianMatrix<numType,numType>;
+extern template class RDM<realNumType, realNumType>;
+extern template class RDM<realNumType, numType>;
+extern template class RDM<numType, numType>;
 #else
 extern template class HamiltonianMatrix<numType,numType>;
+extern template class RDM<numType, numType>;
 #endif
 
 #endif // HAMILTONIANMATRIX_H

@@ -5,6 +5,7 @@
  */
 #include "hamiltonianmatrix.h"
 #include "logger.h"
+#include "myComplex.h"
 #include "threadpool.h"
 #include <chrono>
 static size_t choose(size_t n, size_t k)
@@ -1069,19 +1070,279 @@ vector<vectorType> HamiltonianMatrix<dataType, vectorType>::apply(const vector<v
     return ret;
 }
 
+//dest must be appropriately resized and zeroed
+template<typename dataType, typename vectorType, bool compressed>
+void opKernel(
+    Eigen::Matrix<vectorType, -1, -1> &ret,
+    const vectorType *src,
+    std::vector<typename RDM<dataType, vectorType>::RDMOp> ops,
+    std::shared_ptr<compressor> comp,
+    size_t numQubits
+)
+{
+    size_t opCount = ops.size();
+    size_t vecSize = 0;
+    if constexpr (compressed)
+        vecSize = comp->getCompressedSize();
+    else
+        vecSize = 1ul << numQubits;
 
+    threadpool &pool = threadpool::getInstance(NUM_CORES);
+    size_t stepSize = std::max(opCount / NUM_CORES, 1ul);
+    std::vector<std::future<void>> futs;
+    for (size_t startOp = 0; startOp < opCount; startOp += stepSize)
+    {
+        size_t endOp = std::min(startOp + stepSize, opCount);
+        futs.push_back(pool.queueWork([&src, &ret, startOp, endOp, vecSize, &ops, comp]()
+        {
+            for (size_t opIdx = startOp; opIdx < endOp; opIdx++)
+            {
+                uint32_t create = ops[opIdx].exc.create;
+                uint32_t destroy = ops[opIdx].exc.destroy;
+                uint32_t signMask = ops[opIdx].exc.signBitMask;
+                vectorType &dest = ret.coeffRef(ops[opIdx].idxs.first, ops[opIdx].idxs.second);
+                for (uint32_t i = 0; i < vecSize; i++)
+                {
+                    uint32_t iBasisState = i;
+                    if constexpr (compressed) comp->deCompressIndex(iBasisState, iBasisState);
+                    uint32_t jBasisState = destroy ^ iBasisState;
+                    bool canDestroy = (jBasisState & destroy) == 0;
+                    bool canCreate = (create & jBasisState) == 0;
+                    jBasisState = (create | jBasisState);
 
+                    if ((canDestroy && canCreate) == false) continue;
+                    if constexpr (compressed)
+                    {
+                        if (!comp->compressIndex(jBasisState, jBasisState)) continue;
+                    }
+                    bool sign = popcount(iBasisState & signMask) & 1;
+                    dest += (sign ? -1 : 1) * myConj(src[jBasisState]) * src[i];
+                }
+            }
+        }));
+    }
+    for (auto &f : futs)
+        f.wait();
+}
 
+template<typename dataType, typename vectorType>
+RDM<dataType, vectorType>::RDM(size_t numberOfQubits, std::shared_ptr<compressor> comp)
+{
+    //miscelleneous
+    assert(numberOfQubits < 64);
+    m_numQubits = numberOfQubits;
+    m_comp = comp;
+    m_isCompressed = (bool) comp;
 
+    //2RDM - Construct in the same order as secQuantHam as that seems to work. We can sort it later.
+    //a^\dagger_i a^\dagger_k a_j a_l, i > k && j < l
+    m_twoRDMOps.clear();
+    m_twoRDMOps.reserve(m_numQubits * m_numQubits * m_numQubits * m_numQubits);
+    for (size_t k = 0; k < m_numQubits; k++)
+    {
+        for (size_t i = k + 1; i < m_numQubits; i++)
+        {
+            for (size_t j = 0; j < m_numQubits; j++)
+            {
+                for (size_t l = j + 1; l < m_numQubits; l++)
+                {
+                    uint32_t create = (1u << i) | (1u << k);
+                    uint32_t destroy = (1u << j) | (1u << l);
+                    uint32_t signMask = ((1u << i) - 1) ^ ((1u << k) - 1) ^ ((1u << j) - 1) ^ ((1u << l) - 1);
+                    signMask = signMask & ~((1u << i) | (1u << k) | (1u << j) | (1u << l));
+                    std::pair<long, long> idxs = std::make_pair(k * m_numQubits + i, j * m_numQubits + l);
+                    RDMOp op = {.exc = {.create = create, .destroy = destroy, .signBitMask = signMask}, .idxs = idxs};
+                    m_twoRDMOps.push_back(op);
+                }
+            }
+        }
+    }
+    m_twoRDMOps.shrink_to_fit();
 
+    //oneRDMOps
+    m_oneRDMOps.clear();
+    m_oneRDMOps.reserve(m_numQubits * m_numQubits);
+    for (size_t i = 0; i < m_numQubits; i++)
+    {
+        for (size_t j = 0; j < m_numQubits; j++)
+        {
+            uint32_t create = (1u << i);
+            uint32_t destroy = (1u << j);
+            uint32_t signMask = ((1u << i) - 1) ^ ((1u << j) - 1);
+            signMask = signMask & ~((1u << i) | (1u << j));
+            std::pair<long, long> idxs = std::make_pair(i, j);
+            RDMOp op = {.exc = {.create = create, .destroy = destroy, .signBitMask = signMask}, .idxs = idxs};
+            m_oneRDMOps.push_back(op);
+        }
+    }
+    m_oneRDMOps.shrink_to_fit();
+    //m_numberCorr2RDMOps = n_i n_j = a^\dagger_i  a_i a^\dagger_j a_j = -a^\dagger_i a^\dagger_j a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum)
+    //                                                                 = a^\dagger_j a^\dagger_i a_i a_j + a^\dagger_i \delta_{ij} a_j (nosum)
+    //Note that we require j>i or j<i in the two electron term. For it to be normal ordered (and therefore have the correct phase when applied to a basis state) the second swap must be performed.
+    // This gives two cases: a^\dagger_2 a^\dagger_1 a_1 a_2 - Correct normal ordered
+    //                       a^\dagger_1 a^\dagger_2 a_2 a_1 -- Wrong normal ordered but double error cancels.
+    // Therefore there are no extra signs to take care of.
 
+    m_numberCorr2RDMOps.clear();
+    m_numberCorr2RDMOps.reserve(m_numQubits * m_numQubits);
+    for (size_t i = 0; i < m_numQubits; i++)
+    {
+        for (size_t j = 0; j < m_numQubits; j++)
+        {
+            if (i != j)
+            {
+                uint32_t create = (1ul << i) | (1ul << j);
+                uint32_t destroy = (1ul << i) | (1ul << j);
+                uint32_t signMask = ((1ul << i) - 1) ^ ((1ul << j) - 1) ^ ((1ul << i) - 1) ^ ((1ul << j) - 1);
+                signMask = signMask & ~((1ul << i) | (1ul << j) | (1ul << i) | (1ul << j));
+                assert(signMask == 0);
+                std::pair<long, long> idxs = std::make_pair(i, j);
+                RDMOp op = {.exc = {.create = create, .destroy = destroy, .signBitMask = signMask}, .idxs = idxs};
+                m_numberCorr2RDMOps.push_back(op);
+            }
+            else
+            {
+                //i == j
+                uint32_t create = (1ul << i);
+                uint32_t destroy = (1ul << i);
+                uint32_t signMask = 0;
+                signMask = 0;
+                std::pair<long, long> idxs = std::make_pair(i, j);
+                RDMOp op = {.exc = {.create = create, .destroy = destroy, .signBitMask = signMask}, .idxs = idxs};
+                m_numberCorr2RDMOps.push_back(op);
+            }
+        }
+    }
+    m_numberCorr2RDMOps.shrink_to_fit();
+
+    //m_numberCorr1RDMOps = n_i = a^\dagger_i  a_i
+    m_numberCorr1RDMOps.clear();
+    m_numberCorr1RDMOps.reserve(m_numQubits);
+    for (size_t i = 0; i < m_numQubits; i++)
+    {
+        uint32_t create = (1ul << i);
+        uint32_t destroy = (1ul << i);
+        uint32_t signMask = 0;
+        std::pair<long, long> idxs = std::make_pair(i, 0);
+        RDMOp op = {.exc = {.create = create, .destroy = destroy, .signBitMask = signMask}, .idxs = idxs};
+        m_numberCorr1RDMOps.push_back(op);
+    }
+    m_numberCorr1RDMOps.shrink_to_fit();
+}
+
+template<typename dataType, typename vectorType>
+Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::get2RDM(const vector<vectorType> &src)
+{
+    {
+        std::shared_ptr<compressor> c;
+        assert(src.getIsCompressed(c) == m_isCompressed && c == m_comp);
+    }
+    Eigen::Matrix<dataType, -1, -1> ret;
+    ret.resize(m_numQubits * m_numQubits, m_numQubits * m_numQubits);
+    ret.setZero();
+    if (m_isCompressed)
+        opKernel<dataType, vectorType, true>(ret, src.begin(), m_twoRDMOps, m_comp, m_numQubits);
+    else
+        opKernel<dataType, vectorType, false>(ret, src.begin(), m_twoRDMOps, m_comp, m_numQubits);
+    // a^\dagger_i a^\dagger_k a_j a_l, i > k && j < l only
+    // a^+_i a^+_k a_j a_l = -a^+_i a^+_k a_l a_j = -a^+_k a^+_i a_j a_l = a^+_k a^+_i a_l a_j
+    for (size_t k = 0; k < m_numQubits; k++)
+    {
+        for (size_t i = k + 1; i < m_numQubits; i++)
+        {
+            for (size_t j = 0; j < m_numQubits; j++)
+            {
+                for (size_t l = j + 1; l < m_numQubits; l++)
+                {
+                    std::pair<long, long> idxs = std::make_pair(k * m_numQubits + i, j * m_numQubits + l);  //  a^+_i a^+_k a_j a_l
+                    std::pair<long, long> idxs2 = std::make_pair(k * m_numQubits + i, l * m_numQubits + j); // -a^+_i a^+_k a_l a_j
+                    std::pair<long, long> idxs3 = std::make_pair(i * m_numQubits + k, j * m_numQubits + l); // -a^+_k a^+_i a_j a_l
+                    std::pair<long, long> idxs4 = std::make_pair(i * m_numQubits + k, l * m_numQubits + j); //  a^+_k a^+_i a_l a_j
+                    ret(idxs2.first, idxs2.second) = -ret(idxs.first, idxs.second);
+                    ret(idxs3.first, idxs3.second) = -ret(idxs.first, idxs.second);
+                    ret(idxs4.first, idxs4.second) = ret(idxs.first, idxs.second);
+                }
+            }
+        }
+    }
+    // ret is now stored as ret_{(ji)(kl)} = <a^\dagger_i a^\dagger_j a_k a_l> at (j*m_numQubits+i,k*m_numQubits+l)
+    return ret;
+}
+
+template<typename dataType, typename vectorType>
+Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::get1RDM(const vector<vectorType> &src)
+{
+    {
+        std::shared_ptr<compressor> c;
+        assert(src.getIsCompressed(c) == m_isCompressed && c == m_comp);
+    }
+    Eigen::Matrix<dataType, -1, -1> ret;
+    ret.resize(m_numQubits, m_numQubits);
+    ret.setZero();
+    if (m_isCompressed)
+        opKernel<dataType, vectorType, true>(ret, src.begin(), m_oneRDMOps, m_comp, m_numQubits);
+    else
+        opKernel<dataType, vectorType, false>(ret, src.begin(), m_oneRDMOps, m_comp, m_numQubits);
+    return ret;
+}
+
+template<typename dataType, typename vectorType>
+Eigen::Matrix<vectorType, -1, 1> RDM<dataType, vectorType>::getNumberCorr1RDM(const vector<vectorType> &src)
+{
+    {
+        std::shared_ptr<compressor> c;
+        assert(src.getIsCompressed(c) == m_isCompressed && c == m_comp);
+    }
+    Eigen::Matrix<vectorType, -1, -1> ret;
+    ret.resize(m_numQubits, 1);
+    ret.setZero();
+    if (m_isCompressed)
+        opKernel<dataType, vectorType, true>(ret, src.begin(), m_numberCorr1RDMOps, m_comp, m_numQubits);
+    else
+        opKernel<dataType, vectorType, false>(ret, src.begin(), m_numberCorr1RDMOps, m_comp, m_numQubits);
+    return ret;
+}
+
+template<typename dataType, typename vectorType>
+Eigen::Matrix<vectorType, -1, -1> RDM<dataType, vectorType>::getNumberCorr2RDM(const vector<vectorType> &src)
+{
+    {
+        std::shared_ptr<compressor> c;
+        assert(src.getIsCompressed(c) == m_isCompressed && c == m_comp);
+    }
+    Eigen::Matrix<dataType, -1, -1> ret;
+    ret.resize(m_numQubits, m_numQubits);
+    ret.setZero();
+    if (m_isCompressed)
+        opKernel<dataType, vectorType, true>(ret, src.begin(), m_numberCorr2RDMOps, m_comp, m_numQubits);
+    else
+        opKernel<dataType, vectorType, false>(ret, src.begin(), m_numberCorr2RDMOps, m_comp, m_numQubits);
+
+    // //Need to fix up the signs.
+    // for (size_t i = 0; i < m_numQubits; i++)
+    // {
+    //     for (size_t j = 0; j < m_numQubits; j++)
+    //     {
+    //         if (i != j)
+    //         {
+    //             // std::pair<long,long> idxs = std::make_pair(i,j);
+    //             ret(i,j) *= -1;
+    //         }
+    //     }
+    // }
+    return ret;
+}
 
 #ifdef useComplex
 template class HamiltonianMatrix<realNumType,realNumType>;
 template class HamiltonianMatrix<realNumType,numType>;
 template class HamiltonianMatrix<numType,numType>;
+template class RDM<realNumType, realNumType>;
+template class RDM<realNumType, numType>;
+template class RDM<numType, numType>;
 #else
 template class HamiltonianMatrix<numType,numType>;
+template class RDM<numType, numType>;
 #endif
 
 
