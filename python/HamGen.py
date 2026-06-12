@@ -28,20 +28,20 @@ slaterDeterminantPositions = [posA,posB]
 # frozenOrbitals = set()
 # activeOrbitals = None
 
-# outputName = f"H6_Triangular"
-# atomString =\
-# """H 0.00000000000 0.00000000000 0.00000000000;
-# H 1.00000000000 1.73205080757 0.00000000000;
-# H 2.00000000000 0.00000000000 0.00000000000;
-# H 3.00000000000 1.73205080757 0.00000000000;
-# H 4.00000000000 0.00000000000 0.00000000000;
-# H 2.00000000000 3.46410161514 0.00000000000;"""
+outputName = f"H6_Triangular"
+atomString =\
+"""H 0.00000000000 0.00000000000 0.00000000000;
+H 1.00000000000 1.73205080757 0.00000000000;
+H 2.00000000000 0.00000000000 0.00000000000;
+H 3.00000000000 1.73205080757 0.00000000000;
+H 4.00000000000 0.00000000000 0.00000000000;
+H 2.00000000000 3.46410161514 0.00000000000;"""
 
 
 # outputName = f"H2_Linear"
 # atomString = f"H 0 0 0 ; H 0 0 2  ;"
-outputName = f"L1"
-atomString = f"N 0 0 0; N 0 0 1.1;"
+# outputName = f"L1"
+# atomString = f"N 0 0 0; N 0 0 1.1;"
 # outputName = f"H6_Linear"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ; H 0 0 8 ; H 0 0 10 ;"
 # outputName = f"H8_Linear"
@@ -59,8 +59,8 @@ activeOrbitals = None
 
 # outputName = f"H4_L1"
 # atomString = f"H 0 0 0 ; H 0 0 2  ; H 0 0 4 ; H 0 0 6 ;"
-frozenOrbitals = {0,1}
-activeOrbitals = None
+# frozenOrbitals = {0,1}
+# activeOrbitals = None
 
 subtractNuclearEnergy = True
 perfectPairing = True
@@ -161,6 +161,8 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
     activeOrbitals = activeOrbitals.intersection(spatialorbitals) if not activeOrbitals is None and not len(activeOrbitals) == 0 else set(spatialorbitals)-frozenOrbitals
 
     twoElectronIntegrals = ao2mo.kernel(mol,orbs,aosym=1)
+    with open(outputName + "_orbs.bin","wb") as orbsFile:
+        orbs.tofile(orbsFile)
     with open(outputName + "_twoEInts.bin","wb") as twoEIntsFile:
         twoElectronIntegrals.tofile(twoEIntsFile)
     with open(outputName + "_oneEInts.bin","wb") as oneEIntsFile:
