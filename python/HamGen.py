@@ -65,6 +65,8 @@ activeOrbitals = None
 subtractNuclearEnergy = True
 perfectPairing = True
 localise = False
+loadFromOrbs = True
+FullFockSpace = True
 
 
 # atomString = f"Li 0 0 0 ; H 0 0 {bondlen}"
@@ -136,7 +138,8 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
             orbs2[:,p] = orbs[:,i]
         orbs = orbs2
         print(orbs)
-
+    if loadFromOrbs:
+        orbs = np.fromfile(outputName + "_orbs.bin").reshape(numSpatialOrbitals,numSpatialOrbitals)
     h_core_ao = mol.intor_symmetric('int1e_kin') + mol.intor_symmetric('int1e_nuc')
     hcore_mo = np.einsum("pi,pq,qj->ij", orbs,h_core_ao,orbs)
 
@@ -161,8 +164,9 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
     activeOrbitals = activeOrbitals.intersection(spatialorbitals) if not activeOrbitals is None and not len(activeOrbitals) == 0 else set(spatialorbitals)-frozenOrbitals
 
     twoElectronIntegrals = ao2mo.kernel(mol,orbs,aosym=1)
-    with open(outputName + "_orbs.bin","wb") as orbsFile:
-        orbs.tofile(orbsFile)
+    if not loadFromOrbs:
+        with open(outputName + "_orbs.bin","wb") as orbsFile:
+            orbs.tofile(orbsFile)
     with open(outputName + "_twoEInts.bin","wb") as twoEIntsFile:
         twoElectronIntegrals.tofile(twoEIntsFile)
     with open(outputName + "_oneEInts.bin","wb") as oneEIntsFile:
@@ -188,17 +192,26 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
         numAlphaelectrons,numBetaElectrons = mol.nelec
         numAlphaelectrons -= len(frozenOrbitals)
         numBetaElectrons -= len(frozenOrbitals)
-
-        alphaOccupations = [set(x).union(frozenOrbitalsList) for x in it.combinations(activeOrbitalsList,numAlphaelectrons)]
-        betaOccupations = [set(x).union(numSpatialOrbitals+frozenOrbitalsList) for x in it.combinations(numSpatialOrbitals+activeOrbitalsList,numBetaElectrons)]
-
-        if spinLocked:
-            hfStates = [a.union(b) for a,b in it.product(alphaOccupations,betaOccupations)]
+        if not FullFockSpace:
+            alphaOccupations = [set(x).union(frozenOrbitalsList) for x in it.combinations(activeOrbitalsList,numAlphaelectrons)]
+            betaOccupations = [set(x).union(numSpatialOrbitals+frozenOrbitalsList) for x in it.combinations(numSpatialOrbitals+activeOrbitalsList,numBetaElectrons)]
+            if spinLocked:
+                hfStates = [a.union(b) for a,b in it.product(alphaOccupations,betaOccupations)]
+            else:
+                TotalActiveOrbitals = np.array([[a,b] for a,b in zip(activeOrbitalsList,numSpatialOrbitals+activeOrbitalsList)])
+                TotalActiveOrbitals = TotalActiveOrbitals.flatten()
+                hfStates = [set(x).union(frozenOrbitalsList).union(numSpatialOrbitals+frozenOrbitalsList) for x in 
+                            it.combinations(TotalActiveOrbitals,numBetaElectrons+numAlphaelectrons)]
         else:
-            TotalActiveOrbitals = np.array([[a,b] for a,b in zip(activeOrbitalsList,numSpatialOrbitals+activeOrbitalsList)])
-            TotalActiveOrbitals = TotalActiveOrbitals.flatten()
-            hfStates = [set(x).union(frozenOrbitalsList).union(numSpatialOrbitals+frozenOrbitalsList) for x in 
-                        it.combinations(TotalActiveOrbitals,numBetaElectrons+numAlphaelectrons)]
+            alphaOccupations = [set(x).union(frozenOrbitalsList)
+                        for r in range(len(activeOrbitalsList) + 1)
+                        for x in it.combinations(activeOrbitalsList, r)]
+            betaOccupations  = [set(x).union(numSpatialOrbitals + frozenOrbitalsList)
+                                for r in range(len(activeOrbitalsList) + 1)
+                                for x in it.combinations(numSpatialOrbitals + activeOrbitalsList, r)]
+            hfStates = [a.union(b) for a, b in it.product(alphaOccupations, betaOccupations)]
+        
+
 
 
         ijIndexes = {(i,j):idx for idx,(i,j) in enumerate(it.product(spatialorbitals,repeat=2))} #lookup table for ij -> 2 electron integral index
@@ -267,6 +280,8 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
             d = 0
             for i,state1 in enumerate(hfStates):
                 for j,state2 in enumerate(hfStates):
+                    if len(state1) != len(state2):
+                        continue
                     bothOccupied = list(state1.intersection(state2))
                     bothOccupied.sort()
 
@@ -367,9 +382,10 @@ def runHamGen(outputName = outputName, atomString = atomString, frozenOrbitals =
                                     ketInt += 1<<newOcc
                             indexF.write(f"{braInt} {ketInt}\n")
                             CoeffF.write(f"{Ham[i,j]}\n")
-                    fockSpaceSize = pow(2,2*len(activeOrbitals))
-                    indexF.write(f"{fockSpaceSize} {fockSpaceSize}")
-                    CoeffF.write(f"0\n")
+                    if not FullFockSpace:
+                        fockSpaceSize = pow(2,2*len(activeOrbitals))
+                        indexF.write(f"{fockSpaceSize} {fockSpaceSize}")
+                        CoeffF.write(f"0\n")
 
 def generateHams(bondLengths,shift=0):
     for L in bondLengths:
