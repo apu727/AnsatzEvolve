@@ -3,8 +3,11 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 cmake_minimum_required(VERSION 3.5)
-project(AnsatzEvolve LANGUAGES CXX Fortran)
-
+project(AnsatzEvolve
+    LANGUAGES CXX Fortran
+    DESCRIPTION "Fast classical computation of Quantum Ansatze"
+    VERSION 1.0.0
+)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set (CMAKE_C_STANDARD 11)
@@ -139,6 +142,9 @@ if (ANSATZEVOLVE_COMPILE_PYTHON_LIBS)
     install(TARGETS PyAnsatzEvolve DESTINATION ${CMAKE_SOURCE_DIR}/../) # Set Install prefix to python directory
     target_compile_options(PyAnsatzEvolve PRIVATE "${ANSATZEVOLVE_CXX_FLAGS}")
 endif()
+
+#Doxygen target
+add_subdirectory(doxygen)
 
 
 
