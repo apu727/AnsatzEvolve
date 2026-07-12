@@ -28,6 +28,14 @@ libAnsatzSynthInterface.a
 libcppAnsatzSynthLib.a
 ```
 must then be added to the link line of the final executable. An example of how to do this with Cmake can be seen in ```src/CMakeLists.txt``` where the ```FortranBindingsTest``` executable is compiled. 
+
+## Documentation
+To build the documentation, run the following command with doxygen installed. 
+
+``` cmake --build . --target AnsatzEvolve_docs ```
+
+The documentation will be available in ```docs/index.html```
+
 ## Compiler compatibility
 It has currently been tested with:
 ```
