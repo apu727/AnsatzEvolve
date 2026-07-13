@@ -161,7 +161,7 @@ public:
      * `parameterDependency[i].first` gives the free parameter that operator `i`'s angle depends
      * on, and `parameterDependency[i].second` is the scale factor applied to that free parameter
      * to obtain operator `i`'s angle. This is the same information as the "Order file" — see the
-     * \subpage manual_page "manual" for the file-format description.
+     * \ref manual_page "manual" for the file-format description.
      *
      * \param parameterDependency One entry per operator, in the same order as the excitations given to storeOperators(). Must be non-empty.
      * \return `true` on success. `false` (with a logged error) if something went wrong. 
@@ -171,7 +171,7 @@ public:
     bool storeParameterDependencies(const std::vector<std::pair<int,realNumType>>& parameterDependency);
     /**
      * \brief Store the path used to locate/save resources (e.g. Hamiltonian integral files, output files).
-     * \param runPath Path prefix, in the same style as the `filepath` command-line option of `cppAnsatzSynth` (see the \subpage manual_page "manual").
+     * \param runPath Path prefix, in the same style as the `filepath` command-line option of `cppAnsatzSynth` (see the \ref manual_page "manual").
      * \return `true` on success. `false` (with a logged error) if something went wrong.
      */
     bool storeRunPath(const std::string& runPath);
@@ -236,7 +236,7 @@ public:
      */
     bool getHessian(Matrix<realNumType>::EigenMatrix& hessian);
     /**
-     * \brief **DO NOT USE** Get the second derivative of the current energy using the latest evolution of the ansatz with the supplied Hamiltonian. 
+     * \brief Get the second derivative of the current energy using the latest evolution of the ansatz with the supplied Hamiltonian. 
      * i.e. \f$\frac{\partial^2 \braket{\psi|H|\psi}}{\partial \theta_i \partial \theta_j}\f$
      * \param hessian The resultant hessian.  There is one entry for each **unique parameter** (compressed format) in the ansatz
      * \return `true` on success. `false` (with a logged error) if something went wrong. 
@@ -246,33 +246,35 @@ public:
 
     //Allow providing the angle and update if needed
     /**
-     * \brief Overload of getExpectationValue(). Allows setting the angles and getting the expectation value in one go.
+     * \brief Overload of getExpectationValue(realNumType&). Allows setting the angles and getting the expectation value in one go.
      */
     bool getExpectationValue(const std::vector<realNumType>& angles, realNumType& exptValue);
     /**
-     * \brief Overload of getFinalState(). Allows setting the angles and computing the final state in one go.
+     * \brief Overload of getFinalState(vector<numType>&). Allows setting the angles and computing the final state in one go.
      */
     bool getFinalState(const std::vector<realNumType>& angles, vector<numType>& finalState);
     /**
-     * \brief Overload of getGradient(). Allows setting the angles and getting the gradient in one go.
+     * \brief Overload of getGradient(vector<realNumType>&). Allows setting the angles and getting the gradient in one go.
      */
     bool getGradient(const std::vector<realNumType>& angles, vector<realNumType>& gradient);
     /**
-     * \brief Overload of getGradientComp(). Allows setting the angles and getting the gradient in one go.
+     * \brief Overload of getGradientComp(vector<realNumType>&). Allows setting the angles and getting the gradient in one go.
      */
     bool getGradientComp(const std::vector<realNumType>& angles,vector<realNumType>& gradient); // compressed format
     /**
-     * \brief Overload of getHessian(). Allows setting the angles and getting the hessian in one go.
+     * \brief Overload of getHessian(Matrix<realNumType>::EigenMatrix&). Allows setting the angles and getting the hessian in one go.
      */
     bool getHessian(const std::vector<realNumType>& angles, Matrix<realNumType>::EigenMatrix& hessian);
     /**
-     * \brief Overload of getHessian(). Allows setting the angles and getting the hessian in one go.
+     * \brief Overload of getHessianComp(Matrix<realNumType>::EigenMatrix&). Allows setting the angles and getting the hessian in one go.
      */
     bool getHessianComp(const std::vector<realNumType>& angles, Matrix<realNumType>::EigenMatrix& hessian);
 
-    //Compute on each set of angles
     /**
-     * \brief compute expectation values at lots of sets of angles. Each *row* of the matrix is a set of angles. 
+     * \brief Compute the energy at multiple sets of angles. 
+     * \param angles The angles at which to compute the energy. Each *row* of the matrix is a set of angles. 
+     * \param exptValue The energies at each set of angles.
+     * \return `true` on success. `false` (with a logged error) if something went wrong. 
      */
     bool getExpectationValues(Matrix<realNumType>::EigenMatrix& angles, vector<realNumType>::EigenVector& exptValue);
 
@@ -285,7 +287,7 @@ public:
     // bool subspaceDiag(); // Cant ATM keep track of multiple rotation paths TODO
     // bool writeProperties(); // Cant ATM keep track of multiple rotation paths TODO
     /**
-     * \brief UnTested. 
+     * \brief Untested. 
      */
     bool generatePathsForSubspace(size_t numberOfPaths);
 

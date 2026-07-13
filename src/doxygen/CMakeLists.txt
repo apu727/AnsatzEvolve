@@ -12,15 +12,16 @@ if (Doxygen_FOUND)
     set(DOXYGEN_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/../docs)
     set(DOXYGEN_EXTRACT_ALL YES)
     set(DOXYGEN_USE_MATHJAX YES)
-    # set(DOXYGEN_FORMULA_MACROFILE macros.tex)
     set(DOXYGEN_MATHJAX_EXTENSIONS braket)
     set(DOXYGEN_MATHJAX_VERSION MathJax_3)
+    set(DOXYGEN_EXTENSION_MAPPING pyi=Python)
 
     set(ANSATZEVOLVE_DOC_FILES
             GettingStarted.dox
             Manual.dox
             ExternalInterface.dox
             benchmarks.dox
+            PyAnsatzEvolve.pyi
         )
 
     set(ANSATZEVOLVE_PYTHON_SRC_FILES

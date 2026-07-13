@@ -11,3 +11,5 @@ share/
 python
 build*
 docs
+*.so
+*.pyi

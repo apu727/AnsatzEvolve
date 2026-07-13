@@ -141,6 +141,9 @@ if (ANSATZEVOLVE_COMPILE_PYTHON_LIBS)
     #InstallDir
     install(TARGETS PyAnsatzEvolve DESTINATION ${CMAKE_SOURCE_DIR}/../) # Set Install prefix to python directory
     target_compile_options(PyAnsatzEvolve PRIVATE "${ANSATZEVOLVE_CXX_FLAGS}")
+
+    #Install the .pyi
+    install(FILES doxygen/PyAnsatzEvolve.pyi DESTINATION ${CMAKE_SOURCE_DIR}/../) # Set Install prefix to python directory
 endif()
 
 #Doxygen target

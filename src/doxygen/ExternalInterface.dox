@@ -20,15 +20,17 @@ The C interface exposes the following functions:
 This header has been automatically generated from `AnsatzSynthInterface.f90` via:
 
     gfortran -fc-prototypes -fsyntax-only ${CMAKE_SOURCE_DIR}/AnsatzSynthInterface.f90 > Generated/AnsatzSynthInterface.h
+\sa AnsatzSynthInterface.cpp
 
 ## Fortran interface
 Fortran can be linked directly to C.  `AnsatzSynthInterface.f90` contains the fortran function declarations for easy binding to the C functions. `test.f90` contains an example fortran program.
+\sa ansatzsynthinterface
 
 ## C++ interface
 For C++ usage it is best to use the class `stateAnsatzManager` directly.
 The C API is a wrapper around this class.
 
-If more advanced features are needed, see `main.cpp` for example usage.
+\sa `main.cpp` for example usage.
 
 ## Python Bindings
 These also wrap the class `stateAnsatzManager`. `PyAnsatzEvolve.cpp` contains the implementation of all functions exposed to python.
@@ -41,5 +43,6 @@ when configuring. A detectable version of pybind11 is also needed. The output li
 
     cmake --build . --target install
 
-TODO: .pyi for compatibility with python intellisense.
+\sa PyAnsatzEvolve.stateAnsatzManager,
+\sa PyAnsatzEvolve
 */
