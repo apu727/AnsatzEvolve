@@ -1,5 +1,5 @@
 # AnsatzEvolve
-Fast classical statevector computation of Quantum Ansatze such as TUPS and LUCJ
+Fast classical statevector computation of Quantum Ansatze such as TUPS and LUCJ. The Documentation can be accessed [here](https://apu727.github.io/AnsatzEvolve/)
 ## Building
 Building all libraries and tests
 ```
@@ -34,7 +34,7 @@ To build the documentation, run the following command with doxygen installed.
 
 ``` cmake --build . --target AnsatzEvolve_docs ```
 
-The documentation will be available in ```docs/index.html```
+The documentation will be available in ```docs/index.html```. Alternatively it is hosted online at [here](https://apu727.github.io/AnsatzEvolve/).
 
 ## Compiler compatibility
 It has currently been tested with:

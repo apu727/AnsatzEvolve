@@ -15,6 +15,7 @@ if (Doxygen_FOUND)
     set(DOXYGEN_MATHJAX_EXTENSIONS braket)
     set(DOXYGEN_MATHJAX_VERSION MathJax_3)
     set(DOXYGEN_EXTENSION_MAPPING pyi=Python)
+    set(DOXYGEN_HTML_OUTPUT .)
 
     set(ANSATZEVOLVE_DOC_FILES
             GettingStarted.dox
