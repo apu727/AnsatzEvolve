@@ -1,0 +1,27 @@
+var searchData=
+[
+  ['decompress_0',['decompress',['../classsparse_matrix.html#a4128145758eed848ec1a21b9ecc54680',1,'sparseMatrix']]],
+  ['decompressindex_1',['deCompressIndex',['../classcompressor.html#a95f4c2826fa2a11dfa8dcd86dc8bb50b',1,'compressor']]],
+  ['decompressperm_2',['decompressPerm',['../classcompressor.html#a459040d995ec1c4f654434b6ed671dc3',1,'compressor']]],
+  ['decompressvector_3',['deCompressVector',['../classcompressor.html#a3c10560f685e277a9254dbbdbc917701',1,'compressor']]],
+  ['description_4',['Input file description',['../manual_page.html',1,'']]],
+  ['destroy_5',['destroy',['../structexc_op.html#a6ee78605eafb2d0af520b5d6df834e51',1,'excOp']]],
+  ['development_6',['Future development',['../index.html#autotoc_md16',1,'']]],
+  ['diag1_7',['diag1',['../namespacemake_operators.html#a36ade76452eeb2c35ff4f29bfad35371',1,'makeOperators']]],
+  ['diag1l_8',['diag1L',['../namespacemake_operators.html#a0c4da7018333fffaae8136f292d456af',1,'makeOperators']]],
+  ['diag2_9',['diag2',['../namespacemake_operators.html#a98895a0a4b99bbee8694dc297c26e435',1,'makeOperators']]],
+  ['diag2l_10',['diag2L',['../namespacemake_operators.html#af4c6d3a5fd695ee54c695d574e525760',1,'makeOperators']]],
+  ['diag3_11',['diag3',['../namespacemake_operators.html#a3aa0eaa8cbc925e7ba1d47f23549915f',1,'makeOperators']]],
+  ['diag3l_12',['diag3L',['../namespacemake_operators.html#a42cc898164ce270ae1d8cf3d9a0c5ad9',1,'makeOperators']]],
+  ['diagonalevolve_13',['DiagonalEvolve',['../fusedevolve_8cpp.html#a4e46a634c85a1da442613ba6313d4ef4',1,'fusedevolve.cpp']]],
+  ['diis_14',['DIIS',['../class_d_i_i_s.html',1,'DIIS&lt; errorVectorType, quantityType, innerProductFunc, EDIIS &gt;'],['../class_d_i_i_s.html#ad42fe2617678138f65abd195bc084625',1,'DIIS::DIIS()']]],
+  ['diis_2ecpp_15',['diis.cpp',['../diis_8cpp.html',1,'']]],
+  ['diis_2eh_16',['diis.h',['../diis_8h.html',1,'']]],
+  ['diis_3c_20errorvectortype_2c_20quantitytype_2c_20innerproductfunc_2c_20false_20_3e_17',['DIIS&lt; errorVectorType, quantityType, innerProductFunc, false &gt;',['../class_d_i_i_s.html',1,'']]],
+  ['diis_3c_20errorvectortype_2c_20quantitytype_2c_20innerproductfunc_2c_20true_20_3e_18',['DIIS&lt; errorVectorType, quantityType, innerProductFunc, true &gt;',['../class_d_i_i_s.html',1,'']]],
+  ['dosubspacediagonalisation_19',['doSubspaceDiagonalisation',['../class_t_u_p_s_quantities.html#a86166b84455a58912628c12f478d90b7',1,'TUPSQuantities']]],
+  ['dot_20',['dot',['../classvector_view.html#ade786fe9f48b7d9b0c43cca9f0301496',1,'vectorView::dot()'],['../classvector.html#aec7252bbaf997c7a70e04526d76d8507',1,'vector::dot()'],['../benchmark_8cpp.html#a60f5f377188e0e905d358d0ac47ea5ab',1,'dot(const uint32_t a, const uint32_t b, int dim):&#160;benchmark.cpp'],['../fusedevolve_8cpp.html#a60f5f377188e0e905d358d0ac47ea5ab',1,'dot(const uint32_t a, const uint32_t b, int dim):&#160;fusedevolve.cpp']]],
+  ['dryrun_21',['dryRun',['../namespace_ham_gen.html#ac0a17ab2a7baa24b70a71366db7ada47',1,'HamGen']]],
+  ['dummyimplement_22',['dummyImplement',['../classnumber_operator_compressor.html#a89624ef94a7658ba114f94247ca4505b',1,'numberOperatorCompressor::dummyImplement()'],['../class_s_z_andnumber_operator_compressor.html#a7bf7b7ebc14b9afe6025ac854c5b3315',1,'SZAndnumberOperatorCompressor::dummyImplement()'],['../classcompressor.html#ab3421463ebb83703e5e96dfd05293f63',1,'compressor::dummyImplement()']]],
+  ['dumpmatrix_23',['dumpMatrix',['../classsparse_matrix.html#a42478c346a13f1f7cc1aee38ae8d5e33',1,'sparseMatrix']]]
+];

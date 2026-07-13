@@ -1,0 +1,5 @@
+var searchData=
+[
+  ['vector_0',['vector',['../classvector.html#a2914a4ab64de53d04258ada5dfbe0599',1,'vector::vector()'],['../classvector.html#a90a3b6c30235fc6cf03af02e968fce81',1,'vector::vector(int size)'],['../classvector.html#a79616841be03d5fb00b6bde07529d57e',1,'vector::vector(const EigenVector &amp;vec)'],['../classvector.html#a08f5a763fbe408113f64bce4718f7fe5',1,'vector::vector(const std::vector&lt; dataType &gt; &amp;data)'],['../classvector.html#ab887049cfb19bd99ca1167a6a856ccb5',1,'vector::vector(const Matrix&lt; dataType &gt; &amp;other)=delete'],['../classvector.html#a4fb0299e1ce93abaafa629bb8304b153',1,'vector::vector(dataType *buffer, size_t size)'],['../classvector.html#a4480ac8a5c84e8decd0c5fc0e09e2b82',1,'vector::vector(Matrix&lt; dataType &gt; &amp;&amp;other) noexcept'],['../classvector.html#a73b394305ceb59cbad153146097d2228',1,'vector::vector(vector &amp;&amp;other) noexcept']]],
+  ['vectorview_1',['vectorView',['../classvector_view.html#af1e67635c8069c532daa9c48d6feb3fe',1,'vectorView']]]
+];
