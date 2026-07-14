@@ -931,19 +931,146 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
         for (long startj = 0; startj < numberOfCols; startj+= stepSize)
         {
             long endj = std::min(startj + stepSize,numberOfCols);
-            futs.push_back(pool.queueWork([this,&src,&dest,startj,endj](){
-                for (long j = startj; j < endj; j++)
+            futs.push_back(pool.queueWork([this,src = src.data(),dest = dest.data(),startj,endj](){
+#if defined(__AVX512F__)
+                long endJ8 = ((endj-startj)/8)*8 + startj;
+                assert((endJ8-startj)%8 == 0);
+                for (long j = startj; j < endJ8; j+=8)
                 {//across
-                    uint32_t jBasisState = j;
+                    //Do 8 JBasisStates at a time
+                    uint32_t jBasisStates[8];
+                    jBasisStates[0] = j;
+                    jBasisStates[1] = j+1;
+                    jBasisStates[2] = j+2;
+                    jBasisStates[3] = j+3;
+                    jBasisStates[4] = j+4;
+                    jBasisStates[5] = j+5;
+                    jBasisStates[6] = j+6;
+                    jBasisStates[7] = j+7;
+
                     if (m_isCompressed)
-                        m_compressor->deCompressIndex(jBasisState,jBasisState);
+                        //Find the bit strings for the JBasisStates
+                        m_compressor->deCompressIndex(jBasisStates,jBasisStates);
 
                     auto opIt = m_operators.cbegin();
                     auto valIt = m_vals.cbegin();
                     const auto valItEnd = m_vals.cend();
                     uint32_t badCreate = 0;
                     uint32_t goodCreate = 0;
+
+                    __m256i destroys;
+                    __m256i BCastCreate = _mm256_broadcastd_epi32(_mm_loadu_si32(&opIt->create));
+                    __m256i JBasisStatesVec = _mm256_loadu_epi32(jBasisStates);
+
+                    __mmask8 canDestroys;
+                    if (valIt != valItEnd)
+                    {
+                        //Yes yes these are backwards to the way it was defined however for real hamiltonians it doesnt matter because theyre Hermitian. see comments on a,b,c,d
+                        goodCreate = opIt->create;
+                        //Apply the Creation operator on the right, (Destroy)
+                        destroys = JBasisStatesVec ^ BCastCreate;
+                        //Check that the bits have been destroyed, Same as checking they were 1 before
+                        canDestroys = _mm256_testn_epi32_mask(destroys, BCastCreate);
+                        //Check that this did something
+                        if (canDestroys == 0)
+                            badCreate = opIt->create;
+                    }
+                    //The j loop
+                    for (;valIt != valItEnd; ++valIt,++opIt)
+                    {
+                        //Skip if known that it does nothing
+                        if (opIt->create == badCreate)
+                            continue;
+                        badCreate = 0;
+
+                        __mmask8 signs;
+
+                        //createOp
+
+                        if (opIt->create != goodCreate)
+                        {
+                            //Broadcast the create op to the whole vector
+                            BCastCreate = _mm256_set1_epi32(opIt->create);
+                            goodCreate = opIt->create;
+                            //Apply the Creation operator on the right, (Destroy)
+                            destroys = JBasisStatesVec ^ BCastCreate;
+                            //Check that the bits have been destroyed, Same as checking they were 1 before
+                            canDestroys = _mm256_testn_epi32_mask(destroys, BCastCreate);
+                            //Check that this did something
+                            if (canDestroys == 0)
+                            {
+                                badCreate = opIt->create;
+                                continue;
+                            }
+                        }
+
+                        //destroyOp
+                        __mmask8 canCreates;
+                        __m256i BCastDestroy = _mm256_set1_epi32(opIt->destroy);
+                        //Check that the bits can be created
+                        canCreates =  _mm256_testn_epi32_mask(destroys, BCastDestroy);
+                        //Check that this did something
+                        if (canCreates == 0)
+                            continue;
+
+                        __m256i is;
+                        //Setup the signmask as a vector
+                        __m256i BCastSignBitMask = _mm256_set1_epi32(opIt->signBitMask);
+                        //Create the bits
+                        is = destroys | BCastDestroy;
+                        __m256i BCast1s = _mm256_set1_epi32(1);
+                        //Compute the signs. bool signs =  popcount(JBasisStatesVec & signBitMask) & 1. sign = 1 => negative
+#if defined(__AVX512VPOPCNTDQ__)
+                        __m256i popCounted = _mm256_popcnt_epi32(JBasisStatesVec & BCastSignBitMask);
+#else
+                        __m256i popCounted = explicitPopcountAVX2(JBasisStatesVec & BCastSignBitMask);
+#endif
+                        signs = _mm256_test_epi32_mask(popCounted,BCast1s);
+                        __mmask8 valid = -1;
+                        //Compress the indices if needed
+                        if (m_isCompressed)
+                            m_compressor->compressIndex(is,is,valid);
+                        //check that we need to do something
+                        valid = valid & canCreates & canDestroys;
+                        if (valid == 0)
+                            continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
+
+                        //Load the value vector
+                        __m512d vs = _mm512_set1_pd(*valIt);
+                        __m512d negZero = _mm512_set1_pd(-0.0);
+                        //Negate the terms indicated by signs
+                        vs = _mm512_mask_xor_pd(vs,signs,vs,negZero);
+
+                        //Load the dest vector for FMA
+                        __m512d destVec = _mm512_loadu_pd(dest + j);
+                        //Load the src vector for FMA, Mask out any invalids with negZero. (exact value doesnt matter)
+                        __m512d srcVec = _mm512_mask_i32gather_pd(negZero,valid,is,src,sizeof(double));
+                        //FMA, Mask means that if valid == 0 then FMA copies from destVec. i.e. does nothing
+                        destVec = _mm512_mask3_fmadd_pd(srcVec,vs,destVec,valid);
+                        //Store the result. Take care of unaligned accesses potentially.
+                        _mm512_storeu_pd(dest + j,destVec);
+
+                    }
+                }
+#else
+                long endJ8 = startj;
+#endif
+                for (long j = endJ8; j < endj; j++)
+                {//across
+                    uint32_t jBasisState = j;
+                    if (m_isCompressed)
+                    {
+                        m_compressor->deCompressIndex(jBasisState,jBasisState);
+                    }
+
+                    auto opIt = m_operators.cbegin();
+                    auto valIt = m_vals.cbegin();
+                    const auto valItEnd = m_vals.cend();
+                    uint32_t badCreate = 0;
+                    uint32_t goodCreate = 0;
+
                     uint32_t destroy;
+
                     bool canDestroy;
                     if (valIt != valItEnd)
                     {
@@ -980,24 +1107,23 @@ void HamiltonianMatrix<dataType, vectorType>::apply(const Eigen::Map<const Eigen
                         }
 
                         bool canCreate =  (destroy & opIt->destroy) == 0;
+
                         if (!canCreate)
                             continue;
-                        i  = destroy | opIt->destroy;
 
+                        i  = destroy | opIt->destroy;
                         sign = popcount(jBasisState & opIt->signBitMask) & 1;
+
+                        bool OutOfSpace = false;
                         if (m_isCompressed)
-                            m_compressor->compressIndex(i,i);
-                        if (i == (uint32_t)-1)
+                            OutOfSpace = !m_compressor->compressIndex(i,i);
+
+                        if (m_isCompressed && OutOfSpace)
                             continue;//Out of the space. Probably would cancel somwhere else assuming the symmetry is a valid one
 
-                        // for (long i = 0; i < numberOfRows; i++)
-                        // {//down
-                        //     HT_C(i,j) += T_C(i,k) * valIt;
-                        // }
-                        // dest.col(j) += src.col(i) * ((sign ? -1 : 1)* *valIt);
-                        dataType v = (sign ? -*valIt : *valIt);
-
-                        dest(0,j) += src(0,i) * v;
+                        dataType v;
+                        v = (sign ? -*valIt : *valIt);
+                        dest[j] += src[i] * v;
 
                     }
                 }
