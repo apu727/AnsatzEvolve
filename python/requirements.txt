@@ -1,5 +1,6 @@
-h5py==3.14.0
-numpy==2.3.2
+# Runtime dependencies for the Python workflows in this directory.
+h5py
+matplotlib
+numpy>=2.0.0
 pyscf==2.10.0
-scipy==1.16.1
-setuptools==80.9.0
+scipy>=1.16

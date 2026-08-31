@@ -8,7 +8,9 @@ Hams
 *.dat
 *.bin
 share/
-python
+python/*
+!python/requirements.txt
+!python/requirements-dev.txt
 build*
 docs
 *.so
