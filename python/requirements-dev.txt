@@ -1,8 +1,8 @@
 # Development and optional Python-extension build dependencies.
 -r requirements.txt
 
-pybind11==2.13.6
-setuptools==80.9.0
+pybind11[global]
+setuptools
 
 # Test, lint, formatting, and spelling tooling.
 codespell==2.4.1
