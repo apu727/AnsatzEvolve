@@ -29,44 +29,52 @@ The project includes a native C++17 library, a standalone executable, C, Fortran
 
 Eigen 3.4.0 is bundled in [`src/third-party/`](src/third-party/). Doxygen is only needed to regenerate the documentation. Python workflows use the packages listed in [`python/requirements.txt`](python/requirements.txt), including PySCF.
 
-### Makefile build
+### CMake build
 
-The Makefile provides configure, build, test, dependency, documentation, and clean targets:
+Configure and build the project from the repository root:
 
 ```sh
-# Configure and build with the defaults
-make build
+# Configure and build the default configuration
+cmake -S src -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 
-# Configure and run all smoke tests
-make test
+# Configure without OpenMP or Python
+cmake -S src -B build-no-optional \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DANSATZEVOLVE_OPENMP=OFF \
+  -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=OFF
+cmake --build build-no-optional --parallel
 
-# Build without OpenMP or Python
-make build OPENMP=OFF PYTHON=OFF
-
-# Build a Debug complex-mode configuration with four parallel jobs
-make build BUILD_TYPE=Debug COMPLEX=ON JOBS=4
-
-# Install Python dependencies before building the Python extension
-make python-deps PYTHON_EXECUTABLE=python3
-make build PYTHON=ON PYTHON_EXECUTABLE=python3
+# Configure a Debug complex-mode build with four parallel jobs
+cmake -S src -B build-debug \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCOMPLEX_MODE=ON
+cmake --build build-debug --parallel 4
 ```
 
-Configuration variables can be passed to any Makefile target:
+To build the optional Python extension, install the development dependencies and provide pybind11's CMake package to CMake:
+
+```sh
+python3 -m pip install -r python/requirements-dev.txt
+cmake -S src -B build-python \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON \
+  -Dpybind11_DIR="$(python3 -m pybind11 --cmakedir)" \
+  -DPython_EXECUTABLE="$(command -v python3)"
+cmake --build build-python --parallel
+```
+
+Useful CMake options include:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `BUILD_TYPE` | `Release` | CMake build type, such as `Release` or `Debug` |
-| `OPENMP` | `ON` | Enable OpenMP; use `OFF` when unavailable |
-| `COMPLEX` | `OFF` | Enable complex-valued arithmetic |
-| `PYTHON` | `ON` | Build and test the Python extension |
-| `PYTHON_EXECUTABLE` | `python3` | Python executable used for dependencies and tests |
-| `CC` | auto-detected | C compiler used by the C smoke test |
-| `CXX` | auto-detected | C++ compiler passed to CMake |
-| `FC` | auto-detected | Fortran compiler passed to CMake |
-| `JOBS` | `2` | Parallel build jobs |
-| `BUILD_DIR` | configuration-specific | Override the generated build directory |
-
-The default build directory includes the selected configuration. For example, `BUILD_DIR=build/local make test` can be used to choose a custom location.
+| `CMAKE_BUILD_TYPE` | `Release` | Build type, such as `Release` or `Debug` |
+| `ANSATZEVOLVE_OPENMP` | `ON` | Enable OpenMP; use `OFF` when unavailable |
+| `COMPLEX_MODE` | `OFF` | Enable complex-valued arithmetic |
+| `ANSATZEVOLVE_COMPILE_PYTHON_LIBS` | `OFF` | Build the Python extension |
+| `CMAKE_C_COMPILER` | auto-detected | C compiler used by the C interface smoke test |
+| `CMAKE_CXX_COMPILER` | auto-detected | C++ compiler used by the project |
+| `CMAKE_Fortran_COMPILER` | auto-detected | Fortran compiler used by the project |
 
 ### Manual build
 
@@ -79,7 +87,7 @@ cmake --build build --target all
 
 This builds `cppAnsatzSynth`, the static C++ library, the C/Fortran interface library, and `FortranBindingsTest`.
 
-To build the Python extension, make a pybind11 CMake package available and configure with `-DANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON`. The current CMake install target places the extension in the repository root.
+The CMake install target places the Python extension in the repository root.
 
 Useful configuration options:
 
@@ -106,6 +114,7 @@ Specific targets can be selected via the ```--target XX``` cmake option. Possibl
 cppAnsatzSynthLib
 cppAnsatzSynth
 AnsatzSynthInterface
+CInterfaceSmoke
 FortranBindingsTest
 all
 ```
@@ -144,15 +153,13 @@ The library can be used through:
 
 ## Verification
 
-Run
+Run the CMake-registered smoke tests with:
 
 ```sh
-make test
+ctest --test-dir build --output-on-failure
 ```
 
-to test whether the builds were successful and the basic smoke tests pass.
-
-In addition, run the bundled Fortran interface smoke test after building:
+This covers the C++, C, and Fortran interfaces. When the Python extension is enabled, it also checks that `PyAnsatzEvolve` imports successfully. The bundled Fortran interface smoke test can also be run directly:
 
 ```sh
 ./build/FortranBindingsTest
@@ -166,7 +173,7 @@ It exercises representative energy, gradient, Hessian, and statevector calls. Co
 - [Input-file manual](Manual.md)
 - [Benchmark report](Benchmarks.md)
 
-Regenerate the documentation with Doxygen using `make docs`, or manually with:
+Regenerate the documentation with Doxygen using:
 
 ```sh
 cmake --build build --target AnsatzEvolve_docs
