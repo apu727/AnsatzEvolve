@@ -4,9 +4,9 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
 
   - package-ecosystem: pip
     directory: /python
     schedule:
-      interval: weekly
+      interval: monthly

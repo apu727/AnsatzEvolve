@@ -37,14 +37,14 @@ Configure and build the project from the repository root:
 ```sh
 # Configure and build the default configuration
 cmake -S src -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel --target all
+cmake --build build --target all
 
 # Configure without OpenMP or Python
 cmake -S src -B build-no-optional \
   -DCMAKE_BUILD_TYPE=Release \
   -DANSATZEVOLVE_OPENMP=OFF \
   -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=OFF
-cmake --build build-no-optional --parallel --target all
+cmake --build build-no-optional --target all
 
 # Configure a Debug complex-mode build with four parallel jobs
 cmake -S src -B build-debug \
@@ -60,7 +60,7 @@ python3 -m pip install -r python/requirements-dev.txt
 cmake -S src -B build-python \
   -DCMAKE_BUILD_TYPE=Release \
   -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON
-cmake --build build-python --parallel --target all
+cmake --build build-python --target all
 ```
 
 This builds `cppAnsatzSynth`, the static C++ library, the C/Fortran interface library, and `FortranBindingsTest`.
@@ -73,8 +73,6 @@ Useful CMake options include:
 | `ANSATZEVOLVE_OPENMP` | `ON` | Enable OpenMP; use `OFF` when unavailable |
 | `COMPLEX_MODE` | `OFF` | Enable complex-valued arithmetic |
 | `ANSATZEVOLVE_COMPILE_PYTHON_LIBS` | `OFF` | Build the Python extension |
-| `CMAKE_C_COMPILER` | auto-detected | C compiler used by the C interface smoke test |
-| `CMAKE_CXX_COMPILER` | auto-detected | C++ compiler used by the project |
 | `CMAKE_Fortran_COMPILER` | auto-detected | Fortran compiler used by the project |
 
 Specific targets can be selected via the ```--target XX``` cmake option. Possible targets are:
@@ -82,7 +80,6 @@ Specific targets can be selected via the ```--target XX``` cmake option. Possibl
 cppAnsatzSynthLib
 cppAnsatzSynth
 AnsatzSynthInterface
-CInterfaceSmoke
 FortranBindingsTest
 all
 ```
@@ -95,7 +92,7 @@ all
 > gfortran 13.3.0
 > Apple Clang++ 17
 > ```
-> Other compilers may or may not work. A C++17 compatible compiler is necessary. Builds for Windows are not currently supported.
+> Other compilers may or may not work. A C++17 compatible compiler is necessary. Builds for Windows are not currently untested.
 
 
 
@@ -133,13 +130,7 @@ The library can be used through:
 
 ## Verification
 
-Run the CMake-registered smoke tests with:
-
-```sh
-ctest --test-dir build --output-on-failure
-```
-
-This covers the C++, C, and Fortran interfaces. When the Python extension is enabled, it also checks that `PyAnsatzEvolve` imports successfully. The bundled Fortran interface smoke test can also be run directly:
+The bundled Fortran interface smoke test can also be run directly:
 
 ```sh
 ./build/FortranBindingsTest

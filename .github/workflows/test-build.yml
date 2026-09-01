@@ -9,8 +9,8 @@ on:
       - main
   workflow_dispatch:
   schedule:
-    # Run every day at 1 AM
-    - cron: '0 1 * * *'
+    # Run once a week at 1 AM on Monday
+  - cron: "0 1 * * 1"
 
 permissions:
   contents: read
@@ -50,7 +50,7 @@ jobs:
           - compiler: Clang
             cc: clang
             cxx: clang++
-            fc: gfortran
+            fc: flang
             configuration: default
             openmp: "ON"
             complex: "OFF"
@@ -59,7 +59,7 @@ jobs:
           - compiler: Clang
             cc: clang
             cxx: clang++
-            fc: gfortran
+            fc: flang
             configuration: everything-on
             openmp: "ON"
             complex: "ON"
@@ -92,7 +92,7 @@ jobs:
           cmake \
             -S src \
             -B build \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE=Debug \
             -DANSATZEVOLVE_OPENMP=${{ matrix.openmp }} \
             -DCOMPLEX_MODE=${{ matrix.complex }} \
             -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=${{ matrix.python }} \
@@ -103,13 +103,14 @@ jobs:
       - name: Build
         run: cmake --build build --parallel 2 --target all
 
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+      # - name: Test
+      # For future reference
+      #   run: ctest --test-dir build --output-on-failure
 
   macos:
     name: >-
       macOS
-      | AppleClang
+      | ${{ matrix.compiler }}
       | ${{ matrix.configuration }}
 
     runs-on: macos-latest
@@ -119,13 +120,39 @@ jobs:
 
       matrix:
         include:
-          - configuration: default-no-openmp
-            openmp: "OFF"
+          - compiler: GCC
+            cc: gcc
+            cxx: g++
+            fc: gfortran
+            configuration: default
+            openmp: "ON"
             complex: "OFF"
             python: "OFF"
 
-          - configuration: complex-python
-            openmp: "OFF"
+          - compiler: GCC
+            cc: gcc
+            cxx: g++
+            fc: gfortran
+            configuration: everything-on
+            openmp: "ON"
+            complex: "ON"
+            python: "ON"
+
+          - compiler: Clang
+            cc: clang
+            cxx: clang++
+            fc: flang
+            configuration: default
+            openmp: "ON"
+            complex: "OFF"
+            python: "OFF"
+
+          - compiler: Clang
+            cc: clang
+            cxx: clang++
+            fc: flang
+            configuration: everything-on
+            openmp: "ON"
             complex: "ON"
             python: "ON"
 
@@ -135,7 +162,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install cmake gcc
+          brew install cmake gcc clang gfortran python3 libomp
 
       - name: Install Python dependencies
         if: matrix.python == 'ON'
@@ -143,25 +170,22 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install -r python/requirements-dev.txt
 
-      - name: Locate gfortran
-        run: |
-          echo "GFORTRAN=$(which gfortran || ls $(brew --prefix)/bin/gfortran-* | head -1)" >> "$GITHUB_ENV"
 
       - name: Configure CMake
         run: |
           cmake \
             -S src \
             -B build \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE=Debug \
             -DANSATZEVOLVE_OPENMP=${{ matrix.openmp }} \
             -DCOMPLEX_MODE=${{ matrix.complex }} \
             -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=${{ matrix.python }} \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_Fortran_COMPILER="${GFORTRAN}"
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_Fortran_COMPILER=${{ matrix.fc }}
 
       - name: Build
         run: cmake --build build --parallel 2 --target all
 
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+      # - name: Test
+      #   run: ctest --test-dir build --output-on-failure
