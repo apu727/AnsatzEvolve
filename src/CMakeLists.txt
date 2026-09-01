@@ -56,7 +56,7 @@ endif()
 
 option(ANSATZEVOLVE_OPENMP "Turn on Openmp (Recommended)" ON)
 if (ANSATZEVOLVE_OPENMP)
-    find_package(OpenMP REQUIRED)
+    find_package(OpenMP)
 endif()
 
 include_directories(./third-party/eigen-3.4.0)
