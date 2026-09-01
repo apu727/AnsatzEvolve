@@ -8,10 +8,17 @@ BUILD_TYPE ?= Release
 OPENMP ?= ON
 COMPLEX ?= OFF
 PYTHON ?= ON
+PYTHON_EXECUTABLE ?= python3
 
-CC ?= $(which gcc)
-CXX ?= $(which g++)
-# FC ?= $(which gfortran)	# Not used in the current CMakeLists.txt, but left here for future use.
+ifeq ($(origin CC), default)
+CC := $(shell command -v gcc 2>/dev/null || command -v cc)
+endif
+ifeq ($(origin CXX), default)
+CXX := $(shell command -v g++ 2>/dev/null || command -v c++)
+endif
+ifeq ($(origin FC), default)
+FC := $(shell command -v gfortran 2>/dev/null || command -v f77)
+endif
 
 JOBS ?= 2
 
@@ -44,9 +51,10 @@ help:
 	@echo "  OPENMP=ON|OFF"
 	@echo "  COMPLEX=ON|OFF"
 	@echo "  PYTHON=ON|OFF"
+	@echo "  PYTHON_EXECUTABLE=<Python executable>"
 	@echo "  CC=<C compiler>"
 	@echo "  CXX=<C++ compiler>"
-# 	@echo "  FC=<Fortran compiler>"
+	@echo "  FC=<Fortran compiler>"
 	@echo "  JOBS=<parallel jobs>"
 	@echo
 	@echo "Examples:"
@@ -68,9 +76,9 @@ help:
 
 python-deps:
 ifeq ($(PYTHON),ON)
-	python -m pip install --upgrade pip
-	python -m pip install -r python/requirements-dev.txt
-	@PYBIND11_DIR="$$(python -m pybind11 --cmakedir)"; \
+	$(PYTHON_EXECUTABLE) -m pip install --upgrade pip
+	$(PYTHON_EXECUTABLE) -m pip install -r python/requirements-dev.txt
+	@PYBIND11_DIR="$$($(PYTHON_EXECUTABLE) -m pybind11 --cmakedir)"; \
 	echo "Using pybind11 from $$PYBIND11_DIR"; \
 	mkdir -p share/cmake; \
 	rm -rf share/cmake/pybind11; \
@@ -87,8 +95,8 @@ configure:
 		-B $(BUILD_DIR) \
 		$(CMAKE_FLAGS) \
 		-DCMAKE_C_COMPILER=$(CC) \
-		-DCMAKE_CXX_COMPILER=$(CXX)
-# 		-DCMAKE_Fortran_COMPILER=$(FC)
+		-DCMAKE_CXX_COMPILER=$(CXX) \
+		-DCMAKE_Fortran_COMPILER=$(FC)
 
 build: configure
 	cmake --build $(BUILD_DIR) --parallel $(JOBS) --target all
@@ -125,7 +133,7 @@ test-c: build
 		'int main(void) {' \
 		'    void *ctx = init();' \
 		'    if (ctx == NULL) return 1;' \
-		'    return cleanup(ctx);' \
+		'    return cleanup(&ctx);' \
 		'}' \
 		> $(BUILD_DIR)/ci/c_interface_smoke.c
 	$(CC) \
@@ -144,7 +152,7 @@ test-c: build
 
 test-python: build
 ifeq ($(PYTHON),ON)
-	python -c "import sys; sys.path.insert(0, '$(BUILD_DIR)'); import PyAnsatzEvolve; m = PyAnsatzEvolve.stateAnsatzManager(); print('PyAnsatzEvolve import OK')"
+	$(PYTHON_EXECUTABLE) -c "import sys; sys.path.insert(0, '$(BUILD_DIR)'); import PyAnsatzEvolve; m = PyAnsatzEvolve.stateAnsatzManager(); print('PyAnsatzEvolve import OK')"
 else
 	@echo "PYTHON=OFF: Python interface test skipped"
 endif

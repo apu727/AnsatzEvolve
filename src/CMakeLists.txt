@@ -56,7 +56,7 @@ endif()
 
 option(ANSATZEVOLVE_OPENMP "Turn on Openmp (Recommended)" ON)
 if (ANSATZEVOLVE_OPENMP)
-    find_package(OpenMP)
+    find_package(OpenMP REQUIRED)
 endif()
 
 include_directories(./third-party/eigen-3.4.0)
@@ -148,6 +148,5 @@ endif()
 
 #Doxygen target
 add_subdirectory(doxygen)
-
 
 
