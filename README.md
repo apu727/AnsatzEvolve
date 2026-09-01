@@ -1,8 +1,8 @@
 # AnsatzEvolve
 
-[![License: MPL 2.0](https://img.shields.io/github/license/edoaltamura/AnsatzEvolve?style=flat-square)](LICENSE)
+[![License: MPL 2.0](https://img.shields.io/github/license/apu727/AnsatzEvolve?style=flat-square)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-Doxygen-2c3e50?style=flat-square)](https://apu727.github.io/AnsatzEvolve/)
-[![Issues](https://img.shields.io/github/issues/edoaltamura/AnsatzEvolve?style=flat-square)](https://github.com/edoaltamura/AnsatzEvolve/issues)
+[![Build](https://github.com/apu727/AnsatzEvolve/actions/workflows/portability.yml/badge.svg?branch=main)](https://github.com/apu727/AnsatzEvolve/actions/workflows/portability.yml)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?style=flat-square&logo=cplusplus&logoColor=white)](src/CMakeLists.txt)
 [![OpenMP](https://img.shields.io/badge/OpenMP-optional-6DB33F?style=flat-square)](#build)
 
@@ -29,7 +29,46 @@ The project includes a native C++17 library, a standalone executable, C, Fortran
 
 Eigen 3.4.0 is bundled in [`src/third-party/`](src/third-party/). Doxygen is only needed to regenerate the documentation. Python workflows use the packages listed in [`python/requirements.txt`](python/requirements.txt), including PySCF.
 
-### Build
+### Makefile build
+
+The Makefile provides configure, build, test, dependency, documentation, and clean targets:
+
+```sh
+# Configure and build with the defaults
+make build
+
+# Configure and run all smoke tests
+make test
+
+# Build without OpenMP or Python
+make build OPENMP=OFF PYTHON=OFF
+
+# Build a Debug complex-mode configuration with four parallel jobs
+make build BUILD_TYPE=Debug COMPLEX=ON JOBS=4
+
+# Install Python dependencies before building the Python extension
+make python-deps PYTHON_EXECUTABLE=python3
+make build PYTHON=ON PYTHON_EXECUTABLE=python3
+```
+
+Configuration variables can be passed to any Makefile target:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `BUILD_TYPE` | `Release` | CMake build type, such as `Release` or `Debug` |
+| `OPENMP` | `ON` | Enable OpenMP; use `OFF` when unavailable |
+| `COMPLEX` | `OFF` | Enable complex-valued arithmetic |
+| `PYTHON` | `ON` | Build and test the Python extension |
+| `PYTHON_EXECUTABLE` | `python3` | Python executable used for dependencies and tests |
+| `CC` | auto-detected | C compiler used by the C smoke test |
+| `CXX` | auto-detected | C++ compiler passed to CMake |
+| `FC` | auto-detected | Fortran compiler passed to CMake |
+| `JOBS` | `2` | Parallel build jobs |
+| `BUILD_DIR` | configuration-specific | Override the generated build directory |
+
+The default build directory includes the selected configuration. For example, `BUILD_DIR=build/local make test` can be used to choose a custom location.
+
+### Manual build
 
 From the repository root:
 
@@ -39,6 +78,8 @@ cmake --build build --target all
 ```
 
 This builds `cppAnsatzSynth`, the static C++ library, the C/Fortran interface library, and `FortranBindingsTest`.
+
+To build the Python extension, make a pybind11 CMake package available and configure with `-DANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON`. The current CMake install target places the extension in the repository root.
 
 Useful configuration options:
 
@@ -58,7 +99,7 @@ cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DCOMPLEX_MODE=ON
 > gfortran 13.3.0
 > Apple Clang++ 17
 > ```
-> Other compilers may or may not work. A C++17 compatible compiler is necessary.
+> Other compilers may or may not work. A C++17 compatible compiler is necessary. Builds for Windows are not corrently supported.
 
 Specific targets can be selected via the ```--target XX``` cmake option. Possible targets are:
 ```
@@ -101,11 +142,17 @@ The library can be used through:
 - Fortran: [`AnsatzSynthInterface.f90`](src/AnsatzSynthInterface.f90)
 - Python: the optional `PyAnsatzEvolve` extension
 
-To build the Python extension, make a pybind11 CMake package available and configure with `-DANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON`. The current CMake install target places the extension in the repository root.
-
 ## Verification
 
-Run the bundled Fortran interface smoke test after building:
+Run
+
+```sh
+make test
+```
+
+to test whether the builds were successful and the basic smoke tests pass.
+
+In addition, run the bundled Fortran interface smoke test after building:
 
 ```sh
 ./build/FortranBindingsTest
@@ -119,7 +166,7 @@ It exercises representative energy, gradient, Hessian, and statevector calls. Co
 - [Input-file manual](Manual.md)
 - [Benchmark report](Benchmarks.md)
 
-Regenerate the documentation with Doxygen using:
+Regenerate the documentation with Doxygen using `make docs`, or manually with:
 
 ```sh
 cmake --build build --target AnsatzEvolve_docs
