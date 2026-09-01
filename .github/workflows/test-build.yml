@@ -16,60 +16,56 @@ permissions:
   contents: read
 
 jobs:
-  linux:
+  build::
     name: >-
-      Linux
-      | ${{ matrix.compiler }}
-      | ${{ matrix.configuration }}
-
-    runs-on: ubuntu-latest
+      ${{ matrix.os }} 
+      | ${{ matrix.build_type }}
+      | ${{ matrix.openmp }}
+      | ${{ matrix.complex }}
+      | ${{ matrix.python }}
+      | ${{ matrix.compiler.cc }}
 
     strategy:
       fail-fast: false
 
       matrix:
-        include:
-          - compiler: GCC
-            cc: gcc
+        os:
+          - ubuntu-latest
+          - macos-latest
+        build_type:
+          - Debug
+          - Release
+        openmp:
+          - "ON"
+          - "OFF"
+        complex:
+          - "ON"
+          - "OFF"
+        python:
+          - "ON"
+          - "OFF"
+        compiler:
+          - cc: gcc
             cxx: g++
             fc: gfortran
-            configuration: default
-            openmp: "ON"
-            complex: "OFF"
-            python: "OFF"
-
-          - compiler: GCC
-            cc: gcc
-            cxx: g++
-            fc: gfortran
-            configuration: everything-on
-            openmp: "ON"
-            complex: "ON"
-            python: "ON"
-
-          - compiler: Clang
-            cc: clang
+          - cc: clang
             cxx: clang++
             fc: flang
-            configuration: default
-            openmp: "ON"
-            complex: "OFF"
-            python: "OFF"
 
-          - compiler: Clang
-            cc: clang
-            cxx: clang++
-            fc: flang
-            configuration: everything-on
-            openmp: "ON"
-            complex: "ON"
-            python: "ON"
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        if: matrix.python == 'ON'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install dependencies
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -77,9 +73,11 @@ jobs:
             clang \
             cmake \
             gfortran \
-            libomp-dev \
-            python3 \
-            python3-pip
+            libomp-dev
+        elif: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install cmake gcc clang gfortran libomp-dev
 
       - name: Install Python dependencies
         if: matrix.python == 'ON'
@@ -92,7 +90,7 @@ jobs:
           cmake \
             -S src \
             -B build \
-            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DANSATZEVOLVE_OPENMP=${{ matrix.openmp }} \
             -DCOMPLEX_MODE=${{ matrix.complex }} \
             -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=${{ matrix.python }} \
@@ -107,85 +105,4 @@ jobs:
       # For future reference
       #   run: ctest --test-dir build --output-on-failure
 
-  macos:
-    name: >-
-      macOS
-      | ${{ matrix.compiler }}
-      | ${{ matrix.configuration }}
 
-    runs-on: macos-latest
-
-    strategy:
-      fail-fast: false
-
-      matrix:
-        include:
-          - compiler: GCC
-            cc: gcc
-            cxx: g++
-            fc: gfortran
-            configuration: default
-            openmp: "ON"
-            complex: "OFF"
-            python: "OFF"
-
-          - compiler: GCC
-            cc: gcc
-            cxx: g++
-            fc: gfortran
-            configuration: everything-on
-            openmp: "ON"
-            complex: "ON"
-            python: "ON"
-
-          - compiler: Clang
-            cc: clang
-            cxx: clang++
-            fc: flang
-            configuration: default
-            openmp: "ON"
-            complex: "OFF"
-            python: "OFF"
-
-          - compiler: Clang
-            cc: clang
-            cxx: clang++
-            fc: flang
-            configuration: everything-on
-            openmp: "ON"
-            complex: "ON"
-            python: "ON"
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          brew install cmake gcc clang gfortran python3 libomp
-
-      - name: Install Python dependencies
-        if: matrix.python == 'ON'
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r python/requirements-dev.txt
-
-
-      - name: Configure CMake
-        run: |
-          cmake \
-            -S src \
-            -B build \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DANSATZEVOLVE_OPENMP=${{ matrix.openmp }} \
-            -DCOMPLEX_MODE=${{ matrix.complex }} \
-            -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=${{ matrix.python }} \
-            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
-            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -DCMAKE_Fortran_COMPILER=${{ matrix.fc }}
-
-      - name: Build
-        run: cmake --build build --parallel 2 --target all
-
-      # - name: Test
-      #   run: ctest --test-dir build --output-on-failure
