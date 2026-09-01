@@ -1,0 +1,167 @@
+name: Test build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    # Run every day at 1 AM
+    - cron: '0 1 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: >-
+      Linux
+      | ${{ matrix.compiler }}
+      | ${{ matrix.configuration }}
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - compiler: GCC
+            cc: gcc
+            cxx: g++
+            fc: gfortran
+            configuration: default
+            openmp: "ON"
+            complex: "OFF"
+            python: "OFF"
+
+          - compiler: GCC
+            cc: gcc
+            cxx: g++
+            fc: gfortran
+            configuration: everything-on
+            openmp: "ON"
+            complex: "ON"
+            python: "ON"
+
+          - compiler: Clang
+            cc: clang
+            cxx: clang++
+            fc: gfortran
+            configuration: default
+            openmp: "ON"
+            complex: "OFF"
+            python: "OFF"
+
+          - compiler: Clang
+            cc: clang
+            cxx: clang++
+            fc: gfortran
+            configuration: everything-on
+            openmp: "ON"
+            complex: "ON"
+            python: "ON"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            cmake \
+            gfortran \
+            libomp-dev \
+            python3 \
+            python3-pip
+
+      - name: Install Python dependencies
+        if: matrix.python == 'ON'
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r python/requirements-dev.txt
+
+      - name: Configure CMake
+        run: |
+          cmake \
+            -S src \
+            -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DANSATZEVOLVE_OPENMP=${{ matrix.openmp }} \
+            -DCOMPLEX_MODE=${{ matrix.complex }} \
+            -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=${{ matrix.python }} \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_Fortran_COMPILER=${{ matrix.fc }}
+
+      - name: Build
+        run: cmake --build build --parallel 2 --target all
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  macos:
+    name: >-
+      macOS
+      | AppleClang
+      | ${{ matrix.configuration }}
+
+    runs-on: macos-latest
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - configuration: default-no-openmp
+            openmp: "OFF"
+            complex: "OFF"
+            python: "OFF"
+
+          - configuration: complex-python
+            openmp: "OFF"
+            complex: "ON"
+            python: "ON"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake gcc
+
+      - name: Install Python dependencies
+        if: matrix.python == 'ON'
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r python/requirements-dev.txt
+
+      - name: Locate gfortran
+        run: |
+          echo "GFORTRAN=$(which gfortran || ls $(brew --prefix)/bin/gfortran-* | head -1)" >> "$GITHUB_ENV"
+
+      - name: Configure CMake
+        run: |
+          cmake \
+            -S src \
+            -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DANSATZEVOLVE_OPENMP=${{ matrix.openmp }} \
+            -DCOMPLEX_MODE=${{ matrix.complex }} \
+            -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=${{ matrix.python }} \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_Fortran_COMPILER="${GFORTRAN}"
+
+      - name: Build
+        run: cmake --build build --parallel 2 --target all
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

@@ -20,6 +20,7 @@ The project includes a native C++17 library, a standalone executable, C, Fortran
 
 ## Quick start
 
+
 ### Requirements
 
 - CMake 3.5 or newer (CMake 3.13 or newer for the `-S`/`-B` syntax below)
@@ -36,20 +37,20 @@ Configure and build the project from the repository root:
 ```sh
 # Configure and build the default configuration
 cmake -S src -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+cmake --build build --parallel --target all
 
 # Configure without OpenMP or Python
 cmake -S src -B build-no-optional \
   -DCMAKE_BUILD_TYPE=Release \
   -DANSATZEVOLVE_OPENMP=OFF \
   -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=OFF
-cmake --build build-no-optional --parallel
+cmake --build build-no-optional --parallel --target all
 
 # Configure a Debug complex-mode build with four parallel jobs
 cmake -S src -B build-debug \
   -DCMAKE_BUILD_TYPE=Debug \
   -DCOMPLEX_MODE=ON
-cmake --build build-debug --parallel 4
+cmake --build build-debug --parallel 4 --target all
 ```
 
 To build the optional Python extension, install the development dependencies and provide pybind11's CMake package to CMake:
@@ -58,11 +59,11 @@ To build the optional Python extension, install the development dependencies and
 python3 -m pip install -r python/requirements-dev.txt
 cmake -S src -B build-python \
   -DCMAKE_BUILD_TYPE=Release \
-  -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON \
-  -Dpybind11_DIR="$(python3 -m pybind11 --cmakedir)" \
-  -DPython_EXECUTABLE="$(command -v python3)"
-cmake --build build-python --parallel
+  -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON
+cmake --build build-python --parallel --target all
 ```
+
+This builds `cppAnsatzSynth`, the static C++ library, the C/Fortran interface library, and `FortranBindingsTest`.
 
 Useful CMake options include:
 
@@ -76,27 +77,14 @@ Useful CMake options include:
 | `CMAKE_CXX_COMPILER` | auto-detected | C++ compiler used by the project |
 | `CMAKE_Fortran_COMPILER` | auto-detected | Fortran compiler used by the project |
 
-### Manual build
-
-From the repository root:
-
-```sh
-cmake -S src -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target all
+Specific targets can be selected via the ```--target XX``` cmake option. Possible targets are:
 ```
-
-This builds `cppAnsatzSynth`, the static C++ library, the C/Fortran interface library, and `FortranBindingsTest`.
-
-The CMake install target places the Python extension in the repository root.
-
-Useful configuration options:
-
-```sh
-# Disable OpenMP
-cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DANSATZEVOLVE_OPENMP=OFF
-
-# Enable complex-valued statevectors
-cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DCOMPLEX_MODE=ON
+cppAnsatzSynthLib
+cppAnsatzSynth
+AnsatzSynthInterface
+CInterfaceSmoke
+FortranBindingsTest
+all
 ```
 
 > [!IMPORTANT]
@@ -107,17 +95,9 @@ cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DCOMPLEX_MODE=ON
 > gfortran 13.3.0
 > Apple Clang++ 17
 > ```
-> Other compilers may or may not work. A C++17 compatible compiler is necessary. Builds for Windows are not corrently supported.
+> Other compilers may or may not work. A C++17 compatible compiler is necessary. Builds for Windows are not currently supported.
 
-Specific targets can be selected via the ```--target XX``` cmake option. Possible targets are:
-```
-cppAnsatzSynthLib
-cppAnsatzSynth
-AnsatzSynthInterface
-CInterfaceSmoke
-FortranBindingsTest
-all
-```
+
 
 ### Run an example
 
