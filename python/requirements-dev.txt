@@ -7,4 +7,4 @@ setuptools
 # Test, lint, formatting, and spelling tooling.
 codespell==2.4.1
 pytest==8.4.1
-ruff==0.12.8
+ruff==0.16.5
