@@ -1,7 +1,7 @@
 # Development and optional Python-extension build dependencies.
 -r requirements.txt
 
-pybind11[global]>=3.0.0
+pybind11[global]>=3.1.0
 setuptools
 
 # Test, lint, formatting, and spelling tooling.
