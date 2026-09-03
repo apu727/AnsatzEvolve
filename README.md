@@ -1,8 +1,8 @@
 # AnsatzEvolve
 
-[![License: MPL 2.0](https://img.shields.io/github/license/edoaltamura/AnsatzEvolve?style=flat-square)](LICENSE)
+[![License: MPL 2.0](https://img.shields.io/github/license/apu727/AnsatzEvolve?style=flat-square)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-Doxygen-2c3e50?style=flat-square)](https://apu727.github.io/AnsatzEvolve/)
-[![Issues](https://img.shields.io/github/issues/edoaltamura/AnsatzEvolve?style=flat-square)](https://github.com/edoaltamura/AnsatzEvolve/issues)
+[![Build](https://github.com/apu727/AnsatzEvolve/actions/workflows/portability.yml/badge.svg?branch=main)](https://github.com/apu727/AnsatzEvolve/actions/workflows/portability.yml)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?style=flat-square&logo=cplusplus&logoColor=white)](src/CMakeLists.txt)
 [![OpenMP](https://img.shields.io/badge/OpenMP-optional-6DB33F?style=flat-square)](#build)
 
@@ -20,6 +20,7 @@ The project includes a native C++17 library, a standalone executable, C, Fortran
 
 ## Quick start
 
+
 ### Requirements
 
 - CMake 3.5 or newer (CMake 3.13 or newer for the `-S`/`-B` syntax below)
@@ -29,26 +30,63 @@ The project includes a native C++17 library, a standalone executable, C, Fortran
 
 Eigen 3.4.0 is bundled in [`src/third-party/`](src/third-party/). Doxygen is only needed to regenerate the documentation. Python workflows use the packages listed in [`python/requirements.txt`](python/requirements.txt), including PySCF.
 
-### Build
+### CMake build
 
-From the repository root:
+Configure and build the project from the repository root:
 
 ```sh
+# Configure and build the default configuration
 cmake -S src -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target all
+
+# Configure without OpenMP or Python
+cmake -S src -B build-no-optional \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DANSATZEVOLVE_OPENMP=OFF \
+  -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=OFF
+cmake --build build-no-optional --target all
+
+# Configure a Debug complex-mode build with four parallel jobs
+cmake -S src -B build-debug \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCOMPLEX_MODE=ON
+cmake --build build-debug --parallel 4 --target all
+```
+
+To build the optional Python extension, install the development dependencies and provide pybind11's CMake package to CMake:
+
+```sh
+python3 -m pip install -r python/requirements-dev.txt
+cmake -S src -B build-python \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON
+cmake --build build-python --target all
 ```
 
 This builds `cppAnsatzSynth`, the static C++ library, the C/Fortran interface library, and `FortranBindingsTest`.
 
-Useful configuration options:
+Useful CMake options include:
 
-```sh
-# Disable OpenMP
-cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DANSATZEVOLVE_OPENMP=OFF
+| Variable | Default | Description |
+| --- | --- | --- |
+| `CMAKE_BUILD_TYPE` | `Release` | Build type, such as `Release` or `Debug` |
+| `ANSATZEVOLVE_OPENMP` | `ON` | Enable OpenMP; use `OFF` when unavailable |
+| `COMPLEX_MODE` | `OFF` | Enable complex-valued arithmetic |
+| `ANSATZEVOLVE_COMPILE_PYTHON_LIBS` | `OFF` | Build the Python extension |
+| `CMAKE_Fortran_COMPILER` | auto-detected | Fortran compiler used by the project |
 
-# Enable complex-valued statevectors
-cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DCOMPLEX_MODE=ON
+Specific targets can be selected via the ```--target <X>``` cmake option. Possible targets are:
 ```
+cppAnsatzSynthLib
+cppAnsatzSynth
+AnsatzSynthInterface
+PyAnsatzEvolve      # If configured with ANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON
+FortranBindingsTest
+all
+```
+Running ```--target install``` with the Python configuration installs both `PyAnsatzEvolve.so` and 
+`PyAnsatzEvolve.pyi` into the root directory of the repository. No further modules are installed in
+any other locations (eg `/usr/local/`).
 
 > [!IMPORTANT]
 > **Compiler compatibility**
@@ -58,16 +96,7 @@ cmake -S src -B build -DCMAKE_BUILD_TYPE=Release -DCOMPLEX_MODE=ON
 > gfortran 13.3.0
 > Apple Clang++ 17
 > ```
-> Other compilers may or may not work. A C++17 compatible compiler is necessary.
-
-Specific targets can be selected via the ```--target XX``` cmake option. Possible targets are:
-```
-cppAnsatzSynthLib
-cppAnsatzSynth
-AnsatzSynthInterface
-FortranBindingsTest
-all
-```
+> Other compilers may or may not work. A C++17 compatible compiler is necessary. Builds for Windows are not currently tested.
 
 ### Run an example
 
@@ -101,11 +130,9 @@ The library can be used through:
 - Fortran: [`AnsatzSynthInterface.f90`](src/AnsatzSynthInterface.f90)
 - Python: the optional `PyAnsatzEvolve` extension
 
-To build the Python extension, make a pybind11 CMake package available and configure with `-DANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON`. The current CMake install target places the extension in the repository root.
-
 ## Verification
 
-Run the bundled Fortran interface smoke test after building:
+The bundled Fortran interface smoke test can also be run directly:
 
 ```sh
 ./build/FortranBindingsTest

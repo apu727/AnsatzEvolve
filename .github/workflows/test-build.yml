@@ -1,0 +1,148 @@
+name: Test build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    # Run once a week at 1 AM on Monday
+  - cron: "0 1 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  build::
+    name: >-
+      ${{ matrix.os }} 
+      | ${{ matrix.build_type }}
+      | ${{ matrix.openmp }}
+      | ${{ matrix.complex }}
+      | ${{ matrix.python }}
+      | ${{ matrix.compiler.name }}
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        build_type:
+          - Debug
+          - Release
+        openmp:
+          - "ON"
+          - "OFF"
+        complex:
+          - "ON"
+          - "OFF"
+        python:
+          - "ON"
+          - "OFF"
+        compiler:
+          - name: GNU
+            cc: gcc
+            cxx: g++
+            fc: gfortran
+
+          - name: LLVM
+            cc: clang
+            cxx: clang++
+            fc: flang
+
+          # AppleClang is only available on macOS.
+          - name: AppleClang
+            cc: /usr/bin/clang
+            cxx: /usr/bin/clang++
+            fc: gfortran
+
+        exclude:
+          # AppleClang doesn't apply to Ubuntu.
+          - os: ubuntu-latest
+            compiler:
+              name: AppleClang
+              cc: /usr/bin/clang
+              cxx: /usr/bin/clang++
+              fc: gfortran
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: matrix.python == 'ON'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            gcc \
+            clang \
+            cmake \
+            gfortran \
+            libomp-dev
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install cmake libomp gfortran
+        if: matrix.os == 'macos-latest' && matrix.compiler.name != 'AppleClang'
+        run: |
+          brew install gcc clang
+
+
+      - name: Show compiler versions
+        run: |
+          echo "Compiler versions"
+          echo "CMake:"
+          cmake --version
+
+          echo "C compiler:"
+          ${{ matrix.compiler.cc }} --version
+
+          echo "C++ compiler:"
+          ${{ matrix.compiler.cxx }} --version
+
+          echo "Fortran compiler:"
+          ${{ matrix.compiler.fc }} --version
+
+      - name: Install Python dependencies
+        if: matrix.python == 'ON'
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r python/requirements-dev.txt
+
+      - name: Configure CMake
+        run: |
+          cmake \
+            -S src \
+            -B build \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DANSATZEVOLVE_OPENMP=${{ matrix.openmp }} \
+            -DCOMPLEX_MODE=${{ matrix.complex }} \
+            -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=${{ matrix.python }} \
+            -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
+            -DCMAKE_Fortran_COMPILER=${{ matrix.compiler.fc }}
+
+      - name: Build
+        run: cmake --build build --parallel 2 --target all
+
+      # - name: Test
+      # For future reference
+      #   run: ctest --test-dir build --output-on-failure
+
+
