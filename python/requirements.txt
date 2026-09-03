@@ -2,5 +2,5 @@
 h5py
 matplotlib
 numpy>=2.0.0
-pyscf==2.10.0
+pyscf==2.14.0
 scipy>=1.16
