@@ -75,14 +75,18 @@ Useful CMake options include:
 | `ANSATZEVOLVE_COMPILE_PYTHON_LIBS` | `OFF` | Build the Python extension |
 | `CMAKE_Fortran_COMPILER` | auto-detected | Fortran compiler used by the project |
 
-Specific targets can be selected via the ```--target XX``` cmake option. Possible targets are:
+Specific targets can be selected via the ```--target <X>``` cmake option. Possible targets are:
 ```
 cppAnsatzSynthLib
 cppAnsatzSynth
 AnsatzSynthInterface
+PyAnsatzEvolve      # If configured with ANSATZEVOLVE_COMPILE_PYTHON_LIBS=ON
 FortranBindingsTest
 all
 ```
+Running ```--target install``` with the Python configuration installs both `PyAnsatzEvolve.so` and 
+`PyAnsatzEvolve.pyi` into the root directory of the repository. No further modules are installed in
+any other locations (eg `/usr/local/`).
 
 > [!IMPORTANT]
 > **Compiler compatibility**
@@ -92,9 +96,7 @@ all
 > gfortran 13.3.0
 > Apple Clang++ 17
 > ```
-> Other compilers may or may not work. A C++17 compatible compiler is necessary. Builds for Windows are not currently untested.
-
-
+> Other compilers may or may not work. A C++17 compatible compiler is necessary. Builds for Windows are not currently tested.
 
 ### Run an example
 
