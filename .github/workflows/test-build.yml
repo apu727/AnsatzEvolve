@@ -46,24 +46,28 @@ jobs:
           # Ubuntu: GNU C++ + GNU Fortran
           - name: GNU
             os: ubuntu-24.04
+            cc: gcc-14
             cxx: g++-14
             fc: gfortran-14
 
           # Ubuntu: LLVM Clang + LLVM Flang
           - name: LLVM
             os: ubuntu-24.04
+            cc: clang-19
             cxx: clang++-19
             fc: flang-new-19
 
           # macOS: GNU C++ + GNU Fortran
           - name: GNU
             os: macos-15
+            cc: gcc-14
             cxx: g++-14
             fc: gfortran-14
 
           # macOS: Apple Clang from Xcode + GNU Fortran
           - name: AppleClang
             os: macos-15
+            cc: /usr/bin/clang
             cxx: /usr/bin/clang++
             fc: gfortran-14
 
