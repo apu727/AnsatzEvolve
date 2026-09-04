@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 jobs:
-  build::
+  build:
     name: >-
       ${{ matrix.os }} 
       | ${{ matrix.build_type }}
