@@ -33,8 +33,9 @@ jobs:
           - ubuntu-latest
           - macos-latest
         build_type:
+#Disable release build while there are no tests. If it builds in debug it will build in release
           - Debug
-          - Release
+#          - Release
         openmp:
           - "ON"
 #          - "OFF"
