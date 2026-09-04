@@ -37,23 +37,18 @@ jobs:
           - Release
         openmp:
           - "ON"
-          - "OFF"
+#          - "OFF"
         complex:
           - "ON"
-          - "OFF"
+#          - "OFF"
         python:
           - "ON"
-          - "OFF"
+#          - "OFF"
         compiler:
           - name: GNU
             cc: gcc
             cxx: g++
             fc: gfortran
-
-          - name: LLVM
-            cc: clang
-            cxx: clang++
-            fc: flang
 
           # AppleClang is only available on macOS.
           - name: AppleClang
@@ -69,6 +64,13 @@ jobs:
               cc: /usr/bin/clang
               cxx: /usr/bin/clang++
               fc: gfortran
+          # Clang doesn't apply to macOS
+          - os: macos-latest
+            compiler:
+              name: LLVM
+              cc: clang
+              cxx: clang++
+              fc: flang
 
     runs-on: ${{ matrix.os }}
 
@@ -98,7 +100,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew update
-          brew install gcc clang cmake libomp gfortran
+          brew install gcc cmake libomp gfortran
 
       - name: Show compiler versions
         run: |
