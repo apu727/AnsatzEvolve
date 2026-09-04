@@ -18,62 +18,60 @@ permissions:
 jobs:
   build:
     name: >-
-      ${{ matrix.os }} 
+      ${{ matrix.compiler.os }}
       | ${{ matrix.build_type }}
-      | ${{ matrix.openmp }}
-      | ${{ matrix.complex }}
-      | ${{ matrix.python }}
+      | OpenMP=${{ matrix.openmp }}
+      | Complex=${{ matrix.complex }}
+      | Python=${{ matrix.python }}
       | ${{ matrix.compiler.name }}
 
     strategy:
       fail-fast: false
 
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
         build_type:
 #Disable release build while there are no tests. If it builds in debug it will build in release
           - Debug
 #          - Release
         openmp:
           - "ON"
-#          - "OFF"
+          - "OFF"
         complex:
           - "ON"
-#          - "OFF"
+          - "OFF"
         python:
           - "ON"
-#          - "OFF"
+          - "OFF"
         compiler:
+          # Ubuntu: GNU C++ + GNU Fortran
           - name: GNU
-            cc: gcc
-            cxx: g++
-            fc: gfortran
+            os: ubuntu-24.04
+            cc: gcc-14
+            cxx: g++-14
+            fc: gfortran-14
 
-          # AppleClang is only available on macOS.
+          # Ubuntu: LLVM Clang + LLVM Flang
+          - name: LLVM
+            os: ubuntu-24.04
+            cc: clang-19
+            cxx: clang++-19
+            fc: flang-new-19
+
+          # macOS: GNU C++ + GNU Fortran
+          - name: GNU
+            os: macos-15
+            cc: gcc-14
+            cxx: g++-14
+            fc: gfortran-14
+
+          # macOS: Apple Clang from Xcode + GNU Fortran
           - name: AppleClang
+            os: macos-15
             cc: /usr/bin/clang
             cxx: /usr/bin/clang++
-            fc: gfortran
+            fc: gfortran-14
 
-        exclude:
-          # AppleClang doesn't apply to Ubuntu.
-          - os: ubuntu-latest
-            compiler:
-              name: AppleClang
-              cc: /usr/bin/clang
-              cxx: /usr/bin/clang++
-              fc: gfortran
-          # Clang doesn't apply to macOS
-          - os: macos-latest
-            compiler:
-              name: LLVM
-              cc: clang
-              cxx: clang++
-              fc: flang
-
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.compiler.os }}
 
     steps:
       - name: Checkout
@@ -85,23 +83,30 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install GNU compilers
+        if: runner.os == 'Linux' && matrix.compiler.name == 'GNU'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential \
-            gcc \
-            clang \
-            cmake \
-            gfortran \
-            libomp-dev
+            g++-14 \
+            gfortran-14
 
-      - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest'
+      - name: Install LLVM compilers
+        if: runner.os == 'Linux' && matrix.compiler.name == 'LLVM'
         run: |
-          brew update
-          brew install gcc cmake libomp gfortran
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang-19 \
+            flang-19 \
+            libomp-19-dev
+
+      - name: Install OpenMP for AppleClang
+        if: >-
+          runner.os == 'macOS'
+          && matrix.compiler.name == 'AppleClang'
+          && matrix.openmp == 'ON'
+        run: |
+          brew install libomp
 
       - name: Show compiler versions
         run: |
@@ -125,17 +130,35 @@ jobs:
           python3 -m pip install -r python/requirements-dev.txt
 
       - name: Configure CMake
+        shell: bash
         run: |
-          cmake \
-            -S src \
-            -B build \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DANSATZEVOLVE_OPENMP=${{ matrix.openmp }} \
-            -DCOMPLEX_MODE=${{ matrix.complex }} \
-            -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=${{ matrix.python }} \
-            -DCMAKE_C_COMPILER=${{ matrix.compiler.cc }} \
-            -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
+          CMAKE_ARGS=(
+            -S src
+            -B build
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+            -DANSATZEVOLVE_OPENMP=${{ matrix.openmp }}
+            -DCOMPLEX_MODE=${{ matrix.complex }}
+            -DANSATZEVOLVE_COMPILE_PYTHON_LIBS=${{ matrix.python }}
+            -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }}
             -DCMAKE_Fortran_COMPILER=${{ matrix.compiler.fc }}
+          )
+
+          # CMake does not automatically find Homebrew libomp with
+          # AppleClang on macOS.
+          if [[ \
+            "${{ matrix.compiler.name }}" == "AppleClang" \
+            && "${{ matrix.openmp }}" == "ON" \
+          ]]; then
+            LIBOMP_PREFIX="$(brew --prefix libomp)"
+
+            CMAKE_ARGS+=(
+              "-DOpenMP_CXX_FLAGS=-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include"
+              "-DOpenMP_CXX_LIB_NAMES=omp"
+              "-DOpenMP_omp_LIBRARY=${LIBOMP_PREFIX}/lib/libomp.dylib"
+            )
+          fi
+
+          cmake "${CMAKE_ARGS[@]}"
 
       - name: Build
         run: cmake --build build --parallel 2 --target all
