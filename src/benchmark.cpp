@@ -712,7 +712,8 @@ void benchmarkRotateFuseN(stateAnsatz* ansatz, const std::vector<ansatz::rotatio
             std::array<numType,numberToFuse> cosines;
             for (indexType idx = 0; idx < numberToFuse; idx++)
             {
-                mysincos(rotationPath[i+idx].second,&sines[idx],&cosines[idx]);
+                sines[idx] = std::sin(rotationPath[i + idx].second);
+                cosines[idx] = std::cos(rotationPath[i + idx].second);
             }
 
 
@@ -1536,13 +1537,10 @@ void benchmarkRotate5(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
         startVec.copy(ansatz->getStart());
         for (size_t i = 0; i < rotationPath.size(); i+=numberToFuse)
         {
-            numType S1;
-            numType S2;
-            numType C1;
-            numType C2;
-            mysincos(rotationPath[i].second,&S1,&C1);
-            mysincos(rotationPath[i+1].second,&S2,&C2);
-
+            numType S1 = std::sin(rotationPath[i].second);
+            numType S2 = std::sin(rotationPath[i + 1].second);
+            numType C1 = std::cos(rotationPath[i].second);
+            numType C2 = std::cos(rotationPath[i + 1].second);
 
             //rot0 only
             for (size_t j = 0; j < myFusedAnsatz[i/numberToFuse][0].size(); j++)
@@ -1934,12 +1932,10 @@ void benchmarkRotate4(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
         start.copy(ansatz->getStart());
         for (size_t i = 0; i < rotationPath.size(); i+=numberToFuse)
         {
-            numType S1;
-            numType S2;
-            numType C1;
-            numType C2;
-            mysincos(rotationPath[i].second,&S1,&C1);
-            mysincos(rotationPath[i+1].second,&S2,&C2);
+            numType S1 = std::sin(rotationPath[i].second);
+            numType S2 = std::sin(rotationPath[i + 1].second);
+            numType C1 = std::cos(rotationPath[i].second);
+            numType C2 = std::cos(rotationPath[i + 1].second);
             uint32_t onlyRot1StartIdx = onlyrot1Start[i/numberToFuse];
             size_t j = 0;
             for ( ;j < myFusedAnsatz[i/numberToFuse].size() && j < onlyRot1StartIdx ; j++)
@@ -2167,9 +2163,8 @@ void benchmarkRotate2(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> 
 
             // vector<numType> & dst = onTemp1 ? temp2 : temp1;
 
-            double S = 0;
-            double C = 0;
-            mysincos(theta,&S,&C);
+            double S = std::sin(theta);
+            double C = std::cos(theta);
 
             auto iIdx = iGenerators[i].begin();
             auto jIdx = jGenerators[i].begin();
@@ -2584,9 +2579,8 @@ void benchmark(stateAnsatz* ansatz, std::vector<ansatz::rotationElement> rp, std
             realNumType** ptr = resultStore;
             for (auto& r: rp)
             {
-                realNumType S;
-                realNumType C;
-                mysincos(r.second,&S,&C);
+                realNumType S = std::sin(r.second);
+                realNumType C = std::cos(r.second);
 
                 ansatz->getLie()->getLieAlgebraMatrix(r.first)->rotateAndBraketWithTangentOfResult(S,C,start,start,*vecPtr++,**ptr++);
             }
