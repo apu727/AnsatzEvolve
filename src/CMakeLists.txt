@@ -121,7 +121,9 @@ target_compile_options(AnsatzSynthInterface PRIVATE "${ANSATZEVOLVE_CXX_FLAGS}")
 set(fortran_files test.F90 AnsatzSynthInterface.f90)
 add_executable(FortranBindingsTest ${fortran_files})
 target_link_libraries(FortranBindingsTest AnsatzSynthInterface)
-set_source_files_properties(test.F90 PROPERTIES COMPILE_FLAGS -ffree-line-length-none)
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(test.F90 PROPERTIES COMPILE_FLAGS -ffree-line-length-none)
+endif()
 
 #Python Interface
 set(PYTHON_MODULE_SOURCES PyAnsatzEvolve.cpp)
