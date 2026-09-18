@@ -870,9 +870,8 @@ void sparseMatrix<dataType, vectorType>::multiply(const vectorView<const Matrix<
 template<typename dataType, typename vectorType>
 void sparseMatrix<dataType, vectorType>::rotate(realNumType angle, const vectorView<const Matrix<vectorType>>& other, vectorView<Matrix<vectorType>> dest) const
 {
-    double S = 0;
-    double C = 0;
-    mysincos(angle,&S,&C);
+    double S = std::sin(angle);
+    double C = std::cos(angle);
     rotate(S,C,other,dest);
 }
 
