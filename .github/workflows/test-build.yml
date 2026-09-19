@@ -163,7 +163,8 @@ jobs:
       - name: Build
         run: cmake --build build --parallel 2 --target all
 
-      # - name: Test
+      - name: Test Fortran bindings
+        run: ./build/FortranBindingsTest
       # For future reference
       #   run: ctest --test-dir build --output-on-failure
 
