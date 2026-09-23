@@ -88,10 +88,8 @@ void baseAnsatz::rotateState(const matrixType &rotationGenerator, realNumType th
 
     //assert(allClose(rotationGenerator.T()+rotationGenerator,0));
 
-    double S = 0;
-    double C = 0;
-    mysincos(theta,&S,&C);
-
+    double S = std::sin(theta);
+    double C = std::cos(theta);
 
     vector<numType> normDir;
     vector<numType> parallelDir;
@@ -216,9 +214,8 @@ void baseAnsatz::updateAnglesNoDeriv(const std::vector<realNumType> &angles,vect
         const matrixType &rotationGenerator = *m_lie->getLieAlgebraMatrix(rp.first);
         realNumType theta = angles[i];
 
-        double S = 0;
-        double C = 0;
-        mysincos(theta,&S,&C);
+        double S = std::sin(theta);
+        double C = std::cos(theta);
 
         rotationGenerator.rotate(S,C,dest,dest);
     }
@@ -276,9 +273,8 @@ void baseAnsatz::getDerivativeVec(std::shared_ptr<HamiltonianMatrix<realNumType,
         const matrixType &rotationGenerator = *m_lie->getLieAlgebraMatrix(rp.first);
         realNumType theta = -m_rotationPath[i].second;
 
-        double S = 0;
-        double C = 0;
-        mysincos(theta,&S,&C);
+        double S = std::sin(theta);
+        double C = std::cos(theta);
         rotationGenerator.rotate(S,C,src,dest);
         futs.push_back(threadpool::getInstance(NUM_CORES).queueWork([i,&deriv,this](){deriv[i] = 2* m_derivSpaceNotEvolvedCache[i].dot(m_hPsiEvolvedList[i]);}));
     }
@@ -331,9 +327,8 @@ void baseAnsatz::getHessianAndDerivative(std::shared_ptr<HamiltonianMatrix<realN
             const matrixType &rotationGenerator = *m_lie->getLieAlgebraMatrix(rp.first);
             realNumType theta = m_rotationPath[x_j].second;
 
-            double S = 0;
-            double C = 0;
-            mysincos(theta,&S,&C);
+            double S = std::sin(theta);
+            double C = std::cos(theta);
 
             rotationGenerator.rotateAndBraketWithTangentOfResult(S,C,currPos,currPos,m_hPsiEvolvedList[x_j],Hessian(starti,x_j));
             Hessian(starti,x_j) *= 2;
@@ -394,12 +389,10 @@ void baseAnsatz::getHessianAndDerivative(std::shared_ptr<HamiltonianMatrix<realN
             const matrixType &rotationGenerator = *m_lie->getLieAlgebraMatrix(rp.first);
             realNumType theta = m_rotationPath[x_i].second;
 
-            double S = 0;
-            double C = 0;
-            mysincos(theta,&S,&C);
+            double S = std::sin(theta);
+            double C = std::cos(theta);
 
-
-            asyncRotate(derivList,rotationGenerator,S,C);
+            asyncRotate(derivList, rotationGenerator, S, C);
 
             m_derivList.emplace_back();
             mat.getJVectorView(x_i).copy(m_derivSpaceNotEvolvedCache[x_i]);
@@ -526,9 +519,8 @@ void baseAnsatz::getDerivativeVecProj(const vector<numType> &projVec, vector<rea
         const matrixType &rotationGenerator = *m_lie->getLieAlgebraMatrix(rp.first);
         realNumType theta = -m_rotationPath[i].second;
 
-        double S = 0;
-        double C = 0;
-        mysincos(theta,&S,&C);
+        double S = std::sin(theta);
+        double C = std::cos(theta);
         rotationGenerator.rotate(S,C,src,dest);
         // deriv[i] = m_derivSpaceNotEvolvedCache[i].dot(src);
         futs.push_back(threadpool::getInstance(NUM_CORES).queueWork([i,&deriv,this](){deriv[i] = 2* m_derivSpaceNotEvolvedCache[i].dot(m_hPsiEvolvedList[i]);}));
@@ -581,9 +573,8 @@ void baseAnsatz::getHessianAndDerivativeProj(const vector<numType> &projVec, Mat
             const matrixType &rotationGenerator = *m_lie->getLieAlgebraMatrix(rp.first);
             realNumType theta = m_rotationPath[x_j].second;
 
-            double S = 0;
-            double C = 0;
-            mysincos(theta,&S,&C);
+            double S = std::sin(theta);
+            double C = std::cos(theta);
 
             rotationGenerator.rotateAndBraketWithTangentOfResult(S,C,currPos,currPos,m_hPsiEvolvedList[x_j],Hessian(starti,x_j));
             // rotationGenerator.multiply(currPos,normDir); // normDir = rotationGenerator * m_current

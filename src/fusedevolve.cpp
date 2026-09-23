@@ -677,11 +677,9 @@ void RunFuseNDiagonal(fusedDiagonalAnsatz* const myFusedAnsatz, realNumType* sta
                     }
                 }
             }
-            realNumType S;
-            realNumType C;
-            mysincos(totalAngle,&S,&C); // Its unclear whether this is faster or by expanding (cos + sin)(cos + sin). Unlikely to be bottleneck?
-
-
+            // Its unclear whether this is faster or by expanding (cos + sin)(cos + sin). Unlikely to be bottleneck?
+            realNumType S = std::sin(totalAngle);
+            realNumType C = std::cos(totalAngle);
 
             //Manual unroll because im almost certain the compiler wont know that currLocalVector are all different
             constexpr uint8_t unrollCount = 8;
@@ -961,7 +959,8 @@ void RunFuseN(fusedAnsatz* const myFusedAnsatz, realNumType* startVec, const rea
         std::array<realNumType,numberToFuse> cosines;
         for (indexType idx = 0; idx < numberToFuse; idx++)
         {
-            mysincos(angles[i+idx],&sines[idx],&cosines[idx]);
+            sines[idx] = std::sin(angles[i + idx]);
+            cosines[idx] = std::cos(angles[i + idx]);
         }
 
 
