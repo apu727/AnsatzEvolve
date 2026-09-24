@@ -1,0 +1,45 @@
+var annotated_dup =
+[
+    [ "ansatzsynthinterface", "namespaceansatzsynthinterface.html", [
+      [ "settraceinterfacecalls", "interfaceansatzsynthinterface_1_1settraceinterfacecalls.html", "interfaceansatzsynthinterface_1_1settraceinterfacecalls" ],
+      [ "init", "interfaceansatzsynthinterface_1_1init.html", "interfaceansatzsynthinterface_1_1init" ],
+      [ "cleanup", "interfaceansatzsynthinterface_1_1cleanup.html", "interfaceansatzsynthinterface_1_1cleanup" ],
+      [ "setexcitation", "interfaceansatzsynthinterface_1_1setexcitation.html", "interfaceansatzsynthinterface_1_1setexcitation" ],
+      [ "setexcitationscale", "interfaceansatzsynthinterface_1_1setexcitationscale.html", "interfaceansatzsynthinterface_1_1setexcitationscale" ],
+      [ "sethamiltonian", "interfaceansatzsynthinterface_1_1sethamiltonian.html", "interfaceansatzsynthinterface_1_1sethamiltonian" ],
+      [ "setinitialstate", "interfaceansatzsynthinterface_1_1setinitialstate.html", "interfaceansatzsynthinterface_1_1setinitialstate" ],
+      [ "setinitialstatecomplex", "interfaceansatzsynthinterface_1_1setinitialstatecomplex.html", "interfaceansatzsynthinterface_1_1setinitialstatecomplex" ],
+      [ "getenergy", "interfaceansatzsynthinterface_1_1getenergy.html", "interfaceansatzsynthinterface_1_1getenergy" ],
+      [ "getfinalstate", "interfaceansatzsynthinterface_1_1getfinalstate.html", "interfaceansatzsynthinterface_1_1getfinalstate" ],
+      [ "getfinalstatecomplex", "interfaceansatzsynthinterface_1_1getfinalstatecomplex.html", "interfaceansatzsynthinterface_1_1getfinalstatecomplex" ],
+      [ "getgradient_comp", "interfaceansatzsynthinterface_1_1getgradient__comp.html", "interfaceansatzsynthinterface_1_1getgradient__comp" ],
+      [ "gethessian_comp", "interfaceansatzsynthinterface_1_1gethessian__comp.html", "interfaceansatzsynthinterface_1_1gethessian__comp" ]
+    ] ],
+    [ "PyAnsatzEvolve", "namespace_py_ansatz_evolve.html", [
+      [ "stateAnsatzManager", "class_py_ansatz_evolve_1_1state_ansatz_manager.html", "class_py_ansatz_evolve_1_1state_ansatz_manager" ]
+    ] ],
+    [ "baseAnsatz", "classbase_ansatz.html", "classbase_ansatz" ],
+    [ "compressor", "classcompressor.html", "classcompressor" ],
+    [ "csvWriter", "classcsv_writer.html", "classcsv_writer" ],
+    [ "DIIS", "class_d_i_i_s.html", "class_d_i_i_s" ],
+    [ "excOp", "structexc_op.html", "structexc_op" ],
+    [ "FusedEvolve", "class_fused_evolve.html", "class_fused_evolve" ],
+    [ "HamiltonianMatrix", "class_hamiltonian_matrix.html", "class_hamiltonian_matrix" ],
+    [ "logger", "classlogger.html", "classlogger" ],
+    [ "Matrix", "class_matrix.html", "class_matrix" ],
+    [ "numberOperatorCompressor", "classnumber_operator_compressor.html", "classnumber_operator_compressor" ],
+    [ "operatorPool", "classoperator_pool.html", "classoperator_pool" ],
+    [ "options", "structoptions.html", "structoptions" ],
+    [ "projectionMatrix", "classprojection_matrix.html", "classprojection_matrix" ],
+    [ "sparseMatrix", "classsparse_matrix.html", "classsparse_matrix" ],
+    [ "stateAnsatz", "classstate_ansatz.html", "classstate_ansatz" ],
+    [ "stateAnsatzManager", "classstate_ansatz_manager.html", "classstate_ansatz_manager" ],
+    [ "stateRotate", "classstate_rotate.html", "classstate_rotate" ],
+    [ "SZAndnumberOperatorCompressor", "class_s_z_andnumber_operator_compressor.html", "class_s_z_andnumber_operator_compressor" ],
+    [ "targetMatrix", "classtarget_matrix.html", "classtarget_matrix" ],
+    [ "threadpool", "classthreadpool.html", "classthreadpool" ],
+    [ "TUPSQuantities", "class_t_u_p_s_quantities.html", "class_t_u_p_s_quantities" ],
+    [ "TUPSQuantitiesOptions", "struct_t_u_p_s_quantities_options.html", "struct_t_u_p_s_quantities_options" ],
+    [ "vector", "classvector.html", "classvector" ],
+    [ "vectorView", "classvector_view.html", "classvector_view" ]
+];

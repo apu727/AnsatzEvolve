@@ -28,11 +28,6 @@
 #include <immintrin.h>
 #endif
 
-#ifdef APPLECLANG
-#define mysincos __sincos
-#else
-#define mysincos __builtin_sincos
-#endif
 #if defined __has_builtin
 #  if __has_builtin (__builtin_popcount)
 #    define popcount(i) __builtin_popcount(i)

@@ -3,8 +3,11 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 cmake_minimum_required(VERSION 3.5)
-project(AnsatzEvolve LANGUAGES CXX Fortran)
-
+project(AnsatzEvolve
+    LANGUAGES CXX Fortran
+    DESCRIPTION "Fast classical computation of Quantum Ansatze"
+    VERSION 1.0.0
+)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set (CMAKE_C_STANDARD 11)
@@ -16,7 +19,7 @@ endif(NOT CMAKE_BUILD_TYPE)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # using regular Clang or AppleClang
-    if (CMAKE_OSX_SYSROOT)
+    if (CMAKE_OSX_SYSROOT OR CMAKE_CXX_COMPILER_ID MATCHES "AppleClang")
         #Apple specific configs
         message("COMPILER IDENTIFIED AS APPLE CLANG")
 
@@ -44,7 +47,7 @@ else()
     set (ANSATZEVOLVE_CXX_FLAGS -Wall -Wextra -march=native -Wmaybe-uninitialized -Wno-stringop-overflow)
 endif()
 
-if (COMPILE_PYTHON_LIBS)
+if (ANSATZEVOLVE_COMPILE_PYTHON_LIBS)
     set (ANSATZEVOLVE_CXX_FLAGS ${ANSATZEVOLVE_CXX_FLAGS} -fPIC -fvisibility=hidden)
 endif()
 
@@ -57,6 +60,7 @@ if (ANSATZEVOLVE_OPENMP)
 endif()
 
 include_directories(./third-party/eigen-3.4.0)
+option (COMPLEX_MODE OFF)
 if (COMPLEX_MODE)
     add_compile_definitions(useComplex)
 endif()
@@ -117,7 +121,9 @@ target_compile_options(AnsatzSynthInterface PRIVATE "${ANSATZEVOLVE_CXX_FLAGS}")
 set(fortran_files test.F90 AnsatzSynthInterface.f90)
 add_executable(FortranBindingsTest ${fortran_files})
 target_link_libraries(FortranBindingsTest AnsatzSynthInterface)
-set_source_files_properties(test.F90 PROPERTIES COMPILE_FLAGS -ffree-line-length-none)
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(test.F90 PROPERTIES COMPILE_FLAGS -ffree-line-length-none)
+endif()
 
 #Python Interface
 set(PYTHON_MODULE_SOURCES PyAnsatzEvolve.cpp)
@@ -137,7 +143,12 @@ if (ANSATZEVOLVE_COMPILE_PYTHON_LIBS)
     #InstallDir
     install(TARGETS PyAnsatzEvolve DESTINATION ${CMAKE_SOURCE_DIR}/../) # Set Install prefix to python directory
     target_compile_options(PyAnsatzEvolve PRIVATE "${ANSATZEVOLVE_CXX_FLAGS}")
+
+    #Install the .pyi
+    install(FILES doxygen/PyAnsatzEvolve.pyi DESTINATION ${CMAKE_SOURCE_DIR}/../) # Set Install prefix to python directory
 endif()
 
+#Doxygen target
+add_subdirectory(doxygen)
 
 

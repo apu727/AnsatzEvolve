@@ -1,0 +1,22 @@
+# The Python code is currently a set of scripts plus a CMake-built extension,
+# rather than an installable Python package. Keep repository-wide Python tool
+# configuration here without declaring package metadata or a Python build backend.
+
+[tool.pytest.ini_options]
+pythonpath = ["python"]
+addopts = ["--strict-config", "--strict-markers"]
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["src/third-party", "docs/search", "docs/html"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.codespell]
+skip = "Hams/,*.dat,*.bin,src/third-party/*,docs/search/*,docs/html/*"

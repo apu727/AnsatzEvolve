@@ -1,0 +1,180 @@
+/**
+\page manual_page Input file description
+
+### The Initial State file
+
+    XX/YY_Initial.dat
+
+The initial state. This must have the correct length as the number of qubits is determined from this. A linear superposition can be created by specifying multiple basis states on different lines.
+
+An example for H10 working with real statevectors using the 'perfect pairing' initial state:
+
+    01010101010101010101,1
+
+An example for H10 working with complex statevectors using the Hartree--Fock initial state:
+
+    00000111110000011111,0,1
+
+The last two numbers, `0` and `1` are the real and imaginary parts respectively.
+
+It is best to work in a spin-blocked 'back to back' ordering. I.e the alpha spins are on the left, the beta spins on the right.
+
+\f[\ket{\text{AAAABBBB}}\f]
+
+If this ordering is used then any spin symmetry present in the initial state and the operators automatically detected leading to a faster calculation.
+If this ordering is not used then spin symmetry will not be detected. The resulting calculation is still correct as long as the **Sparse** text based Hamiltonian format is used.
+
+**Note that if using the Binary Hamiltonian, spin-blocked ordering is necessary.**
+
+### The Operator file
+
+    XX/YY_Operators.dat
+
+Contains the list of operators to apply to the statevector.
+As an example:
+
+    1 2 0 0
+
+means 'Create' in the first qubit and 'Annihilate' in the second qubit. Note that the anti-hermitian pair is automatically generated.
+Likewise:
+
+    1 11 2 12
+
+means 'Create' in the first and eleventh qubit and 'Annihilate' in the second and twelfth qubit.
+Note how the operators are one indexed. In a bitstring the qubit on the right is the 'first' qubit.
+
+Because these are fermionic operators the order matters. Swapping the order implies a negative sign. E.g.
+
+\f[\text{1 11 2 12} = -\text{11 1 2 12} = \text{11 1 12 2} = -\text{1 11 12 2}\f]
+
+The 'Canonical' order to obtain no signs is for the operator \f$\text{a b c d}\f$ the ordering must be:
+
+\f[a < b \text{ AND } c < d\f]
+
+This is backwards to what may be expected and is intended to match previous versions.
+
+Representing an excitation operator by \f$\hat T \f$ each rotation performs the transformation below to a given basis state \f$\ket{b}\f$
+
+\f[
+a \ket{b} + c \hat T \ket{b} \rightarrow (\sin{(\theta)} c + \cos{(\theta)} a) \ket{b} + (-\sin{(\theta)} a + \cos{(\theta)} c) \hat T\ket{b}
+\f]
+
+As an example, let \f$\ket{b} = \ket{0011}\f$ and \f$\hat T = \text{3 1 0 0}\f$. The statevector:
+
+\f[a\ket{0011} + c\ket{1010}\f]
+
+gets rotated to:
+
+\f[(\cos{(\theta)} a - \sin{(\theta)} c) \ket{0011} + (\sin{(\theta)} a + \cos{(\theta)} c) \ket{1010}\f]
+
+### The Order file
+
+    XX/YY_Order.dat
+
+Specify the interdependencies of the angles of each operator.
+For example:
+
+    1
+    1
+    2
+    1,-1
+    1,-1
+
+
+Means there are 5 operators. The first two have angle one. The third one has angle two. The last two have the negative of angle one. Any real number can be specified as a ratio.
+Angles are one indexed with respect to the Parameter file. i.e. Angle 1 is the first angle in the parameter file
+
+### The Parameter file
+
+    XX/YY_Parameters.dat
+
+The parameter file. The order is quite strict and not particularly robust to misconfiguration. If you seem to be getting the Hartree--Fock energy for all paths check the parameter file.
+An example file:
+
+    9
+    Energy of minimum      1=  -2.844887240192929 first found at step        5 after                  245 function calls
+    0.182710385127496
+    1.657072388288146
+    0.110549543159596
+    0.878483796766535
+    0.225437898626115
+    1.095597930656243
+    -0.000000000027978
+    0.797060942289907
+    -1.570796326773916
+
+
+The first number gives the number of angles present.
+The text on the next line is parsed to extract the expected energy. For those familiar with C:
+
+`fscanf(fp,"%*[^=]= %lg %*[^\n]",&Energy);`
+
+Is the command that parses this line. Note that Energy is currently unused. see `loadParameters` in `TUPSLoadingUtils.h`
+
+The subsequent angles are extracted and stored.
+This is repeated until the end of the file is reached. There can be no new line between parameter declarations. Feel free to improve this parser.
+
+The first set of angles in this file are used to seed the optimisation. I.e. the optimisation starts at the first set of angles specified by the file.
+
+### The Sparse Hamiltonian
+
+    XX/YY_Ham_Coeff.dat
+    XX/YY_Ham_Index.dat
+
+These give the coefficients and index of the Hamiltonian matrix in a sparse representation respectively.
+An example coefficient file is:
+
+    -2.722167100361861
+    -6.705474e-10
+    -5.470889e-10
+    0.0250723607658918
+    0.1455910528783998
+    -0.1039510623023243
+    -6.705474e-10
+    0.1277814823823004
+    etc.
+
+An example index file is:
+
+    52 52
+    52 55
+    52 58
+    52 61
+    52 86
+    52 91
+    52 100
+    52 103
+    etc.
+
+There does not need to be any ordering of the indexes except that they must match their respective coefficients.
+Indexes are one based and therefore index `1` corresponds to basis state `0000`. Index 2 `0001` etc.
+It is recommended not to use this file and instead provide the one and two electron integrals directly.
+
+Note that if the sparse Hamiltonian file is not found a warning is logged. This is not an error as long as the binary files are found.
+
+### The Binary Hamiltonian
+
+    XX/YY_oneEInts.bin
+    XX/YY_twoEInts.bin
+
+These are the one and two electron integral tensors as provided by [PySCF](https://pyscf.org). see `HamGen.py` for the code to generate them. It is assumed that these binary files are in the correct format with minimal error detection.
+
+At a high level, `XX/YY_oneEInts.bin` contains all Hamiltonian terms of the form:
+
+\f$\braket{i|h|j}\f$
+
+`XX/YY_twoEInts.bin` contains:
+
+\f$\left(il|jk\right) = \braket{ij|1/r12|kl} = \f$ `twoEInts[i][j][k][l]`
+
+The array order is assumed to be C ordered i.e.
+
+\f$\left(13|24\right) = \braket{12|1/r12|34} =\f$ `twoEInts[1*N^3 + 2*N^2 + 3*N + 4]`
+
+where `N` is the number of MOs.
+
+Note also that there is **no** permutational symmetry in the saved binary files. The dimension of `oneEInts` is therefore \f$\text{N}^2\f$,
+`twoEInts` is \f$\text{N}^4\f$
+If you're working on computers with differing endianness, make sure the binary format is saved correctly for the target architecture.
+
+*/
