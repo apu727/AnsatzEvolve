@@ -1,5 +1,7 @@
 set (TestsToRun
   EndtoEndTests.cpp
+  FusedEvolveTests.cpp
+  LoadFilesTests.cpp
 )
 create_test_sourcelist (Tests linalgTestsCMAKE.cpp ${TestsToRun})
 
