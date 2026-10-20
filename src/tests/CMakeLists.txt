@@ -20,5 +20,5 @@ target_compile_definitions(AnsatzEvolveTests PRIVATE ANSATZEVOLVE_RESOURCE_DIR="
 # Add all the ADD_TEST for each test
 foreach (t ${TestsToRun})
   get_filename_component (TName ${t} NAME_WE)
-  add_test (NAME ${TName} COMMAND linalgTests ${TName})
+  add_test (NAME ${TName} COMMAND AnsatzEvolveTests ${TName})
 endforeach ()
