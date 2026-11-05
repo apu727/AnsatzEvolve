@@ -2052,6 +2052,7 @@ void FusedEvolve::cleanup()
     }
     m_commuteBoundaries.clear();
     m_fusedAnsatzes.clear();
+    m_fusedSizes.clear();
     m_excPerm.clear();
     m_excInversePerm.clear();
 }
@@ -2797,12 +2798,12 @@ vector<realNumType> FusedEvolve::getEnergies(const Matrix<numType> &psi)
 {
     auto start = std::chrono::high_resolution_clock::now();
     Eigen::Map<const Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> currentMap(&psi.at(0,0),psi.m_iSize,psi.m_jSize);
-    Eigen::Matrix<numType,-1,-1,Eigen::RowMajor> hPsi(psi.m_iSize,psi.m_jSize);
-    Eigen::Map<Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> hPsiMap(hPsi.data(),hPsi.rows(),hPsi.cols());
+    Matrix<numType> hPsi(psi.m_iSize,psi.m_jSize); // Eigen only guarantees 16 byte alignment on some platforms
+    Eigen::Map<Eigen::Matrix<numType,-1,-1,Eigen::RowMajor>,Eigen::Aligned32> hPsiMap(&hPsi.at(0,0),hPsi.m_iSize,hPsi.m_jSize);
     m_Ham->apply(currentMap,hPsiMap);
     vector<realNumType> ret(psi.m_iSize);
     Eigen::Map<Eigen::Matrix<realNumType,1,-1,Eigen::RowMajor>,Eigen::Aligned32>EMap(&ret[0],1,ret.size());
-    EMap = (hPsi * currentMap.transpose()).diagonal().real();
+    EMap = (hPsiMap * currentMap.adjoint()).diagonal().real();
 
     auto end = std::chrono::high_resolution_clock::now();
     long duration = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
