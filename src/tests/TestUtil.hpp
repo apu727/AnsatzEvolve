@@ -1,4 +1,5 @@
 #include "logger.h"
+#include <functional>
 #include <string>
 template<typename valType1, typename valType2>
 struct DefaultTestComparisons
@@ -93,4 +94,11 @@ inline int expectNotNear(const valType1 &val, const valType2 &found, double tol,
     static_assert(DefaultTestComparisons<valType1, valType2>::HaveComparison, "No default test comparison for this type");
     NotComparison comp(DefaultTestComparisons(val, found, tol));
     return expectNear(val, found, comp, funcName, message);
+}
+
+//Exact comparison, for sizes, indexes and flags.
+template<typename valType1, typename valType2, size_t N>
+inline int expectEqual(const valType1 &val, const valType2 &found, const char (&funcName)[N], std::string message)
+{
+    return expectNear(val, found, std::equal_to<>(), funcName, message);
 }
