@@ -66,7 +66,11 @@ public:
             fprintf(m_file,  "%.16lf, ", o);
         fprintf(m_file, "]\n");
     }
-
+    template<typename... args>
+    void printf(const char *str, args &&...arg)
+    {
+        fprintf(m_file, str, std::forward<args>(arg)...);
+    }
 };
 
 void writeVector(std::string filename, const vector<numType>& vec,stateRotate&);
