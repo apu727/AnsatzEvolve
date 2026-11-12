@@ -96,7 +96,6 @@ inline int expectNotNear(const valType1 &val, const valType2 &found, double tol,
     return expectNear(val, found, comp, funcName, message);
 }
 
-//Exact comparison, for sizes, indexes and flags.
 template<typename valType1, typename valType2, size_t N>
 inline int expectEqual(const valType1 &val, const valType2 &found, const char (&funcName)[N], std::string message)
 {

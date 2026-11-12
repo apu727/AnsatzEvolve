@@ -35,20 +35,20 @@
 static const std::string H4L1Path = ANSATZEVOLVE_RESOURCE_DIR "/H4/L1/H4";
 static const std::string H4L5Path = ANSATZEVOLVE_RESOURCE_DIR "/H4/L5/H4";
 constexpr int numberOfQubits = 8;
-constexpr uint32_t H4HFState = 85; // 01010101, two spin up and two spin down electrons
+constexpr uint32_t H4HFState = 85; // 01010101, two spin up and two spin down electrons, 4 orbitals.
 constexpr realNumType tol = 1e-10;
 
-typedef std::vector<numType> refState;
+typedef std::vector<numType> DenseStateVectorType;
 typedef Eigen::SparseMatrix<realNumType, Eigen::RowMajor> parameterMatrix;
-typedef HamiltonianMatrix<realNumType, numType> hamiltonian;
+typedef HamiltonianMatrix<realNumType, numType> HamiltonianType;
 
 /*
- * Reference implementation: dense state vectors, textbook Jordan-Wigner signs and one gate at a time, i.e. no fusing.
+ * Reference implementation: dense state vectors,
  * Each excitation is the generator G = A - A^dagger with
  *   single {p,q}:     A = a^dagger_p a_q
  *   double {i,j,k,l}: A = a^dagger_i a^dagger_j a_l a_k
- * applied in order as exp(-theta G) = 1 - sin(theta) G + (1 - cos(theta)) G^2, which holds since G^3 = -G.
- * Derivatives of a gate are then exact: -cos(theta) G + sin(theta) G^2 and sin(theta) G + cos(theta) G^2.
+ * Evolution: exp(-theta G)|psi> =     (1 - sin(theta) G + (1 - cos(theta)) G^2)|psi>
+ * Derivatives: -Gexp(-theta G)|psi> = (-cos(theta) G + sin(theta) G^2)|psi>
  */
 struct ladderOp
 {
@@ -59,16 +59,16 @@ struct ladderOp
 // Applies a ladder operator to a basis state. Returns false if the state is destroyed
 static bool applyLadder(uint32_t &state, int &sign, ladderOp op)
 {
+    // applies a^\dagger_i, accumulating signs for orbitals < create.
     uint32_t bit = 1u << op.orbital;
-    if (bool(state & bit) == op.create)
-        return false;
-    if (__builtin_popcount(state & (bit - 1)) & 1)
-        sign = -sign;
+    // If create == true && i is occ or create == false && i is unocc, result is zero.
+    if (bool(state & bit) == op.create) return false;
+    if (popcount(state & (bit - 1)) & 1) sign = -sign;
     state ^= bit;
     return true;
 }
 
-static refState applyGenerator(const stateRotate::exc &e, const refState &psi)
+static DenseStateVectorType applyGenerator(const stateRotate::exc &e, const DenseStateVectorType &psi)
 {
     // Written left to right, applied right to left
     std::vector<ladderOp> A;
@@ -80,7 +80,7 @@ static refState applyGenerator(const stateRotate::exc &e, const refState &psi)
     for (auto op = A.rbegin(); op != A.rend(); op++)
         ADagger.push_back({op->orbital, !op->create});
 
-    refState ret(psi.size(), 0);
+    DenseStateVectorType ret(psi.size(), 0);
     for (uint32_t basisState = 0; basisState < psi.size(); basisState++)
     {
         for (auto [product, sign] : {std::make_pair(&A, 1), std::make_pair(&ADagger, -1)})
@@ -89,40 +89,44 @@ static refState applyGenerator(const stateRotate::exc &e, const refState &psi)
             bool alive = true;
             for (auto op = product->rbegin(); op != product->rend() && alive; op++)
                 alive = applyLadder(state, sign, *op);
-            if (alive)
-                ret[state] += realNumType(sign) * psi[basisState];
+            if (alive) ret[state] += realNumType(sign) * psi[basisState];
         }
     }
     return ret;
 }
 
-// The derivative'th derivative of exp(-theta G) applied to psi
-static refState applyRotation(const stateRotate::exc &e, realNumType theta, const refState &psi, int derivative)
+// The n'th derivative of exp(-theta G) applied to psi
+static DenseStateVectorType applyRotation(const stateRotate::exc &e, realNumType theta, const DenseStateVectorType &psi, int derivative)
 {
-    refState G = applyGenerator(e, psi);
-    refState GG = applyGenerator(e, G);
+    DenseStateVectorType G = applyGenerator(e, psi);
+    DenseStateVectorType GG = applyGenerator(e, G);
     realNumType s = std::sin(theta);
     realNumType c = std::cos(theta);
     const realNumType coeffs[3][3] = {{1, -s, 1 - c}, {0, -c, s}, {0, s, c}};
     const realNumType *coeff = coeffs[derivative];
-    refState ret(psi.size());
+    DenseStateVectorType ret(psi.size());
     for (size_t i = 0; i < psi.size(); i++)
         ret[i] = coeff[0] * psi[i] + coeff[1] * G[i] + coeff[2] * GG[i];
     return ret;
 }
 
 // Evolves start through every gate, differentiating with respect to angles derivA and derivB if given
-static refState refEvolve(const std::vector<stateRotate::exc> &excs, const std::vector<realNumType> &angles, const refState &start,
-                          long derivA = -1, long derivB = -1)
+static DenseStateVectorType refEvolve(
+    const std::vector<stateRotate::exc> &excs,
+    const std::vector<realNumType> &angles,
+    const DenseStateVectorType &start,
+    long derivA = -1,
+    long derivB = -1
+)
 {
-    refState psi = start;
-    for (long i = 0; i < (long)excs.size(); i++)
+    DenseStateVectorType psi = start;
+    for (long i = 0; i < (long) excs.size(); i++)
         psi = applyRotation(excs[i], angles[i], psi, (i == derivA) + (i == derivB));
     return psi;
 }
 
 // Re <bra|H|ket>
-static realNumType expectation(const hamiltonian &H, const refState &bra, const refState &ket)
+static realNumType expectation(const HamiltonianType &H, const DenseStateVectorType &bra, const DenseStateVectorType &ket)
 {
     vector<numType> ketVec(ket);
     vector<numType> HKet;
@@ -135,15 +139,21 @@ static realNumType expectation(const hamiltonian &H, const refState &bra, const 
 
 struct refResult
 {
-    refState psi;
-    std::vector<refState> tangents; // d psi / d angle_i
+    DenseStateVectorType psi;
+    std::vector<DenseStateVectorType> tangents; // d psi / d angle_i
     realNumType energy;
     Eigen::VectorXd gradient; // With respect to the compressed parameters, as is the Hessian
     Eigen::MatrixXd hessian;
 };
 
-static refResult reference(const hamiltonian &H, const std::vector<stateRotate::exc> &excs, const std::vector<realNumType> &angles,
-                           const refState &start, const parameterMatrix &compress, bool calcHessian)
+static refResult reference(
+    const HamiltonianType &H,
+    const std::vector<stateRotate::exc> &excs,
+    const std::vector<realNumType> &angles,
+    const DenseStateVectorType &start,
+    const parameterMatrix &compress,
+    bool calcHessian
+)
 {
     long n = excs.size();
     refResult ret;
@@ -161,19 +171,19 @@ static refResult reference(const hamiltonian &H, const std::vector<stateRotate::
         Eigen::MatrixXd hessian(n, n);
         for (long i = 0; i < n; i++)
             for (long j = i; j < n; j++)
-                hessian(i, j) = hessian(j, i) =
-                    2 * (expectation(H, ret.tangents[i], ret.tangents[j]) + expectation(H, ret.psi, refEvolve(excs, angles, start, i, j)));
+                hessian(i, j) = hessian(j, i) = 2
+                                                * (expectation(H, ret.tangents[i], ret.tangents[j])
+                                                   + expectation(H, ret.psi, refEvolve(excs, angles, start, i, j)));
         ret.hessian = compress * hessian * compress.transpose();
     }
     return ret;
 }
 
 // Copies a state out of FusedEvolve, decompressing it if needed
-static refState toRefState(const numType *data, size_t size, std::shared_ptr<compressor> comp)
+static DenseStateVectorType toRefState(const numType *data, size_t size, std::shared_ptr<compressor> comp)
 {
-    if (!comp)
-        return refState(data, data + size);
-    refState ret(1 << numberOfQubits, 0);
+    if (!comp) return DenseStateVectorType(data, data + size);
+    DenseStateVectorType ret(1 << numberOfQubits, 0);
     for (uint32_t i = 0; i < size; i++)
     {
         uint32_t fullIdx;
@@ -183,10 +193,9 @@ static refState toRefState(const numType *data, size_t size, std::shared_ptr<com
     return ret;
 }
 
-static realNumType maxDifference(const refState &a, const refState &b)
+static realNumType maxDifference(const DenseStateVectorType &a, const DenseStateVectorType &b)
 {
-    if (a.size() != b.size())
-        return std::numeric_limits<realNumType>::infinity();
+    if (a.size() != b.size()) return std::numeric_limits<realNumType>::infinity();
     realNumType ret = 0;
     for (size_t i = 0; i < a.size(); i++)
         ret = std::max<realNumType>(ret, std::abs(a[i] - b[i]));
@@ -195,8 +204,7 @@ static realNumType maxDifference(const refState &a, const refState &b)
 
 static realNumType maxDifference(const Eigen::MatrixXd &a, const Eigen::MatrixXd &b)
 {
-    if (a.rows() != b.rows() || a.cols() != b.cols())
-        return std::numeric_limits<realNumType>::infinity();
+    if (a.rows() != b.rows() || a.cols() != b.cols()) return std::numeric_limits<realNumType>::infinity();
     return (a - b).cwiseAbs().maxCoeff();
 }
 
@@ -218,9 +226,9 @@ struct testSystem
     std::string name;
     uint32_t startState;
     std::vector<stateRotate::exc> excs;
-    parameterMatrix deCompress; // D_{i mu} = d angle_i / d parameter_mu
+    parameterMatrix deCompress;                      // D_{i mu} = d angle_i / d parameter_mu
     std::vector<std::vector<realNumType>> angleSets; // One angle per excitation
-    bool checkHessian; // The reference Hessian is too slow for large ansatze
+    bool checkHessian;                               // The reference Hessian is too slow for large ansatze
 };
 
 static bool loadH4System(const std::string &path, const std::string &name, bool checkHessian, testSystem &s)
@@ -232,8 +240,8 @@ static bool loadH4System(const std::string &path, const std::string &name, bool 
     std::vector<std::vector<ansatz::rotationElement>> rotationPaths;
     std::vector<std::pair<int, realNumType>> orders;
     int numberOfUniqueParameters;
-    if (!stateRotate::loadOperators(path + "_Operators.dat", s.excs) || !loadPath(nullptr, path + "_Operators.dat", rotationPath) ||
-        !loadParameters(path + "_Order.dat", path + "_Parameters.dat", rotationPath, rotationPaths, orders, numberOfUniqueParameters))
+    if (!stateRotate::loadOperators(path + "_Operators.dat", s.excs) || !loadPath(nullptr, path + "_Operators.dat", rotationPath)
+        || !loadParameters(path + "_Order.dat", path + "_Parameters.dat", rotationPath, rotationPaths, orders, numberOfUniqueParameters))
         return false;
 
     int numberOfParameters = 0;
@@ -256,7 +264,7 @@ static bool loadH4System(const std::string &path, const std::string &name, bool 
 }
 
 // The two circuits from the description above, worked out by hand. Bit i of a basis state is orbital i.
-static int AnalyticStateTest(std::shared_ptr<hamiltonian> H)
+static int AnalyticStateTest(std::shared_ptr<HamiltonianType> H)
 {
     int ret = 0;
     realNumType t1 = 0.3;
@@ -278,9 +286,9 @@ static int AnalyticStateTest(std::shared_ptr<hamiltonian> H)
     };
     for (auto &c : cases)
     {
-        refState start(1 << numberOfQubits, 0);
+        DenseStateVectorType start(1 << numberOfQubits, 0);
         start[c.start] = 1;
-        refState expected(1 << numberOfQubits, 0);
+        DenseStateVectorType expected(1 << numberOfQubits, 0);
         for (auto [idx, amplitude] : c.amplitudes)
             expected[idx] = amplitude;
 
@@ -289,19 +297,25 @@ static int AnalyticStateTest(std::shared_ptr<hamiltonian> H)
         FE.updateExc(c.excs);
         vector<numType> psi;
         FE.evolve(psi, {t1, t2});
-        ret += expectNear(0.0, maxDifference(expected, toRefState(&psi[0], psi.size(), nullptr)), tol, __PRETTY_FUNCTION__, c.name + ": evolved state wrong");
+        ret += expectNear(
+            0.0, maxDifference(expected, toRefState(&psi[0], psi.size(), nullptr)), tol, __PRETTY_FUNCTION__, c.name + ": evolved state wrong"
+        );
         // Everything else is checked against the reference so make sure it agrees
-        ret += expectNear(0.0, maxDifference(expected, refEvolve(c.excs, {t1, t2}, start)), tol, __PRETTY_FUNCTION__, c.name + ": reference state wrong");
+        ret += expectNear(
+            0.0, maxDifference(expected, refEvolve(c.excs, {t1, t2}, start)), tol, __PRETTY_FUNCTION__, c.name + ": reference state wrong"
+        );
     }
     return ret;
 }
 
 // Checks everything FusedEvolve calculates against the reference. The start state is multiplied by phase.
-static int ReferenceTest(const testSystem &s, const hamiltonian &refH, std::shared_ptr<hamiltonian> H, std::shared_ptr<compressor> comp, numType phase)
+static int ReferenceTest(
+    const testSystem &s, const HamiltonianType &refH, std::shared_ptr<HamiltonianType> H, std::shared_ptr<compressor> comp, numType phase
+)
 {
     int ret = 0;
     std::string name = s.name + (comp ? " compressed" : "") + (phase != numType(1) ? " times i" : "");
-    refState refStart(1 << numberOfQubits, 0);
+    DenseStateVectorType refStart(1 << numberOfQubits, 0);
     refStart[s.startState] = phase;
     vector<numType> fullStart(refStart);
     vector<numType> start;
@@ -313,7 +327,9 @@ static int ReferenceTest(const testSystem &s, const hamiltonian &refH, std::shar
     parameterMatrix compress = s.deCompress.transpose();
     FusedEvolve FE(start, H, compress, s.deCompress);
     FE.updateExc(s.excs);
-    ret += expectNear(0.0, maxDifference(refStart, toRefState(&FE.getStart()[0], FE.getStart().size(), comp)), tol, __PRETTY_FUNCTION__, name + ": getStart wrong");
+    ret += expectNear(
+        0.0, maxDifference(refStart, toRefState(&FE.getStart()[0], FE.getStart().size(), comp)), tol, __PRETTY_FUNCTION__, name + ": getStart wrong"
+    );
 
     for (size_t set = 0; set < s.angleSets.size(); set++)
     {
@@ -323,19 +339,25 @@ static int ReferenceTest(const testSystem &s, const hamiltonian &refH, std::shar
 
         vector<numType> psi;
         FE.evolve(psi, angles);
-        ret += expectNear(0.0, maxDifference(ref.psi, toRefState(&psi[0], psi.size(), comp)), tol, __PRETTY_FUNCTION__, where + ": evolve differs from reference");
+        ret += expectNear(
+            0.0, maxDifference(ref.psi, toRefState(&psi[0], psi.size(), comp)), tol, __PRETTY_FUNCTION__, where + ": evolve differs from reference"
+        );
         ret += expectNear(ref.energy, FE.getEnergy(psi), tol, __PRETTY_FUNCTION__, where + ": getEnergy wrong");
 
         vector<numType> psiTwice;
         FE.evolve(psiTwice, angles, &psi);
-        ret += expectNear(0.0, maxDifference(refEvolve(s.excs, angles, ref.psi), toRefState(&psiTwice[0], psiTwice.size(), comp)), tol,
-                          __PRETTY_FUNCTION__, where + ": evolve from a given start differs from reference");
+        ret += expectNear(
+            0.0, maxDifference(refEvolve(s.excs, angles, ref.psi), toRefState(&psiTwice[0], psiTwice.size(), comp)), tol, __PRETTY_FUNCTION__,
+            where + ": evolve from a given start differs from reference"
+        );
 
         vector<realNumType> deriv;
         realNumType energy = 0;
         FE.evolveDerivative(psi, deriv, angles, &energy);
         ret += expectNear(ref.energy, energy, tol, __PRETTY_FUNCTION__, where + ": evolveDerivative energy wrong");
-        ret += expectNear(0.0, maxDifference(ref.gradient, Eigen::VectorXd(deriv)), tol, __PRETTY_FUNCTION__, where + ": evolveDerivative differs from reference");
+        ret += expectNear(
+            0.0, maxDifference(ref.gradient, Eigen::VectorXd(deriv)), tol, __PRETTY_FUNCTION__, where + ": evolveDerivative differs from reference"
+        );
 
         Eigen::MatrixXd hessian;
         vector<realNumType> hessianDeriv;
@@ -343,7 +365,10 @@ static int ReferenceTest(const testSystem &s, const hamiltonian &refH, std::shar
         energy = 0;
         FE.evolveHessian(hessian, hessianDeriv, angles, &tangents, &energy);
         ret += expectNear(ref.energy, energy, tol, __PRETTY_FUNCTION__, where + ": evolveHessian energy wrong");
-        ret += expectNear(0.0, maxDifference(ref.gradient, Eigen::VectorXd(hessianDeriv)), tol, __PRETTY_FUNCTION__, where + ": evolveHessian derivative differs from reference");
+        ret += expectNear(
+            0.0, maxDifference(ref.gradient, Eigen::VectorXd(hessianDeriv)), tol, __PRETTY_FUNCTION__,
+            where + ": evolveHessian derivative differs from reference"
+        );
         if (s.checkHessian)
             ret += expectNear(0.0, maxDifference(ref.hessian, hessian), tol, __PRETTY_FUNCTION__, where + ": evolveHessian differs from reference");
         else
@@ -367,34 +392,39 @@ static int ReferenceTest(const testSystem &s, const hamiltonian &refH, std::shar
     for (size_t set = 0; set < s.angleSets.size(); set++)
     {
         std::string where = name + " angle set " + std::to_string(set);
-        refState expected = refEvolve(s.excs, s.angleSets[set], refStart);
-        ret += expectNear(0.0, maxDifference(expected, toRefState(&psis.at(set, 0), psis.m_jSize, comp)), tol, __PRETTY_FUNCTION__, where + ": evolveMultiple differs from reference");
+        DenseStateVectorType expected = refEvolve(s.excs, s.angleSets[set], refStart);
+        ret += expectNear(
+            0.0, maxDifference(expected, toRefState(&psis.at(set, 0), psis.m_jSize, comp)), tol, __PRETTY_FUNCTION__,
+            where + ": evolveMultiple differs from reference"
+        );
         ret += expectNear(expectation(refH, expected, expected), energies[set], tol, __PRETTY_FUNCTION__, where + ": getEnergies wrong");
     }
     return ret;
 }
 
 // Changing the excitations after construction must rebuild the fused gates
-static int UpdateExcTest(const testSystem &s, std::shared_ptr<hamiltonian> H)
+static int UpdateExcTest(const testSystem &s, std::shared_ptr<HamiltonianType> H)
 {
     int ret = 0;
-    refState start(1 << numberOfQubits, 0);
+    DenseStateVectorType start(1 << numberOfQubits, 0);
     start[s.startState] = 1;
     vector<numType> startVec(start);
     FusedEvolve FE(startVec, H, s.deCompress.transpose(), s.deCompress);
 
     std::vector<stateRotate::exc> reversedExcs(s.excs.rbegin(), s.excs.rend());
     std::vector<realNumType> reversedAngles(s.angleSets[0].rbegin(), s.angleSets[0].rend());
-    std::vector<std::pair<std::vector<stateRotate::exc>, std::vector<realNumType>>> steps = {
-        {s.excs, s.angleSets[0]}, {reversedExcs, reversedAngles}, {s.excs, s.angleSets[0]}};
+    std::vector<std::pair<std::vector<stateRotate::exc>, std::vector<realNumType>>> steps
+        = {{s.excs, s.angleSets[0]}, {reversedExcs, reversedAngles}, {s.excs, s.angleSets[0]}};
     for (size_t step = 0; step < steps.size(); step++)
     {
         auto &[excs, angles] = steps[step];
         FE.updateExc(excs);
         vector<numType> psi;
         FE.evolve(psi, angles);
-        ret += expectNear(0.0, maxDifference(refEvolve(excs, angles, start), toRefState(&psi[0], psi.size(), nullptr)), tol, __PRETTY_FUNCTION__,
-                          s.name + ": state wrong after updateExc step " + std::to_string(step));
+        ret += expectNear(
+            0.0, maxDifference(refEvolve(excs, angles, start), toRefState(&psi[0], psi.size(), nullptr)), tol, __PRETTY_FUNCTION__,
+            s.name + ": state wrong after updateExc step " + std::to_string(step)
+        );
     }
     return ret;
 }
@@ -402,9 +432,9 @@ static int UpdateExcTest(const testSystem &s, std::shared_ptr<hamiltonian> H)
 int FusedEvolveTests(int argc, char **argv)
 {
     int ret = 0;
-    auto H = std::make_shared<hamiltonian>(H4L1Path, numberOfQubits, nullptr);
+    auto H = std::make_shared<HamiltonianType>(H4L1Path, numberOfQubits, nullptr);
     std::shared_ptr<compressor> comp = std::make_shared<SZAndnumberOperatorCompressor>(1 << numberOfQubits, 2, 2);
-    auto compressedH = std::make_shared<hamiltonian>(H4L1Path, numberOfQubits, comp);
+    auto compressedH = std::make_shared<HamiltonianType>(H4L1Path, numberOfQubits, comp);
 
     std::vector<testSystem> toySystems = {
         {"Fermionic sign", 0b011, {makeExc(2, 0), makeExc(2, 1)}, identityParameters(2), {{0.3, 0.7}, {-1.2, 2.5}}, true},
@@ -412,8 +442,7 @@ int FusedEvolveTests(int argc, char **argv)
     };
     testSystem H4L1;
     testSystem H4L5;
-    if (!loadH4System(H4L1Path, "H4 L1", true, H4L1) || !loadH4System(H4L5Path, "H4 L5", false, H4L5))
-        return -1;
+    if (!loadH4System(H4L1Path, "H4 L1", true, H4L1) || !loadH4System(H4L5Path, "H4 L5", false, H4L5)) return -1;
 
     std::vector<numType> phases = {1};
 #ifdef useComplex

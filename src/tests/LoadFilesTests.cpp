@@ -33,25 +33,22 @@ static const std::string MissingPath = ANSATZEVOLVE_RESOURCE_DIR "/H4/L1/DoesNot
 
 // H4_Operators.dat, 0 indexed. -1 marks an unused slot of a single excitation
 static const std::vector<std::vector<int>> H4Excs = {
-    {0, 1, -1, -1}, {4, 5, -1, -1}, {0, 4, 1, 5}, {0, 1, -1, -1}, {4, 5, -1, -1},
-    {2, 3, -1, -1}, {6, 7, -1, -1}, {2, 6, 3, 7}, {2, 3, -1, -1}, {6, 7, -1, -1},
-    {1, 2, -1, -1}, {5, 6, -1, -1}, {1, 5, 2, 6}, {1, 2, -1, -1}, {5, 6, -1, -1},
+    {0, 1, -1, -1}, {4, 5, -1, -1}, {0, 4, 1, 5},   {0, 1, -1, -1}, {4, 5, -1, -1}, {2, 3, -1, -1}, {6, 7, -1, -1}, {2, 6, 3, 7},
+    {2, 3, -1, -1}, {6, 7, -1, -1}, {1, 2, -1, -1}, {5, 6, -1, -1}, {1, 5, 2, 6},   {1, 2, -1, -1}, {5, 6, -1, -1},
 };
 
 // H4_Order.dat, as {0 indexed parameter, scale factor}
 static const std::vector<std::pair<int, realNumType>> H4Orders = {
-    {0, 1}, {0, 1}, {1, 1}, {0, -1}, {0, -1},
-    {2, 1}, {2, 1}, {3, 1}, {2, -1}, {2, -1},
-    {4, 1}, {4, 1}, {5, 1}, {6, 1}, {6, 1},
+    {0, 1}, {0, 1}, {1, 1}, {0, -1}, {0, -1}, {2, 1}, {2, 1}, {3, 1}, {2, -1}, {2, -1}, {4, 1}, {4, 1}, {5, 1}, {6, 1}, {6, 1},
 };
 
 // The angle of each operator for the zero path followed by the two minima in H4_Parameters.dat
 static const std::vector<std::vector<realNumType>> H4Angles = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     {0.1, 0.1, 0.2, -0.1, -0.1, 0.3, 0.3, 0.4, -0.3, -0.3, 0.5, 0.5, 0.6, 0.7, 0.7},
-    {-3.14159265358979, -3.14159265358979, 0.296442558183625, 3.14159265358979, 3.14159265358979,
-     -7.31564874620643e-20, -7.31564874620643e-20, 0.536266956045058, 7.31564874620643e-20, 7.31564874620643e-20,
-     0.907191125929521, 0.907191125929521, 3.43173936258855, 0.602580862545367, 0.602580862545367},
+    {-3.14159265358979, -3.14159265358979, 0.296442558183625, 3.14159265358979, 3.14159265358979, -7.31564874620643e-20, -7.31564874620643e-20,
+     0.536266956045058, 7.31564874620643e-20, 7.31564874620643e-20, 0.907191125929521, 0.907191125929521, 3.43173936258855, 0.602580862545367,
+     0.602580862545367},
 };
 
 static std::vector<int> toVector(const stateRotate::exc &e)
@@ -117,10 +114,12 @@ static int LoadPathTest()
     return ret;
 }
 
-static int checkParameters(const std::vector<ansatz::rotationElement> &rotationPath,
-                           const std::vector<std::vector<ansatz::rotationElement>> &rotationPaths,
-                           const std::vector<std::pair<int, realNumType>> &orders,
-                           int numberOfUniqueParameters)
+static int checkParameters(
+    const std::vector<ansatz::rotationElement> &rotationPath,
+    const std::vector<std::vector<ansatz::rotationElement>> &rotationPaths,
+    const std::vector<std::pair<int, realNumType>> &orders,
+    int numberOfUniqueParameters
+)
 {
     int ret = 0;
     ret += expectEqual(H4Orders.size(), orders.size(), __PRETTY_FUNCTION__, "Wrong number of orders");
