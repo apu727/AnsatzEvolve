@@ -61,4 +61,21 @@ extern unsigned long NUM_CORES;
 
 #define MAYBE_UNUSED __attribute__((unused))
 
+//Compatibility with GCC 11.4.0 and others.
+//Note: https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2593r0.html
+//& https://stackoverflow.com/questions/57812038/if-constexpr-and-dependent-false-static-assert-is-ill-formed
+template<class T>
+struct dependent_false : std::false_type
+{ };
+
+template<class T>
+constexpr bool dependent_false_v = dependent_false<T>::value;
+
+template<auto T>
+struct val_dependent_false : std::false_type
+{ };
+
+template<auto T>
+constexpr bool val_dependent_false_v = val_dependent_false<T>::value;
+
 #endif // GLOBALS_H

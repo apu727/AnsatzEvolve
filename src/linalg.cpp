@@ -12,6 +12,7 @@
 #include <complex>
 #include <cstring>
 #include <future>
+// Assumed in a lot of places that this is 32. Search for Eigen::Aligned32
 static const int alignment = 32;
 
 

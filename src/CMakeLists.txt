@@ -8,6 +8,9 @@ project(AnsatzEvolve
     DESCRIPTION "Fast classical computation of Quantum Ansatze"
     VERSION 1.0.0
 )
+include(CTest)
+
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set (CMAKE_C_STANDARD 11)
@@ -150,5 +153,9 @@ endif()
 
 #Doxygen target
 add_subdirectory(doxygen)
+
+#tests
+add_custom_target(AllTests)
+add_subdirectory(tests/)
 
 
